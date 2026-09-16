@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct XYAxis:Codable,Equatable {
     var macro:Int
@@ -13,7 +14,6 @@ struct XYSettings:Codable,Equatable {
     var y=XYAxis(macro:2)
     var valid:Bool{x.valid && y.valid && x.macro != y.macro}
 }
-@MainActor final class XYGestureState:ObservableObject {var dragging=false}
 extension SynthModel {
     var xySettings:XYSettings{patch.xy ?? XYSettings()}
     func changeXY(_ change:(inout XYSettings)->Void){
@@ -33,16 +33,89 @@ extension SynthModel {
         macro(settings.x.macro,settings.x.value(x));macro(settings.y.macro,settings.y.value(y))
     }
 }
+// Keep pointer feedback independent of SwiftUI's full sound-model redraws.
+struct XYTrackingPad:NSViewRepresentable {
+    var x:Double
+    var y:Double
+    var palette:AuroraPalette
+    var onBegin:()->Void
+    var onMove:(Double,Double)->Void
+    func makeNSView(context:Context)->XYTrackingView{XYTrackingView()}
+    func updateNSView(_ view:XYTrackingView,context:Context){
+        view.onBegin=onBegin;view.onMove=onMove
+        view.waveColor=NSColor(palette.graphCyan);view.fillColor=NSColor(palette.graphBackground)
+        if !view.dragging{view.position=CGPoint(x:x,y:y)}
+        view.needsDisplay=true
+    }
+    static func dismantleNSView(_ view:XYTrackingView,coordinator:()){view.cancelPending()}
+}
+@MainActor final class XYTrackingView:NSView {
+    var onBegin:()->Void={}
+    var onMove:(Double,Double)->Void={_,_ in}
+    var waveColor=NSColor.cyan
+    var fillColor=NSColor.black
+    var position=CGPoint(x:0.5,y:0.5)
+    private(set) var dragging=false
+    private var pending:CGPoint?
+    private var updateTimer:Timer?
+    override var isFlipped:Bool{true}
+    override func acceptsFirstMouse(for event:NSEvent?)->Bool{true}
+    override func draw(_ dirtyRect:NSRect){
+        let background=NSBezierPath(roundedRect:bounds,xRadius:10,yRadius:10)
+        fillColor.setFill();background.fill()
+        NSGraphicsContext.saveGraphicsState();background.addClip()
+        defer{NSGraphicsContext.restoreGraphicsState()}
+        let grid=NSBezierPath()
+        for i in 1..<4{
+            let t=CGFloat(i)/4
+            grid.move(to:NSPoint(x:bounds.width*t,y:0));grid.line(to:NSPoint(x:bounds.width*t,y:bounds.height))
+            grid.move(to:NSPoint(x:0,y:bounds.height*t));grid.line(to:NSPoint(x:bounds.width,y:bounds.height*t))
+        }
+        waveColor.withAlphaComponent(0.18).setStroke();grid.lineWidth=1;grid.stroke()
+        let point=CGPoint(x:12+position.x*max(1,bounds.width-24),y:12+(1-position.y)*max(1,bounds.height-24))
+        let cross=NSBezierPath()
+        cross.move(to:NSPoint(x:point.x,y:0));cross.line(to:NSPoint(x:point.x,y:bounds.height))
+        cross.move(to:NSPoint(x:0,y:point.y));cross.line(to:NSPoint(x:bounds.width,y:point.y))
+        cross.setLineDash([4,4],count:2,phase:0);cross.lineWidth=1
+        waveColor.withAlphaComponent(0.5).setStroke();cross.stroke()
+        waveColor.withAlphaComponent(0.2).setFill();NSBezierPath(ovalIn:NSRect(x:point.x-15,y:point.y-15,width:30,height:30)).fill()
+        NSColor.white.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-7,y:point.y-7,width:14,height:14)).fill()
+        let ring=NSBezierPath(ovalIn:NSRect(x:point.x-9,y:point.y-9,width:18,height:18))
+        waveColor.setStroke();ring.lineWidth=2;ring.stroke()
+    }
+    func track(_ point:CGPoint){
+        position=CGPoint(x:max(0,min(1,(point.x-12)/max(1,bounds.width-24))),y:max(0,min(1,1-(point.y-12)/max(1,bounds.height-24))))
+        pending=position
+        // Draw now, before publishing changes that invalidate the surrounding UI.
+        needsDisplay=true;displayIfNeeded()
+        if updateTimer==nil{
+            let timer=Timer(timeInterval:1.0/60,repeats:false){[weak self] _ in
+                MainActor.assumeIsolated{self?.flushPending()}
+            }
+            updateTimer=timer;RunLoop.main.add(timer,forMode:.common)
+        }
+    }
+    func flushPending(){
+        updateTimer?.invalidate();updateTimer=nil
+        if let value=pending{pending=nil;onMove(value.x,value.y)}
+    }
+    func cancelPending(){updateTimer?.invalidate();updateTimer=nil;pending=nil}
+    override func mouseDown(with event:NSEvent){dragging=true;onBegin();track(convert(event.locationInWindow,from:nil))}
+    override func mouseDragged(with event:NSEvent){track(convert(event.locationInWindow,from:nil))}
+    override func mouseUp(with event:NSEvent){
+        track(convert(event.locationInWindow,from:nil));flushPending();dragging=false
+    }
+}
 struct XYPadPanel:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    @StateObject private var gesture=XYGestureState()
     var settings:XYSettings{m.xySettings}
     func position(_ horizontal:Bool)->Double{let axis=horizontal ? settings.x:settings.y;return axis.position(m.patch.macros[axis.macro])}
     func axisControls(_ horizontal:Bool)->some View {
         let axis=horizontal ? settings.x:settings.y
         return VStack(spacing:8){
             HStack{
-                Text(horizontal ? "X · left → right":"Y · bottom → top").font(.system(size:14,weight:.semibold)).foregroundStyle(.white)
+                Text(horizontal ? "X · left → right":"Y · bottom → top").font(.system(size:14,weight:palette.weight(.semibold))).foregroundStyle(.white)
                 Spacer()
                 Button("Reverse"){m.checkpoint();m.changeXY{settings in if horizontal{let old=settings.x.start;settings.x.start=settings.x.end;settings.x.end=old}else{let old=settings.y.start;settings.y.start=settings.y.end;settings.y.end=old}}}
             }
@@ -56,24 +129,10 @@ struct XYPadPanel:View {
         }
     }
     var graph:some View {
-        GeometryReader{geometry in
-            Canvas{context,size in
-                var grid=Path()
-                for i in 1..<4{let t=Double(i)/4;grid.move(to:CGPoint(x:size.width*t,y:0));grid.addLine(to:CGPoint(x:size.width*t,y:size.height));grid.move(to:CGPoint(x:0,y:size.height*t));grid.addLine(to:CGPoint(x:size.width,y:size.height*t))}
-                context.stroke(grid,with:.color(graphCyan.opacity(0.18)),lineWidth:1)
-                let point=CGPoint(x:12+position(true)*(size.width-24),y:12+(1-position(false))*(size.height-24))
-                var cross=Path();cross.move(to:CGPoint(x:point.x,y:0));cross.addLine(to:CGPoint(x:point.x,y:size.height));cross.move(to:CGPoint(x:0,y:point.y));cross.addLine(to:CGPoint(x:size.width,y:point.y))
-                context.stroke(cross,with:.color(graphCyan.opacity(0.5)),style:StrokeStyle(lineWidth:1,dash:[4,4]))
-                context.fill(Path(ellipseIn:CGRect(x:point.x-15,y:point.y-15,width:30,height:30)),with:.color(graphCyan.opacity(0.2)))
-                context.fill(Path(ellipseIn:CGRect(x:point.x-7,y:point.y-7,width:14,height:14)),with:.color(.white))
-                context.stroke(Path(ellipseIn:CGRect(x:point.x-9,y:point.y-9,width:18,height:18)),with:.color(graphCyan),lineWidth:2)
-            }.background(graphBackground,in:RoundedRectangle(cornerRadius:10)).contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance:0).onChanged{event in
-                    if !gesture.dragging{m.checkpoint();gesture.dragging=true}
-                    m.moveXY(x:(event.location.x-12)/max(1,geometry.size.width-24),y:1-(event.location.y-12)/max(1,geometry.size.height-24))
-                }.onEnded{_ in gesture.dragging=false})
-                .accessibilityLabel("XY performance pad. Use the X and Y sliders below to adjust each axis.")
-        }.frame(height:245)
+        XYTrackingPad(x:position(true),y:position(false),palette:palette,
+                      onBegin:{m.checkpoint()},onMove:{x,y in m.moveXY(x:x,y:y)})
+            .frame(height:245)
+            .accessibilityLabel("XY performance pad. Use the X and Y sliders below to adjust each axis.")
     }
     var body:some View {
         Panel(title:"XY · performance"){
@@ -85,9 +144,9 @@ struct XYPadPanel:View {
                         ParameterSlider(title:"Y · \(m.macroNames[settings.y.macro])",value:Binding(get:{position(false)},set:{m.macro(settings.y.macro,settings.y.value($0))}),onBegin:{m.checkpoint()})
                     }
                 }
-                VStack(spacing:16){axisControls(true);axisControls(false);HStack{Button("Center"){m.checkpoint();m.moveXY(x:0.5,y:0.5)};Spacer();Text("Drag to perform").font(.system(size:13)).foregroundStyle(muted)}}.frame(width:300)
+                VStack(spacing:16){axisControls(true);axisControls(false);HStack{Button("Center"){m.checkpoint();m.moveXY(x:0.5,y:0.5)};Spacer();Text("Drag to perform").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}}.frame(width:300)
             }
-            Text("Controls two macros, including custom assignments. Release to hold the position. Axis settings save with the patch. If routes overlap, Y applies last.").font(.system(size:13)).foregroundStyle(muted)
+            Text("Controls two macros, including custom assignments. Release to hold the position. Axis settings save with the patch. If routes overlap, Y applies last.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }
     }
 }
@@ -221,6 +280,7 @@ extension SynthModel {
     }
 }
 struct ControlTargetPicker:View {
+    @Environment(\.auroraPalette) private var palette
     @Binding var target:ControlTarget
     var body:some View {
         HStack{
@@ -232,6 +292,7 @@ struct ControlTargetPicker:View {
     }
 }
 struct ControlLearnMenu:ViewModifier {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let target:ControlTarget
     func body(content:Content)->some View {content.contextMenu{
@@ -241,6 +302,7 @@ struct ControlLearnMenu:ViewModifier {
     }}
 }
 struct MacroAssignmentRow:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let macro:Int
     let index:Int
@@ -255,16 +317,17 @@ struct MacroAssignmentRow:View {
                 ParameterSlider(title:"At macro 100%",value:bound(\.to),format:{String(format:"%.3g",route.target.actual($0))},onBegin:{m.checkpoint()})
                 Button("Reverse"){m.checkpoint();editRoute{let f=$0.from;$0.from=$0.to;$0.to=f}}
             }
-        }.padding(12).background(surface,in:RoundedRectangle(cornerRadius:8))
+        }.padding(12).background(palette.surface,in:RoundedRectangle(cornerRadius:8))
     }
 }
 struct CreativeToolsView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @StateObject private var editor=CreativeEditorState()
     var macroEditor:some View {
         VStack(alignment:.leading,spacing:16){
             Picker("Macro",selection:$editor.macro){ForEach(0..<8){Text("\($0+1) · \(m.macroNames[$0])").tag($0)}}
-            Text("Custom assignments replace this macro's original behavior. Each route has its own range and direction. Move the macro to apply them.").font(.system(size:14)).foregroundStyle(muted)
+            Text("Custom assignments replace this macro's original behavior. Each route has its own range and direction. Move the macro to apply them.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             HStack{
                 TextField("Macro name",text:Binding(get:{m.macroNames[editor.macro]},set:{v in m.checkpoint();m.editCustomMacro(editor.macro){$0.name=String(v.prefix(40))}})).textFieldStyle(.roundedBorder)
                 Button("Add assignment"){m.checkpoint();m.editCustomMacro(editor.macro){$0.routes.append(CustomMacroRoute(target:ControlTarget(layer:m.selectedLayer,parameter:7)))}}.disabled((m.patch.customMacros?[editor.macro]?.routes.count ?? 0)>=16)
@@ -276,33 +339,33 @@ struct CreativeToolsView:View {
     }
     var midiEditor:some View {
         VStack(alignment:.leading,spacing:18){
-            Text("Choose any layer or shared control, then move a hardware knob. Mappings are specific to its keyboard, channel and CC, and persist across patches.").foregroundStyle(muted)
+            Text("Choose any layer or shared control, then move a hardware knob. Mappings are specific to its keyboard, channel and CC, and persist across patches.").foregroundStyle(palette.muted)
             ControlTargetPicker(target:$editor.target)
             HStack{Button(m.learningControl==nil ? "Learn control":"Move a knob…"){m.beginDirectLearn(editor.target)};Button("Cancel"){m.learningControl=nil}.disabled(m.learningControl==nil)}
-            Text(m.learningControl.map{"Learning: \($0.name)"} ?? "Soft takeover: cross the current control value before changes take effect. Sustain and channel-mode messages are reserved.").font(.system(size:14)).foregroundStyle(accent)
+            Text(m.learningControl.map{"Learning: \($0.name)"} ?? "Soft takeover: cross the current control value before changes take effect. Sustain and channel-mode messages are reserved.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.accent)
             ScrollView{VStack(alignment:.leading,spacing:12){ForEach(m.directMappings){mapping in
-                HStack{Text(mapping.target.name);Spacer();Text("\(m.sources.first{$0.id==mapping.source}?.name ?? String(mapping.source)) · ch \(mapping.channel) · CC \(mapping.controller)").foregroundStyle(muted);Button("Remove"){m.directMappings.removeAll{$0.id==mapping.id};m.directPickup.remove(mapping.id);m.persist()}}
+                HStack{Text(mapping.target.name);Spacer();Text("\(m.sources.first{$0.id==mapping.source}?.name ?? String(mapping.source)) · ch \(mapping.channel) · CC \(mapping.controller)").foregroundStyle(palette.muted);Button("Remove"){m.directMappings.removeAll{$0.id==mapping.id};m.directPickup.remove(mapping.id);m.persist()}}
             }}}
-            Text("You can also right-click parameter sliders in Edit to learn them. MIDI CC 1 and 11 retain their normal wheel/expression behavior alongside learned assignments.").font(.system(size:13)).foregroundStyle(muted)
+            Text("You can also right-click parameter sliders in Edit to learn them. MIDI CC 1 and 11 retain their normal wheel/expression behavior alongside learned assignments.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }.padding(18)
     }
     var variations:some View {
         VStack(alignment:.leading,spacing:20){
-            Text("Create a variation of the current sound. Locked groups stay unchanged. Master level, layer levels, splits, routing and enabled layers are always preserved.").foregroundStyle(muted)
+            Text("Create a variation of the current sound. Locked groups stay unchanged. Master level, layer levels, splits, routing and enabled layers are always preserved.").foregroundStyle(palette.muted)
             ParameterSlider(title:"Variation amount",value:$editor.amount,range:0.05...1,format:{$0<0.3 ? "Subtle · \(Int($0*100))%":$0<0.65 ? "Moderate · \(Int($0*100))%":"Adventurous · \(Int($0*100))%"})
             Toggle("All enabled layers",isOn:$editor.allLayers)
-            Text(editor.allLayers ? "Scope: all enabled layers":"Scope: layer \(layerLetters[m.selectedLayer])").foregroundStyle(accent)
+            Text(editor.allLayers ? "Scope: all enabled layers":"Scope: layer \(layerLetters[m.selectedLayer])").foregroundStyle(palette.accent)
             ForEach(VariationGroup.allCases){group in Toggle("Lock \(group.rawValue)",isOn:Binding(get:{editor.locked.contains(group)},set:{if $0{editor.locked.insert(group)}else{editor.locked.remove(group)}})).toggleStyle(.checkbox)}
             HStack{Button("Create variation"){m.makeVariation(amount:editor.amount,locked:editor.locked,allLayers:editor.allLayers)};Button("Undo"){m.undo()};Button("Save As…"){m.showingCreativeTools=false;DispatchQueue.main.asyncAfter(deadline:.now()+0.3){m.beginSaveAs()}}}
             Spacer()
         }.padding(18)
     }
     var body:some View {
-        VStack(spacing:16){HStack{Text("Creative tools").font(.system(size:25,weight:.semibold));Spacer();Button("Done"){m.showingCreativeTools=false}}
+        VStack(spacing:16){HStack{Text("Creative tools").font(.system(size:25,weight:palette.weight(.semibold)));Spacer();Button("Done"){m.showingCreativeTools=false}}
             HStack(spacing:8){ForEach(Array(["Macros","MIDI Learn","Variations"].enumerated()),id:\.offset){index,title in
-                Button{editor.tab=index}label:{Text(title).font(.system(size:15,weight:.semibold)).frame(maxWidth:.infinity).padding(.vertical,10).background(editor.tab==index ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:8)).foregroundStyle(editor.tab==index ? Color.white:Color.white)}.buttonStyle(AuroraFlatButtonStyle()).accessibilityAddTraits(editor.tab==index ? .isSelected:[])
+                Button{editor.tab=index}label:{Text(title).font(.system(size:15,weight:editor.tab==index ? .bold:.regular)).frame(maxWidth:.infinity).padding(.vertical,10).background(editor.tab==index ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:8)).foregroundStyle(editor.tab==index ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:editor.tab==index)).accessibilityAddTraits(editor.tab==index ? .isSelected:[])
             }}
-            Group{switch editor.tab{case 1:midiEditor;case 2:variations;default:macroEditor}}.frame(maxWidth:.infinity,maxHeight:.infinity).background(raised.opacity(0.35),in:RoundedRectangle(cornerRadius:10))
-        }.padding(24).frame(width:960,height:700).background(surface).buttonStyle(AuroraButtonStyle()).foregroundStyle(Color(red:0.92,green:0.95,blue:0.91)).font(.system(size:15)).environment(\.colorScheme,.dark).preferredColorScheme(.dark)
+            Group{switch editor.tab{case 1:midiEditor;case 2:variations;default:macroEditor}}.frame(maxWidth:.infinity,maxHeight:.infinity).background(palette.raised.opacity(0.35),in:RoundedRectangle(cornerRadius:10))
+        }.padding(24).frame(width:960,height:700).background(palette.surface).buttonStyle(AuroraButtonStyle()).foregroundStyle(Color.white).font(.system(size:15,weight:palette.weight(.regular))).environment(\.colorScheme,.dark).preferredColorScheme(.dark)
     }
 }

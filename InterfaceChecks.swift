@@ -5,6 +5,20 @@ import SwiftUI
 @main struct InterfaceChecks {
     @MainActor static func main() {
         _ = NSApplication.shared
+        let tracking=XYTrackingView(frame:NSRect(x:0,y:0,width:424,height:224))
+        var xyUpdates=0
+        var lastXY=CGPoint.zero
+        tracking.onMove={x,y in xyUpdates+=1;lastXY=CGPoint(x:x,y:y)}
+        for i in 0..<200{tracking.track(CGPoint(x:12+Double(i)*2,y:12+Double(i)))}
+        precondition(xyUpdates==0,"Pointer updates must not synchronously publish sound-model changes")
+        precondition(tracking.position==CGPoint(x:0.995,y:0.0050000000000000044))
+        tracking.flushPending()
+        precondition(xyUpdates==1 && lastXY==tracking.position,"Rapid events must coalesce to the latest position")
+        tracking.track(CGPoint(x:900,y:-30));tracking.flushPending()
+        precondition(xyUpdates==2 && lastXY==CGPoint(x:1,y:1),"Final position must be clamped and delivered")
+        tracking.track(CGPoint(x:0,y:999));tracking.cancelPending();tracking.flushPending()
+        precondition(xyUpdates==2,"Removing the pad must cancel pending updates")
+        print("PASS: XY pointer feedback is immediate; rapid sound updates coalesce, final positions flush, and pending work cancels.")
         for period in [12.0,80.0,300.0,2400.0]{
             let raw=(0..<8192).map{Float(sin(Double($0)*2*Double.pi/period)*0.02)}
             let display=ScopeTelemetry.displayWave(raw)
@@ -251,12 +265,27 @@ import SwiftUI
         xyHost.frame=NSRect(x:0,y:0,width:1120,height:470);xyHost.layoutSubtreeIfNeeded()
         if let bitmap=xyHost.bitmapImageRepForCachingDisplay(in:xyHost.bounds){xyHost.cacheDisplay(in:xyHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-xy-pad.png"))}
         toolsModel.saveName="Creative tools saved";toolsModel.saveUserPreset()
+        let themeEncoder=JSONEncoder();themeEncoder.outputFormatting=[.sortedKeys]
+        let patchBeforeTheme=try! themeEncoder.encode(toolsModel.patch)
+        let dirtyBeforeTheme=toolsModel.dirty
+        for theme in AuroraTheme.allCases {
+            toolsModel.selectTheme(theme)
+            precondition(try! themeEncoder.encode(toolsModel.patch)==patchBeforeTheme)
+            precondition(toolsModel.dirty==dirtyBeforeTheme)
+            let themeHost=NSHostingView(rootView:ContentView(m:toolsModel))
+            themeHost.frame=NSRect(x:0,y:0,width:1440,height:900);themeHost.layoutSubtreeIfNeeded()
+            if let bitmap=themeHost.bitmapImageRepForCachingDisplay(in:themeHost.bounds){themeHost.cacheDisplay(in:themeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-theme-\(theme.rawValue).png"))}
+        }
+        toolsModel.loadPreset(FactoryBank.all[0]);precondition(toolsModel.theme == .graphiteOrange)
+        toolsModel.undo()
         let creativeID=toolsModel.patch.id
         let creativeHost=NSHostingView(rootView:CreativeToolsView(m:toolsModel))
         creativeHost.frame=NSRect(x:0,y:0,width:1008,height:748);creativeHost.layoutSubtreeIfNeeded()
         if let bitmap=creativeHost.bitmapImageRepForCachingDisplay(in:creativeHost.bounds){creativeHost.cacheDisplay(in:creativeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-creative-tools.png"))}
         toolsModel.shutdown()
         let creativeRestored=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
+        precondition(creativeRestored.theme == .graphiteOrange)
+        print("PASS: all six themes leave patch data unchanged; theme survives patch loads and restart.")
         precondition(creativeRestored.xySettings==savedXY)
         print("PASS: XY axis ranges, inversion, clamping, assignment swaps, undo/redo, invalid-state rejection and persistence.")
         precondition(creativeRestored.patch.id==creativeID && creativeRestored.macroNames[0]=="Intensity")

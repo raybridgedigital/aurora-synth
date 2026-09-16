@@ -110,6 +110,7 @@ extension SynthModel {
     }
 }
 struct MotionPlayhead:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:MotionTelemetry
     let layer:Int
     var body:some View {
@@ -119,6 +120,7 @@ struct MotionPlayhead:View {
     }
 }
 struct MotionGraph:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @ObservedObject var editor:MotionEditorState
     var settings:MotionSettings{m.motionSettings}
@@ -143,8 +145,8 @@ struct MotionGraph:View {
                     context.stroke(grid,with:.color(.white.opacity(0.08)),lineWidth:1)
                     var path=Path()
                     for i in 0...256 {let x=Double(i)/256,point=CGPoint(x:x*size.width,y:(1-graphY(settings.shape(x)))*size.height);if i==0{path.move(to:point)}else{path.addLine(to:point)}}
-                    context.stroke(path,with:.color(graphPink.opacity(0.15)),lineWidth:8)
-                    context.stroke(path,with:.linearGradient(Gradient(colors:[graphPink,Color(red:1,green:0.72,blue:0.30)]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:0)),style:StrokeStyle(lineWidth:2.5,lineJoin:.round))
+                    context.stroke(path,with:.color(palette.graphPink.opacity(0.15)),lineWidth:8)
+                    context.stroke(path,with:.linearGradient(Gradient(colors:[palette.graphPink,palette.graphCyan]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:0)),style:StrokeStyle(lineWidth:2.5,lineJoin:.round))
                 }.contentShape(Rectangle()).gesture(SpatialTapGesture(count:2).onEnded{event in
                     guard settings.points.count<16 else{return}
                     let x=settings.snapped(max(0,min(1,event.location.x/g.size.width)))
@@ -154,7 +156,7 @@ struct MotionGraph:View {
                 })
                 MotionPlayhead(telemetry:m.motionTelemetry,layer:m.selectedLayer)
                 ForEach(settings.points.indices,id:\.self){i in
-                    Circle().fill(editor.selected==i ? Color.white:graphPink).frame(width:12,height:12)
+                    Circle().fill(editor.selected==i ? Color.white:palette.graphPink).frame(width:12,height:12)
                         .frame(width:24,height:24).contentShape(Rectangle())
                         .position(x:settings.points[i].x*g.size.width,y:(1-graphY(settings.points[i].y))*g.size.height)
                         .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("motionGraph")).onChanged{event in
@@ -168,10 +170,11 @@ struct MotionGraph:View {
                         .accessibilityValue(String(format:"%0.2f seconds, %0.0f percent",settings.points[i].x*settings.seconds,settings.points[i].y*100))
                 }
             }.coordinateSpace(name:"motionGraph")
-        }.frame(height:190).padding(12).background(graphBackground,in:RoundedRectangle(cornerRadius:8))
+        }.frame(height:190).padding(12).background(palette.graphBackground,in:RoundedRectangle(cornerRadius:8))
     }
 }
 struct MotionRouteCard:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @ObservedObject var editor:MotionEditorState
     let index:Int
@@ -180,18 +183,19 @@ struct MotionRouteCard:View {
     var body:some View {
         VStack(spacing:10){
             HStack {
-                Toggle(MotionSettings.names[index],isOn:Binding(get:{route.enabled},set:{value in m.checkpoint();m.changeMotion{$0.routes[index].enabled=value};editor.destination=index})).toggleStyle(.checkbox).font(.system(size:14,weight:.medium))
+                Toggle(MotionSettings.names[index],isOn:Binding(get:{route.enabled},set:{value in m.checkpoint();m.changeMotion{$0.routes[index].enabled=value};editor.destination=index})).toggleStyle(.checkbox).font(.system(size:14,weight:palette.weight(.medium)))
                 Spacer(minLength:2)
-                Button{m.checkpoint();m.changeMotion{$0.routes[index].inverted.toggle()}}label:{Image(systemName:"arrow.up.arrow.down").foregroundStyle(Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:route.inverted)).help("Reverse this destination's movement")
+                Button{m.checkpoint();m.changeMotion{$0.routes[index].inverted.toggle()}}label:{Image(systemName:"arrow.up.arrow.down").foregroundStyle(route.inverted ? palette.selectedText:Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:route.inverted)).help("Reverse this destination's movement")
             }
             ParameterSlider(title:"Minimum",value:rangeBinding(true),range:MotionSettings.ranges[index],logarithmic:index==1,format:{MotionSettings.formatted($0,index)},onBegin:{m.checkpoint();editor.destination=index})
             ParameterSlider(title:"Maximum",value:rangeBinding(false),range:MotionSettings.ranges[index],logarithmic:index==1,format:{MotionSettings.formatted($0,index)},onBegin:{m.checkpoint();editor.destination=index})
-        }.padding(12).background(raised.opacity(0.5),in:RoundedRectangle(cornerRadius:8))
-            .overlay(RoundedRectangle(cornerRadius:8).stroke(editor.destination==index ? accent.opacity(0.6):.clear))
+        }.padding(12).background(palette.raised.opacity(0.5),in:RoundedRectangle(cornerRadius:8))
+            .overlay(RoundedRectangle(cornerRadius:8).stroke(editor.destination==index ? palette.accent.opacity(0.6):.clear))
             .contentShape(Rectangle()).onTapGesture{editor.destination=index}
     }
 }
 struct MotionEnvelopePanel:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @StateObject private var editor=MotionEditorState()
     var settings:MotionSettings{m.motionSettings}
@@ -199,7 +203,7 @@ struct MotionEnvelopePanel:View {
     var controls:some View {
         VStack(alignment:.leading,spacing:12){
             HStack {
-                Toggle("Enabled",isOn:Binding(get:{settings.enabled},set:{v in m.checkpoint();m.changeMotion{$0.enabled=v}})).toggleStyle(.switch).tint(accent)
+                Toggle("Enabled",isOn:Binding(get:{settings.enabled},set:{v in m.checkpoint();m.changeMotion{$0.enabled=v}})).toggleStyle(.switch).tint(palette.accent)
                 Toggle("Loop",isOn:Binding(get:{settings.loop},set:{v in m.checkpoint();m.changeMotion{$0.loop=v}})).toggleStyle(.checkbox)
                 Spacer()
 
@@ -207,9 +211,9 @@ struct MotionEnvelopePanel:View {
             LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:8),spacing:6){ForEach(MotionShapes.names,id:\.self){name in
                 let active=settings.points==MotionShapes.points(name)
                 Button{m.checkpoint();m.changeMotion{$0.points=MotionShapes.points(name)};editor.selected=0;editor.libraryID=nil}label:{
-                    Text(name).font(.system(size:13,weight:.medium)).lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity).padding(.vertical,7)
-                        .background(active ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(active ? Color.white:Color.white)
-                }.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("Factory shape · \(name)").accessibilityAddTraits(active ? .isSelected:[])
+                    Text(name).font(.system(size:13,weight:active ? .bold:.regular)).lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity).padding(.vertical,7)
+                        .background(active ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(active ? palette.selectedText:Color.white)
+                }.buttonStyle(AuroraFlatButtonStyle(selected:active)).accessibilityLabel("Factory shape · \(name)").accessibilityAddTraits(active ? .isSelected:[])
             }}
             ParameterSlider(title:"Duration",value:Binding(get:{settings.seconds},set:{v in m.changeMotion{$0.seconds=v}}),range:0.1...60,logarithmic:true,format:{String(format:"%0.2f s",$0)},onBegin:{m.checkpoint()})
                 .disabled(settings.beats != nil)
@@ -217,11 +221,11 @@ struct MotionEnvelopePanel:View {
                 Toggle("Tempo sync",isOn:Binding(get:{settings.beats != nil},set:{value in m.checkpoint();m.changeMotion{$0.beats=value ? 4:nil}})).toggleStyle(.checkbox)
                 if settings.beats != nil {Picker("Length",selection:Binding(get:{settings.beats ?? 4},set:{value in m.checkpoint();m.changeMotion{$0.beats=value}})){ForEach([0.25,0.5,1,2,4,8,16,32],id:\.self){beats in Text(beats>=4 ? "\(Int(beats/4)) bar\(beats==4 ? "":"s") (4/4)":"\(beats.formatted()) beats").tag(beats)}}}
                 Picker("Snap",selection:Binding(get:{settings.grid ?? 0},set:{v in m.checkpoint();m.changeMotion{$0.grid=v}})){Text("Off").tag(0);ForEach([4,8,16,32],id:\.self){Text("\($0) divisions").tag($0)}}
-            }.font(.system(size:14))
+            }.font(.system(size:14,weight:palette.weight(.regular)))
             HStack{
                 Picker("Graph",selection:$editor.destination){ForEach(0..<8){Text(MotionSettings.names[$0]).tag($0)}}
-                Text(settings.beats.map{"0 → \($0.formatted()) beats"} ?? "0 → \(String(format:"%0.1f",settings.seconds)) s").foregroundStyle(muted).monospacedDigit()
-            }.font(.system(size:14))
+                Text(settings.beats.map{"0 → \($0.formatted()) beats"} ?? "0 → \(String(format:"%0.1f",settings.seconds)) s").foregroundStyle(palette.muted).monospacedDigit()
+            }.font(.system(size:14,weight:palette.weight(.regular)))
         }
     }
     var pointControls:some View {
@@ -233,13 +237,13 @@ struct MotionEnvelopePanel:View {
     }
     var destinations:some View {
         VStack(alignment:.leading,spacing:12){
-            Text("Destinations · select a control to adjust its range").font(.system(size:14)).foregroundStyle(muted)
+            Text("Destinations · select a control to adjust its range").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:8),count:2),spacing:8){ForEach(0..<8){i in
                 Button{editor.destination=i}label:{
-                    HStack{Circle().fill(settings.routes[i].enabled ? accent:muted.opacity(0.3)).frame(width:6,height:6);Text(MotionSettings.names[i]);Spacer()}
-                        .font(.system(size:14,weight:.medium)).padding(10).frame(maxWidth:.infinity)
-                        .background(editor.destination==i ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:6))
-                }.foregroundStyle(editor.destination==i ? Color.white:Color.white).buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("Edit \(MotionSettings.names[i]) envelope range")
+                    HStack{Circle().fill(settings.routes[i].enabled ? palette.accent:palette.muted.opacity(0.3)).frame(width:6,height:6);Text(MotionSettings.names[i]);Spacer()}
+                        .font(.system(size:14,weight:editor.destination==i ? .bold:.regular)).padding(10).frame(maxWidth:.infinity)
+                        .background(editor.destination==i ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))
+                }.foregroundStyle(editor.destination==i ? palette.selectedText:Color.white).buttonStyle(AuroraFlatButtonStyle(selected:editor.destination==i)).accessibilityLabel("Edit \(MotionSettings.names[i]) envelope range")
             }}
         }
     }
@@ -252,12 +256,12 @@ struct MotionEnvelopePanel:View {
                 Button("Save new"){m.saveShape(name:editor.shapeName)}
                 Button("Update"){if let id=editor.libraryID{m.saveShape(name:editor.shapeName,replacing:id)}}.disabled(editor.libraryID==nil)
                 Button("Delete"){if let id=editor.libraryID{m.deleteShape(id);editor.libraryID=nil}}.disabled(editor.libraryID==nil)
-            }.font(.system(size:13))
+            }.font(.system(size:13,weight:palette.weight(.regular)))
             MotionGraph(m:m,editor:editor)
-            HStack{Text(MotionSettings.formatted(settings.routes[editor.destination].minimum,editor.destination));Spacer();Text("Drag points · double-click to add · select a point to bend its curve");Spacer();Text(MotionSettings.formatted(settings.routes[editor.destination].maximum,editor.destination))}.font(.system(size:12)).foregroundStyle(muted)
+            HStack{Text(MotionSettings.formatted(settings.routes[editor.destination].minimum,editor.destination));Spacer();Text("Drag points · double-click to add · select a point to bend its curve");Spacer();Text(MotionSettings.formatted(settings.routes[editor.destination].maximum,editor.destination))}.font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             pointControls
             HStack(alignment:.top,spacing:18){destinations.frame(maxWidth:.infinity);MotionRouteCard(m:m,editor:editor,index:editor.destination).frame(width:320)}
-            Text("Each note starts its own shape. Once holds the final value; Loop repeats while held. Volume replaces the attack/decay/sustain envelope; Release still fades notes out. Other destinations replace their base value; existing modulation still adds movement. Wavetable destinations require that oscillator's Wavetable mode; Warp also needs Bend, Sync or Fold.").font(.system(size:12)).foregroundStyle(muted).fixedSize(horizontal:false,vertical:true)
+            Text("Each note starts its own shape. Once holds the final value; Loop repeats while held. Volume replaces the attack/decay/sustain envelope; Release still fades notes out. Other destinations replace their base value; existing modulation still adds movement. Wavetable destinations require that oscillator's Wavetable mode; Warp also needs Bend, Sync or Fold.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize(horizontal:false,vertical:true)
         }
     }
 }

@@ -1,5 +1,9 @@
 # Aurora
 
+## Color themes · 0.14
+
+Use the palette button beside **Sound library** to choose Midnight, Copper, Ocean, Forest, Graphite or Graphite Orange. Themes update immediately across panels, controls, dialogs and graphs with distinct selected/unselected button colors. Graphite Orange keeps Graphite's backgrounds and adds orange sliders and selected buttons with dark text; the other themes retain white button text. Copper is the default. The preference is saved separately in `~/Library/Application Support/Aurora/appearance.json`, so patch loading, patch sharing and Undo do not change the theme.
+
 ## XY performance pad · 0.13
 
 In **Play**, the XY pad controls two distinct macros (including custom macro assignments). X moves left to right; Y moves bottom to top. Each axis has adjustable From/To endpoints and Reverse. Center moves both axes to their range midpoints. Release holds the position; the X/Y sliders provide precise and keyboard-accessible adjustment. Selecting the other axis’s macro swaps the assignments. Axis settings and macro values save with the patch, and a drag is one Undo step. The cursor follows the assigned macro values; values outside a restricted axis range appear at its nearest edge. Overlapping custom routes apply X first, then Y. Existing patches use Brightness on X and Movement on Y without changing sound until the pad is moved.

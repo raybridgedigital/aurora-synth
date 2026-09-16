@@ -2,40 +2,66 @@ import SwiftUI
 import AppKit
 import Combine
 
-let graphCyan = Color(red:0.20,green:0.88,blue:1.0)
-let graphPink = Color(red:1.0,green:0.38,blue:0.75)
-let graphBackground = Color(red:0.035,green:0.055,blue:0.10)
-let accent = Color(red: 0.72, green: 0.85, blue: 0.58)
-let surface = Color(red: 0.115, green: 0.14, blue: 0.125)
-let raised = Color(red: 0.16, green: 0.19, blue: 0.165)
-let muted = Color(red: 0.64, green: 0.70, blue: 0.65)
 let layerLetters = ["A", "B", "C", "D"]
 
-let buttonSelected = Color(red:0.65,green:0.30,blue:0.12)
-let buttonSurface = Color(red:0.18,green:0.28,blue:0.43)
+struct AuroraPalette {
+    let background:Color, surface:Color, raised:Color, accent:Color
+    let buttonSurface:Color, buttonSelected:Color, graphBackground:Color, graphCyan:Color, graphPink:Color
+    let selectedText:Color
+    let boldText:Bool
+    func weight(_ standard:Font.Weight = .regular)->Font.Weight{boldText ? .bold:standard}
+    let muted=Color(red:0.76,green:0.79,blue:0.82)
+    init(_ background:UInt32,_ surface:UInt32,_ raised:UInt32,_ accent:UInt32,_ button:UInt32,_ selected:UInt32,_ graph:UInt32,_ wave1:UInt32,_ wave2:UInt32,selectedText:UInt32=0xFFFFFF,boldText:Bool=false){
+        func color(_ hex:UInt32)->Color{Color(red:Double((hex>>16)&255)/255,green:Double((hex>>8)&255)/255,blue:Double(hex&255)/255)}
+        self.background=color(background);self.surface=color(surface);self.raised=color(raised);self.accent=color(accent)
+        buttonSurface=color(button);buttonSelected=color(selected);graphBackground=color(graph);graphCyan=color(wave1);graphPink=color(wave2)
+        self.selectedText=color(selectedText)
+        self.boldText=boldText
+    }
+}
+enum AuroraTheme:String,Codable,CaseIterable,Identifiable {
+    case midnight="Midnight",copper="Copper",ocean="Ocean",forest="Forest",graphite="Graphite",graphiteOrange="Graphite Orange"
+    var id:String{rawValue}
+    var palette:AuroraPalette{switch self{
+    case .midnight:return AuroraPalette(0x0D1122,0x181E34,0x252E49,0xA7BDFF,0x283C60,0x8D471D,0x080D1A,0x5ADFFC,0xF3BC77)
+    case .copper:return AuroraPalette(0x131815,0x1D2420,0x29302A,0xB8D995,0x2E476E,0xA64D1F,0x090E1A,0x33E0FF,0xFFC077)
+    case .ocean:return AuroraPalette(0x071C26,0x102D3B,0x1A4051,0x8EE6E6,0x1D485C,0x7C3C69,0x04151F,0x55E3D0,0xB5B2FF)
+    case .forest:return AuroraPalette(0x101E18,0x1E3026,0x2B4333,0xC8E3A2,0x2C4A3C,0x80522A,0x081710,0xA1EFBC,0xF4CC70)
+    case .graphite:return AuroraPalette(0x141416,0x242429,0x33333B,0xD1D7E6,0x3B3B45,0x245B83,0x0B0B10,0xF6D17A,0xC7AAFF)
+    case .graphiteOrange:return AuroraPalette(0x141416,0x242429,0x33333B,0xFFB04A,0x3B3B45,0xFFB04A,0x0B0B10,0xFFB04A,0xC7AAFF,selectedText:0x20170D)
+    }}
+}
+private struct AuroraPaletteKey:EnvironmentKey {static let defaultValue=AuroraTheme.copper.palette}
+extension EnvironmentValues {
+    var auroraPalette:AuroraPalette{get{self[AuroraPaletteKey.self]}set{self[AuroraPaletteKey.self]=newValue}}
+}
 struct AuroraButtonStyle:ButtonStyle {
+    @Environment(\.auroraPalette) private var palette
     var selected=false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration:Configuration)->some View {
-        configuration.label.padding(.horizontal,9).padding(.vertical,5)
-            .foregroundStyle(selected ? Color.white:Color.white)
-            .background(selected ? buttonSelected:configuration.role == .destructive ? buttonSelected.opacity(0.55):buttonSurface,in:RoundedRectangle(cornerRadius:6))
-            .overlay(RoundedRectangle(cornerRadius:6).stroke(graphCyan.opacity(0.4),lineWidth:0.7))
+        configuration.label.fontWeight(selected || configuration.isPressed ? .bold:.regular).padding(.horizontal,9).padding(.vertical,5)
+            .foregroundStyle(selected ? palette.selectedText:Color.white)
+            .background(selected ? palette.buttonSelected:configuration.role == .destructive ? palette.buttonSelected.opacity(0.55):palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))
+            .overlay(RoundedRectangle(cornerRadius:6).stroke(palette.graphCyan.opacity(0.4),lineWidth:0.7))
             .opacity(enabled ? (configuration.isPressed ? 0.65:1):0.35)
     }
 }
 struct AuroraFlatButtonStyle:ButtonStyle {
+    var selected=false
+    @Environment(\.auroraPalette) private var palette
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration:Configuration)->some View {
-        configuration.label.opacity(enabled ? (configuration.isPressed ? 0.65:1):0.35)
+        configuration.label.fontWeight(selected || configuration.isPressed ? .bold:.regular).opacity(enabled ? (configuration.isPressed ? 0.65:1):0.35)
     }
 }
 struct AuroraIconButtonStyle:ButtonStyle {
+    @Environment(\.auroraPalette) private var palette
     var selected=false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration:Configuration)->some View {
-        configuration.label.padding(3).background(selected ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:5))
-            .overlay(RoundedRectangle(cornerRadius:5).stroke(graphCyan.opacity(0.4),lineWidth:0.7))
+        configuration.label.fontWeight(selected || configuration.isPressed ? .bold:.regular).padding(3).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5))
+            .overlay(RoundedRectangle(cornerRadius:5).stroke(palette.graphCyan.opacity(0.4),lineWidth:0.7))
             .opacity(enabled ? (configuration.isPressed ? 0.65:1):0.35)
     }
 }
@@ -265,27 +291,28 @@ struct MeterSnapshot: Equatable {
     }
 }
 struct OutputScope:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:ScopeTelemetry
     var normalized=true
     var body:some View {
         Canvas{context,size in
             var center=Path();center.move(to:CGPoint(x:0,y:size.height/2));center.addLine(to:CGPoint(x:size.width,y:size.height/2))
-            context.stroke(center,with:.color(muted.opacity(0.2)),lineWidth:0.5)
+            context.stroke(center,with:.color(palette.muted.opacity(0.2)),lineWidth:0.5)
             var wave=Path()
             let samples=normalized ? telemetry.samples:telemetry.levelSamples
             if !normalized {
                 var grid=Path()
                 for i in 1..<8{let x=size.width*Double(i)/8;grid.move(to:CGPoint(x:x,y:0));grid.addLine(to:CGPoint(x:x,y:size.height))}
                 for i in 1..<4{let y=size.height*Double(i)/4;grid.move(to:CGPoint(x:0,y:y));grid.addLine(to:CGPoint(x:size.width,y:y))}
-                context.stroke(grid,with:.color(graphCyan.opacity(0.12)),lineWidth:0.5)
+                context.stroke(grid,with:.color(palette.graphCyan.opacity(0.12)),lineWidth:0.5)
             }
             for (i,sample) in samples.enumerated(){
                 let point=CGPoint(x:CGFloat(i)*size.width/CGFloat(telemetry.samples.count-1),y:size.height/2-CGFloat(max(-1,min(1,sample)))*(size.height/2-3))
                 if i==0{wave.move(to:point)}else{wave.addLine(to:point)}
             }
-            context.stroke(wave,with:.color(graphCyan.opacity(0.13)),lineWidth:normalized ? 4:8)
-            context.stroke(wave,with:.linearGradient(Gradient(colors:[graphCyan,Color(red:0.55,green:0.60,blue:1),graphPink]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:0)),lineWidth:normalized ? 1.5:2)
-        }.background(graphBackground,in:RoundedRectangle(cornerRadius:7)).accessibilityLabel("Live output waveform").help(normalized ? "Live output · three-cycle view with automatic display scaling":"Live output · three-cycle view at actual output level")
+            context.stroke(wave,with:.color(palette.graphCyan.opacity(0.13)),lineWidth:normalized ? 4:8)
+            context.stroke(wave,with:.linearGradient(Gradient(colors:[palette.graphCyan,palette.accent,palette.graphPink]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:0)),lineWidth:normalized ? 1.5:2)
+        }.background(palette.graphBackground,in:RoundedRectangle(cornerRadius:7)).accessibilityLabel("Live output waveform").help(normalized ? "Live output · three-cycle view with automatic display scaling":"Live output · three-cycle view at actual output level")
     }
 }
 @MainActor final class ModulationTelemetry:ObservableObject {
@@ -298,19 +325,21 @@ struct OutputScope:View {
     }
 }
 struct ModulationIndicator:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:ModulationTelemetry
     let slots:[Int]
     var body:some View {
         GeometryReader{g in
             let value=max(-1,min(1,slots.reduce(Float(0)){$0+telemetry.values[$1]}))
             ZStack(alignment:.leading){
-                Capsule().fill(accent.opacity(0.17))
-                Capsule().fill(accent).frame(width:3).offset(x:CGFloat((value+1)/2)*max(0,g.size.width-3))
+                Capsule().fill(palette.accent.opacity(0.17))
+                Capsule().fill(palette.accent).frame(width:3).offset(x:CGFloat((value+1)/2)*max(0,g.size.width-3))
             }
         }.frame(height:3).accessibilityLabel("Live matrix modulation").help("Matrix modulation · position shows the combined offset for the most recently rendered note")
     }
 }
 struct MatrixFeedback:ViewModifier {
+    @Environment(\.auroraPalette) private var palette
     let model:SynthModel
     let destination:Int
     var layer:Int?=nil
@@ -325,14 +354,17 @@ struct MatrixFeedback:ViewModifier {
     func update(){let bpm=(Double(aurora_clock_tempo())*10).rounded()/10;let time=Int(aurora_record_seconds());if bpm != clockBPM{clockBPM=bpm};if time != seconds{seconds=time}}
 }
 struct ClockReadout:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:PerformanceTelemetry
     var body:some View{Text(telemetry.clockBPM>0 ? String(format:"%.1f",telemetry.clockBPM):"—").monospacedDigit().frame(width:48).accessibilityLabel("External tempo")}
 }
 struct EngineReadout:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:AudioTelemetry
     var body:some View { Text("MIDI \(telemetry.snapshot.midiEvents) · DSP \(telemetry.snapshot.cpuPercent)%").monospacedDigit() }
 }
 struct VoiceStatus:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:AudioTelemetry
     let running:Bool
     var body:some View {
@@ -624,6 +656,11 @@ struct VoiceStatus:View {
         }
     }
     private var storageDirectory: URL?
+    @Published private(set) var theme=AuroraTheme.copper
+    func selectTheme(_ value:AuroraTheme){
+        guard value != theme else{return};theme=value
+        do{try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true);try JSONEncoder().encode(value).write(to:folder.appendingPathComponent("appearance.json"),options:.atomic)}catch{notice="Couldn't save appearance: \(error.localizedDescription)"}
+    }
     var macroNames:[String]{(0..<8).map{patch.customMacros?[$0]?.name ?? Self.defaultMacroNames[$0]}}
     var folder: URL {
         if let storageDirectory {return storageDirectory}
@@ -631,6 +668,7 @@ struct VoiceStatus:View {
     }
     init(storageDirectory:URL? = nil) {
         self.storageDirectory=storageDirectory
+        if let data=try? Data(contentsOf:folder.appendingPathComponent("appearance.json")),let saved=try? JSONDecoder().decode(AuroraTheme.self,from:data){theme=saved}
         aurora_initialize()
         restore()
         restoreShapeLibrary()
@@ -921,11 +959,13 @@ struct EqualHeightRow: Layout {
     }
 }
 struct Panel<Content:View>:View {
+    @Environment(\.auroraPalette) private var palette
     let title:String
     @ViewBuilder var content:Content
-    var body:some View {VStack(alignment:.leading,spacing:16){Text(title).font(.system(size:19,weight:.semibold));content}.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).background(surface,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.white.opacity(0.07))).buttonStyle(AuroraButtonStyle())}
+    var body:some View {VStack(alignment:.leading,spacing:16){Text(title).font(.system(size:19,weight:palette.weight(.semibold)));content}.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).background(palette.surface,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.white.opacity(0.07))).buttonStyle(AuroraButtonStyle())}
 }
 struct ParameterSlider:View {
+    @Environment(\.auroraPalette) private var palette
     let title:String
     @Binding var value:Double
     var range:ClosedRange<Double>=0...1
@@ -936,61 +976,64 @@ struct ParameterSlider:View {
         Binding(get:{logarithmic ? log(max(range.lowerBound,value)/range.lowerBound)/log(range.upperBound/range.lowerBound):(value-range.lowerBound)/(range.upperBound-range.lowerBound)},set:{v in value=logarithmic ? range.lowerBound*pow(range.upperBound/range.lowerBound,v):range.lowerBound+v*(range.upperBound-range.lowerBound)})
     }
     var body:some View {
-        VStack(spacing:5){HStack{Text(title).foregroundStyle(muted);Spacer();Text(format(value)).monospacedDigit()}.font(.system(size:15));Slider(value:normalized,in:0...1,onEditingChanged:{if $0{onBegin()}}).tint(accent).accessibilityLabel(title).accessibilityValue(format(value))}
+        VStack(spacing:5){HStack{Text(title).foregroundStyle(palette.muted);Spacer();Text(format(value)).monospacedDigit()}.font(.system(size:15,weight:palette.weight(.regular)));Slider(value:normalized,in:0...1,onEditingChanged:{if $0{onBegin()}}).tint(palette.accent).accessibilityLabel(title).accessibilityValue(format(value))}
     }
 }
 struct MacroDial:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var model:SynthModel
     let index:Int
     var value:Double{model.patch.macros[index]}
     var body:some View {
         VStack(spacing:9){
             ZStack{
-                Circle().trim(from:0.125,to:0.875).stroke(raised,lineWidth:5).rotationEffect(.degrees(90))
-                Circle().trim(from:0.125,to:0.125+value*0.75).stroke(accent,style:StrokeStyle(lineWidth:5,lineCap:.round)).rotationEffect(.degrees(90))
-                Circle().fill(surface).padding(10)
-                Capsule().fill(accent).frame(width:3,height:15).offset(y:-25).rotationEffect(.degrees(-135+270*value))
+                Circle().trim(from:0.125,to:0.875).stroke(palette.raised,lineWidth:5).rotationEffect(.degrees(90))
+                Circle().trim(from:0.125,to:0.125+value*0.75).stroke(palette.accent,style:StrokeStyle(lineWidth:5,lineCap:.round)).rotationEffect(.degrees(90))
+                Circle().fill(palette.surface).padding(10)
+                Capsule().fill(palette.accent).frame(width:3,height:15).offset(y:-25).rotationEffect(.degrees(-135+270*value))
             }.frame(width:88,height:88).accessibilityHidden(true)
-            HStack{Text(model.macroNames[index]);Spacer();Text("\(Int(value*100))").foregroundStyle(muted).monospacedDigit()}.font(.system(size:15,weight:.medium))
-            Slider(value:Binding(get:{value},set:{model.macro(index,$0)}),in:0...1,onEditingChanged:{if $0{model.checkpoint()}}).tint(accent).accessibilityLabel(model.macroNames[index])
-            Button{model.learningControl=nil;model.learningMacro = model.learningMacro==index ? nil:index;model.notice=model.learningMacro==nil ? "MIDI Learn cancelled.":"Move a hardware knob for \(model.macroNames[index])."}label:{Label(model.learningMacro==index ? "Move a knob…":model.mappings.contains(where:{$0.macro==index}) ? "Mapped":"MIDI Learn",systemImage:"cable.connector")}.buttonStyle(AuroraIconButtonStyle()).font(.system(size:13)).foregroundStyle(Color.white)
+            HStack{Text(model.macroNames[index]);Spacer();Text("\(Int(value*100))").foregroundStyle(palette.muted).monospacedDigit()}.font(.system(size:15,weight:palette.weight(.medium)))
+            Slider(value:Binding(get:{value},set:{model.macro(index,$0)}),in:0...1,onEditingChanged:{if $0{model.checkpoint()}}).tint(palette.accent).accessibilityLabel(model.macroNames[index])
+            Button{model.learningControl=nil;model.learningMacro = model.learningMacro==index ? nil:index;model.notice=model.learningMacro==nil ? "MIDI Learn cancelled.":"Move a hardware knob for \(model.macroNames[index])."}label:{Label(model.learningMacro==index ? "Move a knob…":model.mappings.contains(where:{$0.macro==index}) ? "Mapped":"MIDI Learn",systemImage:"cable.connector")}.buttonStyle(AuroraIconButtonStyle()).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)
         }.frame(maxWidth:.infinity).padding(.vertical,8)
     }
 }
 struct LayerStrip:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var model:SynthModel
     let index:Int
     var body:some View {
         VStack(alignment:.leading,spacing:9){
             HStack{
-                Button{model.selectedLayer=index;if model.screen != "Matrix"{model.screen="Edit"}}label:{Text(layerLetters[index]).font(.system(size:15,weight:.bold)).frame(width:32,height:29).background(model.selectedLayer==index ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(model.selectedLayer==index ? Color.white:Color.white)}.buttonStyle(AuroraFlatButtonStyle())
+                Button{model.selectedLayer=index;if model.screen != "Matrix"{model.screen="Edit"}}label:{Text(layerLetters[index]).font(.system(size:15,weight:model.selectedLayer==index ? .bold:.regular)).frame(width:32,height:29).background(model.selectedLayer==index ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(model.selectedLayer==index ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:model.selectedLayer==index))
                 Spacer()
-                Button{model.toggleSolo(index)}label:{Text("S").font(.system(size:13,weight:.bold)).foregroundStyle(model.soloLayer==index ? Color.white:Color.white).frame(width:23,height:23).background(model.soloLayer==index ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:4))}.buttonStyle(AuroraFlatButtonStyle()).help("Solo layer \(layerLetters[index]); shared FX tails may continue")
+                Button{model.toggleSolo(index)}label:{Text("S").font(.system(size:13,weight:model.soloLayer==index ? .bold:.regular)).foregroundStyle(model.soloLayer==index ? palette.selectedText:Color.white).frame(width:23,height:23).background(model.soloLayer==index ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4))}.buttonStyle(AuroraFlatButtonStyle(selected:model.soloLayer==index)).help("Solo layer \(layerLetters[index]); shared FX tails may continue")
                 Menu{Button("Copy layer"){model.copyLayer(index)};Button("Paste layer"){model.pasteLayer(index)}.disabled(model.layerClipboard==nil)}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:22).help("Copy or paste this layer, including its modulation and wavetable data")
-                Button{model.checkpoint();model.set(index,0,model.patch.layers[index][0]>0.5 ? 0:1)}label:{Image(systemName:"power").foregroundStyle(Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:model.patch.layers[index][0]>0.5)).accessibilityLabel("Enable layer \(layerLetters[index])")
+                Button{model.checkpoint();model.set(index,0,model.patch.layers[index][0]>0.5 ? 0:1)}label:{Image(systemName:"power").foregroundStyle(model.patch.layers[index][0]>0.5 ? palette.selectedText:Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:model.patch.layers[index][0]>0.5)).accessibilityLabel("Enable layer \(layerLetters[index])")
             }
             Picker("Layer \(layerLetters[index]) waveform",selection:Binding(get:{model.patch.layers[index][44] > 0.5 ? 5:Int(model.patch.layers[index][1])},set:{model.checkpoint();if $0==5{model.set(index,44,1)}else{model.set(index,1,Double($0))};model.selectedLayer=index})){
                 ForEach(Array(["Sine","Triangle","Saw","Pulse","Harmonic"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
                 Text("Wavetable").tag(5)
-            }.labelsHidden().font(.system(size:16,weight:.medium))
-            HStack{Text("\(Int(model.patch.layers[index][27]))–\(Int(model.patch.layers[index][28]))");Spacer();Text(model.patch.layers[index][22]>0.5 ? "ARP":["POLY","MONO","LEGATO"][max(0,min(2,Int(model.patch.layers[index][41])))])}.font(.system(size:13)).foregroundStyle(muted)
-            Slider(value:model.parameter(13,layer:index),in:0...1,onEditingChanged:{if $0{model.checkpoint()}}).tint(accent).accessibilityLabel("Layer \(layerLetters[index]) volume").modifier(MatrixFeedback(model:model,destination:3,layer:index))
-        }.padding(13).background(surface,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(model.selectedLayer==index ? accent.opacity(0.55):.white.opacity(0.08))).opacity(model.patch.layers[index][0]>0.5 ? 1:0.65).contentShape(Rectangle()).onTapGesture{model.selectedLayer=index;if model.screen != "Matrix"{model.screen="Edit"}}
+            }.labelsHidden().font(.system(size:16,weight:palette.weight(.medium)))
+            HStack{Text("\(Int(model.patch.layers[index][27]))–\(Int(model.patch.layers[index][28]))");Spacer();Text(model.patch.layers[index][22]>0.5 ? "ARP":["POLY","MONO","LEGATO"][max(0,min(2,Int(model.patch.layers[index][41])))])}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+            Slider(value:model.parameter(13,layer:index),in:0...1,onEditingChanged:{if $0{model.checkpoint()}}).tint(palette.accent).accessibilityLabel("Layer \(layerLetters[index]) volume").modifier(MatrixFeedback(model:model,destination:3,layer:index))
+        }.padding(13).background(palette.surface,in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(model.selectedLayer==index ? palette.accent.opacity(0.55):.white.opacity(0.08))).opacity(model.patch.layers[index][0]>0.5 ? 1:0.65).contentShape(Rectangle()).onTapGesture{model.selectedLayer=index;if model.screen != "Matrix"{model.screen="Edit"}}
     }
 }
 struct PianoView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var model:SynthModel
     private let whites=(48...84).filter{[0,2,4,5,7,9,11].contains($0%12)}
     private var blacks:[(Int,Int)]{(48...84).filter{[1,3,6,8,10].contains($0%12)}.map{note in (note,whites.filter{$0<note}.count-1)}}
     func key(_ note:Int,black:Bool)->some View {
-        RoundedRectangle(cornerRadius:4).fill(model.pressed.contains(note) ? accent:(black ? Color(red:0.08,green:0.10,blue:0.085):Color(red:0.81,green:0.84,blue:0.79)))
-            .overlay(alignment:.bottom){if !black{Text(note%12==0 ? "C\(note/12-1)":"").font(.system(size:12)).foregroundStyle(.black.opacity(0.5)).padding(.bottom,7)}}
+        RoundedRectangle(cornerRadius:4).fill(model.pressed.contains(note) ? palette.accent:(black ? Color(red:0.08,green:0.10,blue:0.085):Color(red:0.81,green:0.84,blue:0.79)))
+            .overlay(alignment:.bottom){if !black{Text(note%12==0 ? "C\(note/12-1)":"").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(.black.opacity(0.5)).padding(.bottom,7)}}
             .gesture(DragGesture(minimumDistance:0).onChanged{_ in model.noteOn(note)}.onEnded{_ in model.noteOff(note)})
             .accessibilityElement(children:.ignore).accessibilityLabel("MIDI note \(note)").accessibilityAddTraits(.isButton)
             .accessibilityAction{model.noteOn(note);Task{@MainActor in try? await Task.sleep(for:.milliseconds(250));model.noteOff(note)}}
     }
     var body:some View {
-        VStack(spacing:8){HStack{Text("PLAY A LITTLE").tracking(1.4);Spacer();Text("Typing keys A W S E D… · middle C = MIDI 60")}.font(.system(size:13)).foregroundStyle(muted)
+        VStack(spacing:8){HStack{Text("PLAY A LITTLE").tracking(1.4);Spacer();Text("Typing keys A W S E D… · middle C = MIDI 60")}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             GeometryReader{g in let width=g.size.width/Double(whites.count)
                 ZStack(alignment:.topLeading){HStack(spacing:2){ForEach(whites,id:\.self){note in key(note,black:false)}}
                     ForEach(blacks,id:\.0){note,pos in key(note,black:true).frame(width:width*0.6,height:51).offset(x:width*Double(pos+1)-width*0.3)}
@@ -1001,22 +1044,23 @@ struct PianoView:View {
 }
 
 struct EditorView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let waves=["Sine","Triangle","Saw","Pulse","Harmonic"]
     func choice(_ label:String,_ p:Int,_ options:[String])->some View {
-        Picker(label,selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][p])},set:{m.checkpoint();m.set(m.selectedLayer,p,Double($0))})){ForEach(Array(options.enumerated()),id:\.offset){i,s in Text(s).tag(i)}}.font(.system(size:15))
+        Picker(label,selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][p])},set:{m.checkpoint();m.set(m.selectedLayer,p,Double($0))})){ForEach(Array(options.enumerated()),id:\.offset){i,s in Text(s).tag(i)}}.font(.system(size:15,weight:palette.weight(.regular)))
     }
     func optionButtons(_ label:String,_ parameter:Int,_ options:[String],offset:Int=0)->some View {
         HStack(spacing:8){
-            Text(label).font(.system(size:14)).foregroundStyle(muted).fixedSize()
+            Text(label).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
             HStack(spacing:3){
                 ForEach(Array(options.enumerated()),id:\.offset){index,name in
                     let usingTable=(parameter==1 && m.patch.layers[m.selectedLayer][44]>0.5)||(parameter==2 && m.patch.layers[m.selectedLayer][51]>0.5)
                     let selected = !usingTable && Int(m.patch.layers[m.selectedLayer][parameter])==index+offset
                     let shortName=["Triangle":"Tri","Square":"Sqr","Random":"Rnd","Amplitude":"Amp","Harmonic":"Harm"][name] ?? name
                     Button{m.checkpoint();m.set(m.selectedLayer,parameter,Double(index+offset))}label:{
-                        Text(shortName).font(.system(size:12,weight:.medium)).lineLimit(1).frame(maxWidth:.infinity).frame(height:22).background(selected ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? Color.white:Color.white).contentShape(Rectangle())
-                    }.buttonStyle(AuroraFlatButtonStyle()).help(name).accessibilityLabel("\(label) \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
+                        Text(shortName).font(.system(size:12,weight:selected ? .bold:.regular)).lineLimit(1).frame(maxWidth:.infinity).frame(height:22).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? palette.selectedText:Color.white).contentShape(Rectangle())
+                    }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help(name).accessibilityLabel("\(label) \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
                 }
             }
         }.frame(height:22)
@@ -1029,13 +1073,13 @@ struct EditorView:View {
     }
     var octaveControl:some View {
         HStack(spacing:8){
-            Text("Octave").font(.system(size:15)).foregroundStyle(muted)
+            Text("Octave").font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             Spacer()
             HStack(spacing:0){
                 Button{shiftOctave(-1)}label:{Image(systemName:"chevron.left").frame(width:25,height:22).contentShape(Rectangle())}.disabled(layerOctave <= -3).accessibilityLabel("Layer octave down")
-                Text(layerOctave > 0 ? "+\(layerOctave)":"\(layerOctave)").font(.system(size:15,weight:.medium)).monospacedDigit().frame(width:32).accessibilityLabel("Layer octave \(layerOctave)")
+                Text(layerOctave > 0 ? "+\(layerOctave)":"\(layerOctave)").font(.system(size:15,weight:palette.weight(.medium))).monospacedDigit().frame(width:32).accessibilityLabel("Layer octave \(layerOctave)")
                 Button{shiftOctave(1)}label:{Image(systemName:"chevron.right").frame(width:25,height:22).contentShape(Rectangle())}.disabled(layerOctave >= 3).accessibilityLabel("Layer octave up")
-            }.buttonStyle(AuroraFlatButtonStyle()).background(buttonSurface,in:RoundedRectangle(cornerRadius:5))
+            }.buttonStyle(AuroraFlatButtonStyle()).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:5))
         }.frame(height:22)
     }
     func slider(_ label:String,_ p:Int,_ range:ClosedRange<Double> = 0...1,log:Bool=false,format:@escaping(Double)->String={String(format:"%.0f%%",$0*100)})->some View {
@@ -1050,7 +1094,7 @@ struct EditorView:View {
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16){
-            HStack{Text("Layer \(layerLetters[m.selectedLayer]) · sound design").font(.system(size:21,weight:.medium));Spacer();Text("Every control shapes the audio engine").font(.system(size:14)).foregroundStyle(muted)}
+            HStack{Text("Layer \(layerLetters[m.selectedLayer]) · sound design").font(.system(size:21,weight:palette.weight(.medium)));Spacer();Text("Every control shapes the audio engine").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
             VStack(alignment:.leading,spacing:16){
                 EqualHeightRow(spacing:16){
                 Panel(title:"Oscillators"){
@@ -1094,7 +1138,7 @@ struct EditorView:View {
             }
             Panel(title:"Live waveform · output"){
                 OutputScope(telemetry:m.scope,normalized:false).frame(height:160)
-                Text("Final mixed output · follows all four layers and FX · actual level, with a triggered view of a few cycles").font(.system(size:13)).foregroundStyle(muted)
+                Text("Final mixed output · follows all four layers and FX · actual level, with a triggered view of a few cycles").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             }
             WavetableSection(m:m)
             MotionEnvelopePanel(m:m).id(m.selectedLayer)
@@ -1104,24 +1148,24 @@ struct EditorView:View {
                 Panel(title:"Pulse & PWM"){
                     slider("Pulse width",34,0.05...0.95)
                     slider("PWM amount",35)
-                    Text("Select Pulse on either oscillator. PWM follows LFO 1’s waveform and rate, independent of its Depth.").font(.system(size:14)).foregroundStyle(muted)
+                    Text("Select Pulse on either oscillator. PWM follows LFO 1’s waveform and rate, independent of its Depth.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
                 Panel(title:"Unison & stereo"){
                     optionButtons("Voices",36,["1","2","3","4"],offset:1)
                     slider("Unison detune",37,0...30,format:{String(format:"%.1f cents",$0)})
                     slider("Stereo spread",38)
-                    Text("2–4 copies per note; levels are balanced automatically.").font(.system(size:14)).foregroundStyle(muted)
+                    Text("2–4 copies per note; levels are balanced automatically.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
                 Panel(title:"Oscillator sync"){
-                    Toggle("Sync oscillator 2 to 1",isOn:Binding(get:{m.patch.layers[m.selectedLayer][39]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,39,$0 ? 1:0)})).tint(accent)
+                    Toggle("Sync oscillator 2 to 1",isOn:Binding(get:{m.patch.layers[m.selectedLayer][39]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,39,$0 ? 1:0)})).tint(palette.accent)
                     slider("Sync tuning",40,0...36,format:{String(format:"%.1f semitones",$0)})
-                    Text("Raise Oscillator blend to hear oscillator 2. Sync resets its cycle to oscillator 1 for a sharper harmonic character.").font(.system(size:14)).foregroundStyle(muted)
+                    Text("Raise Oscillator blend to hear oscillator 2. Sync resets its cycle to oscillator 1 for a sharper harmonic character.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }
             Panel(title:"Playing · layer \(layerLetters[m.selectedLayer])"){
                 EqualHeightRow(spacing:24){
-                    VStack(alignment:.leading,spacing:12){optionButtons("Mode",41,["Poly","Mono","Legato"]);Text("Last-note priority per keyboard/channel. Mono retriggers; Legato connects overlapping notes. Arpeggiator keeps its own gate.").font(.system(size:14)).foregroundStyle(muted)}
-                    VStack(alignment:.leading,spacing:12){slider("Glide",42,0...2,format:{$0==0 ? "Off":String(format:"%.0f ms",$0*1000)});Text("Pitch slides between overlapping mono or legato notes.").font(.system(size:14)).foregroundStyle(muted)}
+                    VStack(alignment:.leading,spacing:12){optionButtons("Mode",41,["Poly","Mono","Legato"]);Text("Last-note priority per keyboard/channel. Mono retriggers; Legato connects overlapping notes. Arpeggiator keeps its own gate.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
+                    VStack(alignment:.leading,spacing:12){slider("Glide",42,0...2,format:{$0==0 ? "Off":String(format:"%.0f ms",$0*1000)});Text("Pitch slides between overlapping mono or legato notes.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
                     slider("Pitch-bend range",43,0...24,format:{"±\(Int($0)) semitones"})
                 }
             }
@@ -1130,23 +1174,24 @@ struct EditorView:View {
     func timeText(_ x:Double)->String{x<1 ? String(format:"%.0f ms",x*1000):String(format:"%.2f s",x)}
 }
 struct ArpEffectsView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     func choices(_ label:String,_ parameter:Int,_ options:[String])->some View {
-        VStack(alignment:.leading,spacing:8){Text(label).foregroundStyle(muted)
+        VStack(alignment:.leading,spacing:8){Text(label).foregroundStyle(palette.muted)
             HStack(spacing:4){ForEach(Array(options.enumerated()),id:\.offset){i,name in
-                Button{m.checkpoint();m.set(m.selectedLayer,parameter,Double(i))}label:{Text(name).font(.system(size:14)).frame(maxWidth:.infinity).padding(.vertical,8).background(Int(m.patch.layers[m.selectedLayer][parameter])==i ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(Int(m.patch.layers[m.selectedLayer][parameter])==i ? Color.white:Color.white).contentShape(Rectangle())}.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("\(label) \(name)")
+                Button{m.checkpoint();m.set(m.selectedLayer,parameter,Double(i))}label:{Text(name).font(.system(size:14,weight:Int(m.patch.layers[m.selectedLayer][parameter])==i ? .bold:.regular)).frame(maxWidth:.infinity).padding(.vertical,8).background(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.selectedText:Color.white).contentShape(Rectangle())}.buttonStyle(AuroraFlatButtonStyle(selected:Int(m.patch.layers[m.selectedLayer][parameter])==i)).accessibilityLabel("\(label) \(name)")
             }}
         }
     }
     var body:some View {
         EqualHeightRow(spacing:16){
             Panel(title:"Arpeggiator · layer \(layerLetters[m.selectedLayer])"){
-                Toggle("Arpeggiator enabled",isOn:Binding(get:{m.patch.layers[m.selectedLayer][22]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,22,$0 ? 1:0)})).tint(accent)
+                Toggle("Arpeggiator enabled",isOn:Binding(get:{m.patch.layers[m.selectedLayer][22]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,22,$0 ? 1:0)})).tint(palette.accent)
                 choices("Pattern",24,["Up","Down","Up/down","Random"])
                 choices("Division",23,["1/4","1/8","1/16","1/32"])
                 Stepper("Octaves: \(Int(m.patch.layers[m.selectedLayer][25]))",value:Binding(get:{Int(m.patch.layers[m.selectedLayer][25])},set:{m.set(m.selectedLayer,25,Double($0))}),in:1...4)
                 ParameterSlider(title:"Gate",value:m.parameter(26),range:0.1...0.95)
-            }.font(.system(size:15))
+            }.font(.system(size:15,weight:palette.weight(.regular)))
             Panel(title:"Delay"){
                 Picker("Timing",selection:Binding(get:{Int(m.patch.globalValue(14))},set:{m.checkpoint();m.global(14,Double($0))})){
                     ForEach(Array(["1/4","1/8","1/16","1/2","1/8 dotted","1/4 dotted","1/8 triplet","1/4 triplet"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
@@ -1158,12 +1203,13 @@ struct ArpEffectsView:View {
                 ParameterSlider(title:"Chorus",value:m.globalBinding(5),range:0...0.6).modifier(MatrixFeedback(model:m,destination:8))
                 ParameterSlider(title:"Phaser",value:m.globalBinding(6),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:9))
                 ParameterSlider(title:"Reverb",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
-                Text("Shared FX returns. Each layer has independent Delay and Reverb sends above.").font(.system(size:14)).foregroundStyle(muted)
+                Text("Shared FX returns. Each layer has independent Delay and Reverb sends above.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             }
         }
     }
 }
 struct FXDetailView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     func control(_ title:String,_ id:Int,_ range:ClosedRange<Double> = 0...1,_ format:@escaping(Double)->String={String(format:"%.0f%%",$0*100)})->some View {
         ParameterSlider(title:title,value:m.globalBinding(id),range:range,format:format,onBegin:{m.checkpoint()})
@@ -1179,17 +1225,18 @@ struct FXDetailView:View {
             Panel(title:"Chorus · movement"){
                 control("Rate",10,0.03...5,{String(format:"%.2f Hz",$0)})
                 control("Depth",11)
-                Text("Adjust wet level in FX above.").font(.system(size:14)).foregroundStyle(muted)
+                Text("Adjust wet level in FX above.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             }
             Panel(title:"Reverb · space"){
                 control("Size",12)
                 control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
-                Text("Room size and approximate decay time. Shared across the patch.").font(.system(size:14)).foregroundStyle(muted)
+                Text("Room size and approximate decay time. Shared across the patch.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             }
         }
     }
 }
 struct MatrixView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     private let soundSources=["LFO 1","LFO 2","Amp envelope"]
     private let performanceSources=["Mod wheel","Velocity","Channel pressure","Expression","Sustain","MIDI CC"]
@@ -1200,63 +1247,64 @@ struct MatrixView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:16){
             Panel(title:"Sound Matrix · layer \(layerLetters[m.selectedLayer])"){
-                Text("Add movement from either LFO or the amplitude envelope. These routes add to the controls in Edit; LFO sources use their full waveform, independent of the Depth slider.").font(.system(size:14)).foregroundStyle(muted)
+                Text("Add movement from either LFO or the amplitude envelope. These routes add to the controls in Edit; LFO sources use their full waveform, independent of the Depth slider.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 ForEach(0..<6){row in routeRow(false,row)}
             }
             Panel(title:"Performance Matrix · this patch"){
-                Text("Use your wheels, playing dynamics, pedals, or any MIDI CC. Layer routes follow each note’s keyboard and channel. Shared FX follow the latest received source value across keyboards.").font(.system(size:14)).foregroundStyle(muted)
+                Text("Use your wheels, playing dynamics, pedals, or any MIDI CC. Layer routes follow each note’s keyboard and channel. Shared FX follow the latest received source value across keyboards.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 ForEach(0..<6){row in routeRow(true,row)}
             }
-            Text("Amount is an offset: ±100% gives up to 4 octaves of cutoff movement, 12 semitones of pitch, or the full normalized range of other destinations. Multiple slots add together; the final value is bounded. Existing wheel vibrato, expression, sustain, and MIDI Learn remain active.").font(.system(size:13)).foregroundStyle(muted)
+            Text("Amount is an offset: ±100% gives up to 4 octaves of cutoff movement, 12 semitones of pitch, or the full normalized range of other destinations. Multiple slots add together; the final value is bounded. Existing wheel vibrato, expression, sustain, and MIDI Learn remain active.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }
     }
     func routeRow(_ performance:Bool,_ slot:Int)->some View {
         let row=m.matrixRows(performance:performance)[slot]
         return HStack(spacing:10){
             Toggle("Slot \(slot+1)",isOn:binding(performance,slot,\.enabled)).labelsHidden().toggleStyle(.checkbox).accessibilityLabel("\(performance ? "Performance":"Sound") slot \(slot+1) enabled")
-            Text("\(slot+1)").foregroundStyle(muted).frame(width:14)
+            Text("\(slot+1)").foregroundStyle(palette.muted).frame(width:14)
             Picker("Source",selection:binding(performance,slot,\.source)){
                 ForEach(Array((performance ? performanceSources:soundSources).enumerated()),id:\.offset){i,name in Text(name).tag(i)}
             }.labelsHidden().frame(width:performance ? 150:140).accessibilityLabel("Slot \(slot+1) source")
             if performance && row.source==5 {
-                HStack(spacing:3){Text("CC").foregroundStyle(muted);TextField("CC number",value:binding(performance,slot,\.cc),format:.number).textFieldStyle(.roundedBorder).frame(width:36)}.frame(width:65)
+                HStack(spacing:3){Text("CC").foregroundStyle(palette.muted);TextField("CC number",value:binding(performance,slot,\.cc),format:.number).textFieldStyle(.roundedBorder).frame(width:36)}.frame(width:65)
             } else if performance {Color.clear.frame(width:65,height:1)}
-            Image(systemName:"arrow.right").foregroundStyle(muted)
+            Image(systemName:"arrow.right").foregroundStyle(palette.muted)
             Picker("Destination",selection:binding(performance,slot,\.destination)){
                 ForEach(performance ? Array(0..<destinations.count):Array(0..<6)+Array(12..<16),id:\.self){i in Text(destinations[i]).tag(i)}
             }.labelsHidden().frame(width:150).accessibilityLabel("Slot \(slot+1) destination")
             if performance {
-                if (8...11).contains(row.destination){Text("Whole patch").foregroundStyle(accent).frame(width:100)}else{
+                if (8...11).contains(row.destination){Text("Whole patch").foregroundStyle(palette.accent).frame(width:100)}else{
                     Picker("Target",selection:binding(true,slot,\.target)){Text("All layers").tag(4);ForEach(0..<4){i in Text("Layer \(layerLetters[i])").tag(i)}}.labelsHidden().frame(width:100)
                 }
             }
-            Slider(value:Binding(get:{m.matrixRows(performance:performance)[slot].amount},set:{value in m.updateMatrix(performance:performance,slot:slot){$0.amount=value}}),in:-1...1,onEditingChanged:{if $0{m.checkpoint()}}).tint(accent).frame(minWidth:70).accessibilityLabel("Slot \(slot+1) amount")
+            Slider(value:Binding(get:{m.matrixRows(performance:performance)[slot].amount},set:{value in m.updateMatrix(performance:performance,slot:slot){$0.amount=value}}),in:-1...1,onEditingChanged:{if $0{m.checkpoint()}}).tint(palette.accent).frame(minWidth:70).accessibilityLabel("Slot \(slot+1) amount")
             VStack(spacing:3){
                 Text(String(format:"%+.0f%%",row.amount*100)).monospacedDigit()
                 ModulationIndicator(telemetry:m.modulation,slots:[(performance ? 24:m.selectedLayer*6)+slot])
             }.frame(width:58,alignment:.trailing)
             Button{m.checkpoint();m.updateMatrix(performance:performance,slot:slot){$0=MatrixAssignment()}}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(AuroraIconButtonStyle()).help("Reset slot \(slot+1)")
-        }.font(.system(size:14)).padding(.vertical,5).opacity(row.enabled ? 1:0.65)
+        }.font(.system(size:14,weight:palette.weight(.regular))).padding(.vertical,5).opacity(row.enabled ? 1:0.65)
     }
 }
 struct RoutingView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     var body:some View {
         VStack(alignment:.leading,spacing:16){
-            HStack{Text("Your keyboards").font(.system(size:22,weight:.medium));Spacer();Button("Refresh",systemImage:"arrow.clockwise"){m.refresh()}}
-            Text("Choose the layers each MIDI source plays. MIDI inputs and the audio output are independent.").foregroundStyle(muted).font(.system(size:15))
-            if m.sources.isEmpty {Panel(title:"No MIDI sources detected"){Text("Connect a keyboard by USB, then Refresh. The on-screen keyboard still works.").foregroundStyle(muted);Text("Yamaha keyboards use USB TO HOST and the Yamaha Steinberg USB Driver.").font(.system(size:15))}}
+            HStack{Text("Your keyboards").font(.system(size:22,weight:palette.weight(.medium)));Spacer();Button("Refresh",systemImage:"arrow.clockwise"){m.refresh()}}
+            Text("Choose the layers each MIDI source plays. MIDI inputs and the audio output are independent.").foregroundStyle(palette.muted).font(.system(size:15,weight:palette.weight(.regular)))
+            if m.sources.isEmpty {Panel(title:"No MIDI sources detected"){Text("Connect a keyboard by USB, then Refresh. The on-screen keyboard still works.").foregroundStyle(palette.muted);Text("Yamaha keyboards use USB TO HOST and the Yamaha Steinberg USB Driver.").font(.system(size:15,weight:palette.weight(.regular)))}}
             ForEach(m.sources){source in sourceRow(source)}
             Panel(title:"Audio output"){
-                Text(m.running ? "Audio is enabled. Changing the output stops playback until you enable audio again.":"Audio is stopped. Choose the output connected to your headphones or speakers.").font(.system(size:15)).foregroundStyle(muted)
+                Text(m.running ? "Audio is enabled. Changing the output stops playback until you enable audio again.":"Audio is stopped. Choose the output connected to your headphones or speakers.").font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 HStack{Picker("Output",selection:Binding(get:{m.output},set:{m.changeOutput($0)})){Text("System default").tag(UInt32(0));ForEach(m.devices){Text($0.name).tag($0.id)}}
                     Picker("Buffer",selection:$m.buffer){ForEach([64,128,256,512],id:\.self){Text("\($0) frames").tag($0)}}.frame(width:220).disabled(m.running)}
-                Text("The output's actual sample rate is used. CK88 and MODX7+ USB audio use 44.1 kHz.").font(.system(size:14)).foregroundStyle(muted)
+                Text("The output's actual sample rate is used. CK88 and MODX7+ USB audio use 44.1 kHz.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             }
             Panel(title:"Oxygen Pro 25 · MIDI Learn"){
-                Text("Use Preset mode and the musical USB MIDI port. Click MIDI Learn below any macro, then move one of your eight knobs. Cross the macro's current position to take control without a jump.").font(.system(size:15)).foregroundStyle(muted)
-                if m.mappings.isEmpty{Text("No knobs mapped yet.").font(.system(size:15))}
-                ForEach(m.mappings,id:\.macro){mapping in HStack{Text(m.macroNames[mapping.macro]);Spacer();Text("CC \(mapping.controller) · ch \(mapping.channel)").foregroundStyle(muted);Button("Remove"){m.mappings.removeAll{$0.macro==mapping.macro};m.persist()}}.font(.system(size:15))}
+                Text("Use Preset mode and the musical USB MIDI port. Click MIDI Learn below any macro, then move one of your eight knobs. Cross the macro's current position to take control without a jump.").font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                if m.mappings.isEmpty{Text("No knobs mapped yet.").font(.system(size:15,weight:palette.weight(.regular)))}
+                ForEach(m.mappings,id:\.macro){mapping in HStack{Text(m.macroNames[mapping.macro]);Spacer();Text("CC \(mapping.controller) · ch \(mapping.channel)").foregroundStyle(palette.muted);Button("Remove"){m.mappings.removeAll{$0.macro==mapping.macro};m.persist()}}.font(.system(size:15,weight:palette.weight(.regular)))}
             }
         }
     }
@@ -1264,18 +1312,19 @@ struct RoutingView:View {
         let route=m.routes[source.id] ?? SourceRoute(mask:1,channel:0)
         return Panel(title:source.name){
             HStack{
-                ForEach(0..<4){i in Button{var r=route;r.mask ^= (1<<i);m.setRoute(source.id,r)}label:{Text("Layer \(layerLetters[i])").frame(maxWidth:.infinity).padding(.vertical,7).background(route.mask&(1<<i) != 0 ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(route.mask&(1<<i) != 0 ? Color.white:Color.white)}.buttonStyle(AuroraFlatButtonStyle())}
+                ForEach(0..<4){i in Button{var r=route;r.mask ^= (1<<i);m.setRoute(source.id,r)}label:{Text("Layer \(layerLetters[i])").frame(maxWidth:.infinity).padding(.vertical,7).background(route.mask&(1<<i) != 0 ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(route.mask&(1<<i) != 0 ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:route.mask&(1<<i) != 0))}
                 Picker("Channel",selection:Binding(get:{route.channel},set:{var r=route;r.channel=$0;m.setRoute(source.id,r)})){Text("All").tag(0);ForEach(1...16,id:\.self){Text("\($0)").tag($0)}}.frame(width:160)
             }
             Picker("Velocity curve",selection:Binding(get:{route.velocityCurve ?? 0},set:{var r=route;r.velocityCurve=$0;m.setRoute(source.id,r)})){
                 Text("Linear").tag(0);Text("Soft touch").tag(1);Text("Hard touch").tag(2);Text("Fixed · 100").tag(3)
             }.frame(maxWidth:380).help("Soft touch makes lighter playing louder; Hard touch gives more quiet range. Saved for this MIDI input.")
-            HStack{Text(route.mask==0 ? "Input disabled":"Assigned to "+(0..<4).filter{route.mask&(1<<$0) != 0}.map{layerLetters[$0]}.joined(separator:" + "));Spacer();Text("\(source.events ?? 0) MIDI events")}.font(.system(size:14)).foregroundStyle(muted)
+            HStack{Text(route.mask==0 ? "Input disabled":"Assigned to "+(0..<4).filter{route.mask&(1<<$0) != 0}.map{layerLetters[$0]}.joined(separator:" + "));Spacer();Text("\(source.events ?? 0) MIDI events")}.font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }
     }
 }
 
 struct PerformanceTools:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @ObservedObject var telemetry:PerformanceTelemetry
     var body:some View{
@@ -1285,14 +1334,14 @@ struct PerformanceTools:View {
                 Picker("Clock",selection:Binding(get:{m.externalClock ? m.clockSourceID:0},set:{m.setClock($0 != 0,source:$0)})){
                     Text("Internal").tag(Int32(0));ForEach(m.sources){Text($0.name).tag($0.id)}
                 }.frame(maxWidth:360)
-                if m.externalClock{Text(telemetry.clockBPM>0 ? "Synced":"Waiting / stopped").font(.system(size:13)).foregroundStyle(muted)}
+                if m.externalClock{Text(telemetry.clockBPM>0 ? "Synced":"Waiting / stopped").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
                 Spacer(minLength:0)
                 Button(m.recording ? "Stop recording":"Record",systemImage:m.recording ? "stop.circle.fill":"record.circle"){m.toggleRecording()}.buttonStyle(AuroraButtonStyle(selected:m.recording)).disabled(m.normalizingRecording || (!m.running && !m.recording))
                 if m.recording{Text(String(format:"%02d:%02d",telemetry.seconds/60,telemetry.seconds%60)).monospacedDigit().frame(width:48)}
                 if let url=m.recordingURL,!m.recording,!m.normalizingRecording{Button("Show WAV"){NSWorkspace.shared.activateFileViewerSelecting([url])}}
             }
-            if !m.recordingMessage.isEmpty{Text(m.recordingMessage).font(.system(size:13)).foregroundStyle(muted)}
-        }.padding(12).background(surface,in:RoundedRectangle(cornerRadius:10))
+            if !m.recordingMessage.isEmpty{Text(m.recordingMessage).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
+        }.padding(12).background(palette.surface,in:RoundedRectangle(cornerRadius:10))
     }
 }
 struct CategoryWrap:Layout {
@@ -1316,6 +1365,7 @@ struct CategoryWrap:Layout {
     @Published var category:String?=nil
 }
 struct PatchBrowserCard:View {
+    @Environment(\.auroraPalette) private var palette
     let patch:SoundPreset
     let selected:Bool
     let userSound:Bool
@@ -1324,23 +1374,24 @@ struct PatchBrowserCard:View {
         Button(action:select){
             VStack(alignment:.leading,spacing:9){
                 HStack(alignment:.top,spacing:8){
-                    Text(patch.name).font(.system(size:17,weight:.semibold)).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
-                    if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}
+                    Text(patch.name).font(.system(size:17,weight:palette.weight(.semibold))).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+                    if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(palette.accent)}
                 }
                 Spacer(minLength:0)
                 HStack{
-                    Text(patch.category).font(.system(size:13,weight:.medium)).foregroundStyle(selected ? accent:muted)
+                    Text(patch.category).font(.system(size:13,weight:palette.weight(.medium))).foregroundStyle(selected ? palette.accent:palette.muted)
                     Spacer()
-                    if userSound{Image(systemName:"person.crop.circle").foregroundStyle(muted)}
+                    if userSound{Image(systemName:"person.crop.circle").foregroundStyle(palette.muted)}
                 }
             }.padding(15).frame(height:104).frame(maxWidth:.infinity,alignment:.leading)
-                .background(selected ? buttonSurface:buttonSurface.opacity(0.4),in:RoundedRectangle(cornerRadius:12))
-                .overlay(RoundedRectangle(cornerRadius:12).stroke(selected ? buttonSelected:graphCyan.opacity(0.25),lineWidth:selected ? 1.5:1))
+                .background(selected ? palette.buttonSurface:palette.buttonSurface.opacity(0.4),in:RoundedRectangle(cornerRadius:12))
+                .overlay(RoundedRectangle(cornerRadius:12).stroke(selected ? palette.buttonSelected:palette.graphCyan.opacity(0.25),lineWidth:selected ? 1.5:1))
                 .contentShape(RoundedRectangle(cornerRadius:12))
         }.buttonStyle(AuroraFlatButtonStyle()).help(patch.name+" · "+patch.detail).accessibilityLabel("Load patch \(patch.name)").accessibilityAddTraits(selected ? .isSelected:[])
     }
 }
 struct PatchBrowser:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let close:()->Void
     @StateObject private var state=PatchBrowserState()
@@ -1353,10 +1404,10 @@ struct PatchBrowser:View {
         let patches=sounds
         VStack(alignment:.leading,spacing:18){
             HStack(spacing:16){
-                VStack(alignment:.leading,spacing:4){Text("All patches").font(.system(size:26,weight:.semibold));Text("Choose a sound, then play your keyboard.").font(.system(size:14)).foregroundStyle(muted)}
+                VStack(alignment:.leading,spacing:4){Text("All patches").font(.system(size:26,weight:palette.weight(.semibold)));Text("Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
                 Spacer()
-                Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18)).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? accent:muted).help(m.running ? "Turn audio off":"Turn audio on")
-                Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:.semibold)).frame(width:36,height:36).background(buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
+                Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
+                Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:palette.weight(.semibold))).frame(width:36,height:36).background(palette.buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
             }
             CategoryWrap{
                 categoryButton("All",nil)
@@ -1380,16 +1431,21 @@ struct PatchBrowser:View {
                     }.padding(2)
                 }.onChange(of:category){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
             }
-            HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(accent)}.font(.system(size:13)).foregroundStyle(muted)
-        }.padding(24).background(surface,in:RoundedRectangle(cornerRadius:20))
+            HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+        }.padding(24).background(palette.surface,in:RoundedRectangle(cornerRadius:20))
             .overlay(RoundedRectangle(cornerRadius:20).stroke(.white.opacity(0.13)))
             .shadow(color:.black.opacity(0.45),radius:30,y:12)
     }
     func categoryButton(_ label:String,_ value:String?)->some View{
-        Button{category=value}label:{Text(label).font(.system(size:15,weight:.semibold)).padding(.horizontal,13).padding(.vertical,8).background(category==value ? buttonSelected:buttonSurface,in:Capsule()).foregroundStyle(category==value ? Color.white:Color.white)}.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("Browse \(label)").accessibilityAddTraits(category==value ? .isSelected:[])
+        Button{category=value}label:{Text(label).font(.system(size:15,weight:category==value ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(category==value ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(category==value ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:category==value)).accessibilityLabel("Browse \(label)").accessibilityAddTraits(category==value ? .isSelected:[])
     }
 }
 struct ContentView:View {
+    @ObservedObject var m:SynthModel
+    var body:some View{AuroraContentView(m:m).environment(\.auroraPalette,m.theme.palette)}
+}
+struct AuroraContentView:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     @StateObject private var browserState=PatchBrowserState()
     var showingPatchBrowser:Bool{get{browserState.visible} nonmutating set{browserState.visible=newValue}}
@@ -1398,75 +1454,78 @@ struct ContentView:View {
             HStack(spacing:0){sidebar.frame(width:270);Divider().opacity(0.15)
                 ScrollView{
                     VStack(alignment:.leading,spacing:23){
-                        HStack(alignment:.top){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:.medium)).tracking(2).foregroundStyle(accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:.medium,design:.rounded));Text(m.patch.detail).font(.system(size:15)).foregroundStyle(muted)};Spacer();Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}
+                        HStack(alignment:.top){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}
                         HStack(spacing:10){
                             Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the filtered library")
                             Button{m.browsePatch(1)}label:{Image(systemName:"chevron.right")}.help("Next patch in the filtered library")
                             Button(m.comparingSaved ? "A · Saved — return to B":"B · Edited — compare A"){m.toggleComparison()}.buttonStyle(AuroraButtonStyle(selected:m.comparingSaved)).disabled(m.savedComparison==nil)
-                            if m.comparingSaved{Text("Hearing saved sound · your edits are retained").font(.system(size:13)).foregroundStyle(accent)}
+                            if m.comparingSaved{Text("Hearing saved sound · your edits are retained").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.accent)}
                             Button("Creative tools…"){m.showingCreativeTools=true}
                             Spacer()
                             if m.soloLayer>=0{Button("Clear solo"){m.toggleSolo(m.soloLayer)}}
                         }
                         HStack(spacing:10){ForEach(0..<4){LayerStrip(model:m,index:$0)}}
                         HStack(spacing:22){
-                            Text("Layer \(layerLetters[m.selectedLayer])\nFX sends").font(.system(size:14,weight:.medium)).foregroundStyle(muted)
+                            Text("Layer \(layerLetters[m.selectedLayer])\nFX sends").font(.system(size:14,weight:palette.weight(.medium))).foregroundStyle(palette.muted)
                             ParameterSlider(title:"Delay send",value:m.sendBinding(true),onBegin:{m.checkpoint()})
                             ParameterSlider(title:"Reverb send",value:m.sendBinding(false),onBegin:{m.checkpoint()})
-                        }.padding(12).background(surface,in:RoundedRectangle(cornerRadius:10)).help("Send levels for the selected layer. Delay and Reverb Mix still control the shared returns.")
+                        }.padding(12).background(palette.surface,in:RoundedRectangle(cornerRadius:10)).help("Send levels for the selected layer. Delay and Reverb Mix still control the shared returns.")
                         PerformanceTools(m:m,telemetry:m.performanceTelemetry)
                         if m.screen=="Play" {play} else if m.screen=="Edit" {EditorView(m:m)} else if m.screen=="Matrix" {MatrixView(m:m)} else {RoutingView(m:m)}
                     }.padding(24)
-                }.background(Color(red:0.075,green:0.095,blue:0.083))
+                }.background(palette.background)
             }
 
-        }.background(surface).foregroundStyle(Color(red:0.92,green:0.95,blue:0.91)).preferredColorScheme(.dark).environment(\.colorScheme,.dark).font(.system(size:15)).controlSize(.regular).buttonStyle(AuroraButtonStyle()).frame(minWidth:1260,minHeight:780)
+        }.background(palette.surface).foregroundStyle(Color.white).preferredColorScheme(.dark).environment(\.colorScheme,.dark).font(.system(size:15,weight:palette.weight(.regular))).controlSize(.regular).buttonStyle(AuroraButtonStyle()).frame(minWidth:1260,minHeight:780)
         .allowsHitTesting(!showingPatchBrowser).accessibilityHidden(showingPatchBrowser)
         .overlay{
             if showingPatchBrowser{
                 GeometryReader{geometry in
                     ZStack{
                         Button{showingPatchBrowser=false}label:{Color.black.opacity(0.5).contentShape(Rectangle())}.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("Dismiss patch browser")
-                        PatchBrowser(m:m){showingPatchBrowser=false}.frame(width:geometry.size.width*0.94,height:geometry.size.height*0.9).foregroundStyle(Color(red:0.92,green:0.95,blue:0.91))
+                        PatchBrowser(m:m){showingPatchBrowser=false}.frame(width:geometry.size.width*0.94,height:geometry.size.height*0.9).foregroundStyle(Color.white)
                     }.frame(width:geometry.size.width,height:geometry.size.height)
                 }
             }
         }
         .sheet(isPresented:Binding(get:{m.renameID != nil},set:{if !$0{m.renameID=nil}})){
-            VStack(alignment:.leading,spacing:18){Text("Edit sound details").font(.system(size:26,weight:.semibold));TextField("Sound name",text:$m.renameName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.renameCategory).textFieldStyle(.roundedBorder);HStack{Button("Cancel"){m.renameID=nil};Spacer();Button("Save details"){m.renameSound()}.keyboardShortcut(.defaultAction).disabled(m.renameName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())
+            VStack(alignment:.leading,spacing:18){Text("Edit sound details").font(.system(size:26,weight:palette.weight(.semibold)));TextField("Sound name",text:$m.renameName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.renameCategory).textFieldStyle(.roundedBorder);HStack{Button("Cancel"){m.renameID=nil};Spacer();Button("Save details"){m.renameSound()}.keyboardShortcut(.defaultAction).disabled(m.renameName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())
         }
         .sheet(isPresented:$m.showingCreativeTools){CreativeToolsView(m:m)}
-        .sheet(isPresented:$m.showingSave){VStack(alignment:.leading,spacing:18){Text("Save sound as").font(.system(size:26,weight:.semibold));TextField("Preset name",text:$m.saveName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.saveCategory).textFieldStyle(.roundedBorder);Text("Use an existing category or enter your own.").foregroundStyle(muted);HStack{Button("Cancel"){m.showingSave=false};Spacer();Button("Save"){m.saveUserPreset()}.keyboardShortcut(.defaultAction).disabled(m.saveName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())}
+        .sheet(isPresented:$m.showingSave){VStack(alignment:.leading,spacing:18){Text("Save sound as").font(.system(size:26,weight:palette.weight(.semibold)));TextField("Preset name",text:$m.saveName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.saveCategory).textFieldStyle(.roundedBorder);Text("Use an existing category or enter your own.").foregroundStyle(palette.muted);HStack{Button("Cancel"){m.showingSave=false};Spacer();Button("Save"){m.saveUserPreset()}.keyboardShortcut(.defaultAction).disabled(m.saveName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())}
     }
     var header:some View {
         HStack(spacing:12){
-            HStack(spacing:8){Image(systemName:"waveform").foregroundStyle(accent);Text("AURORA").tracking(3).font(.system(size:19,weight:.semibold))}.frame(minWidth:125,idealWidth:262,maxWidth:262,alignment:.leading).help(m.notice.isEmpty ? "Aurora synthesizer":m.notice)
-            HStack(spacing:3){ForEach(["Play","Edit","Matrix","Routing"],id:\.self){name in Button{m.screen=name}label:{Text(name).font(.system(size:13,weight:.medium)).frame(maxWidth:.infinity).frame(height:28).background(m.screen==name ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(m.screen==name ? Color.white:Color.white)}.buttonStyle(AuroraFlatButtonStyle()).accessibilityAddTraits(m.screen==name ? .isSelected:[])}}.frame(width:250)
+            HStack(spacing:8){Image(systemName:"waveform").foregroundStyle(palette.accent);Text("AURORA").tracking(3).font(.system(size:19,weight:palette.weight(.semibold))).lineLimit(1)}.frame(minWidth:125,idealWidth:262,maxWidth:262,alignment:.leading).help(m.notice.isEmpty ? "Aurora synthesizer":m.notice)
+            HStack(spacing:3){ForEach(["Play","Edit","Matrix","Routing"],id:\.self){name in Button{m.screen=name}label:{Text(name).font(.system(size:13,weight:m.screen==name ? .bold:.regular)).frame(maxWidth:.infinity).frame(height:28).background(m.screen==name ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(m.screen==name ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:m.screen==name)).accessibilityAddTraits(m.screen==name ? .isSelected:[])}}.frame(width:250)
             OutputScope(telemetry:m.scope).frame(minWidth:65,idealWidth:120,maxWidth:160).frame(height:30)
             HStack(spacing:6){
                 if m.externalClock{ClockReadout(telemetry:m.performanceTelemetry)}else{TextField("Tempo",value:Binding(get:{Int(m.patch.globals[1])},set:{m.global(1,Double($0))}),format:.number).textFieldStyle(.roundedBorder).frame(width:48).monospacedDigit().accessibilityLabel("Tempo")}
-                Text("BPM").font(.system(size:12)).foregroundStyle(muted)
+                Text("BPM").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 Button("Tap"){m.tapTempo()}.disabled(m.externalClock).help("Tap repeatedly to set the tempo")
             }.fixedSize()
             Divider().frame(height:24)
             HStack(spacing:0){
                 Button{m.setTranspose(m.transpose-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:30).contentShape(Rectangle())}.disabled(m.transpose <= -24).accessibilityLabel("Transpose down one semitone")
-                Text(m.transpose > 0 ? "+\(m.transpose)":"\(m.transpose)").monospacedDigit().font(.system(size:15,weight:.medium)).frame(width:34).accessibilityLabel("Global transpose \(m.transpose) semitones")
+                Text(m.transpose > 0 ? "+\(m.transpose)":"\(m.transpose)").monospacedDigit().font(.system(size:15,weight:palette.weight(.medium))).frame(width:34).accessibilityLabel("Global transpose \(m.transpose) semitones")
                 Button{m.setTranspose(m.transpose+1)}label:{Image(systemName:"chevron.right").frame(width:28,height:30).contentShape(Rectangle())}.disabled(m.transpose >= 24).accessibilityLabel("Transpose up one semitone")
-            }.buttonStyle(AuroraFlatButtonStyle()).background(buttonSurface,in:RoundedRectangle(cornerRadius:7)).help("Global transpose · semitones · applies to all layers")
+            }.buttonStyle(AuroraFlatButtonStyle()).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:7)).help("Global transpose · semitones · applies to all layers")
             HStack(spacing:5){
                 Button{m.undo()}label:{Image(systemName:"arrow.uturn.backward").frame(width:18,height:20)}.help("Undo").accessibilityLabel("Undo").keyboardShortcut("z",modifiers:.command)
                 Button{m.redo()}label:{Image(systemName:"arrow.uturn.forward").frame(width:18,height:20)}.help("Redo").accessibilityLabel("Redo").keyboardShortcut("z",modifiers:[.command,.shift])
             }
-            HStack(spacing:6){Text("Master").foregroundStyle(muted);Slider(value:m.globalBinding(0),in:0...1).frame(minWidth:65,idealWidth:95,maxWidth:115).tint(accent).accessibilityLabel("Master volume");Text(String(format:"%.0f%%",m.patch.globals[0]*100)).frame(width:40).monospacedDigit()}
-            Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:17)).foregroundStyle(m.running ? Color.white:Color.white).frame(width:34,height:30).background(m.running ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel(m.running ? "Turn audio off":"Turn audio on").help(m.status+String(format:" · %.1f kHz · %d frames",m.sampleRate/1000,m.actualFrames))
+            HStack(spacing:6){Text("Master").foregroundStyle(palette.muted);Slider(value:m.globalBinding(0),in:0...1).frame(minWidth:65,idealWidth:95,maxWidth:115).tint(palette.accent).accessibilityLabel("Master volume");Text(String(format:"%.0f%%",m.patch.globals[0]*100)).frame(width:40).monospacedDigit()}
+            Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:17,weight:m.running ? .bold:.regular)).foregroundStyle(m.running ? palette.selectedText:Color.white).frame(width:34,height:30).background(m.running ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle(selected:m.running)).accessibilityLabel(m.running ? "Turn audio off":"Turn audio on").help(m.status+String(format:" · %.1f kHz · %d frames",m.sampleRate/1000,m.actualFrames))
             Button("Panic",systemImage:"stop.circle"){m.panic()}.help("Stop all notes and effect tails").fixedSize().keyboardShortcut(".",modifiers:.command)
-            EngineReadout(telemetry:m.telemetry).font(.system(size:13)).foregroundStyle(muted).frame(width:130,alignment:.trailing)
-        }.font(.system(size:14)).padding(.horizontal,20).padding(.vertical,14)
+            EngineReadout(telemetry:m.telemetry).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted).frame(width:130,alignment:.trailing)
+        }.font(.system(size:14,weight:palette.weight(.regular))).padding(.horizontal,20).padding(.vertical,14)
+    }
+    var themeMenu:some View {
+        Menu{ForEach(AuroraTheme.allCases){theme in Button{m.selectTheme(theme)}label:{Label(theme.rawValue,systemImage:m.theme==theme ? "checkmark.circle.fill":"circle")}}}label:{Image(systemName:"paintpalette.fill").foregroundStyle(Color.white).frame(width:26,height:26).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))}.menuStyle(.borderlessButton).fixedSize().help("Color theme · \(m.theme.rawValue)").accessibilityLabel("Color theme · \(m.theme.rawValue)")
     }
     var sidebar:some View {
-        VStack(alignment:.leading,spacing:16){HStack{Text("Sound library").font(.system(size:18,weight:.semibold));Spacer();Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Button("Import preset…"){m.importPreset()};Button("Export current preset…"){m.exportPreset()}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:20)}
-            TextField("Search sounds",text:$m.search).textFieldStyle(.roundedBorder).font(.system(size:15))
+        VStack(alignment:.leading,spacing:16){HStack{Text("Sound library").font(.system(size:18,weight:palette.weight(.semibold)));Spacer();themeMenu;Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Button("Import preset…"){m.importPreset()};Button("Export current preset…"){m.exportPreset()}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:20)}
+            TextField("Search sounds",text:$m.search).textFieldStyle(.roundedBorder).font(.system(size:15,weight:palette.weight(.regular)))
             VStack(alignment:.leading,spacing:9){
                 Picker("Collection",selection:$m.collection){
                     Text("Aurora").tag("Aurora")
@@ -1478,56 +1537,56 @@ struct ContentView:View {
                     Text("All categories").tag("All categories")
                     ForEach(m.categories,id:\.self){Text($0).tag($0)}
                 }.labelsHidden().accessibilityLabel("Sound category")
-            }.font(.system(size:15))
+            }.font(.system(size:15,weight:palette.weight(.regular)))
                 .onChange(of:m.collection){_,_ in m.category="All categories"}
-            Toggle("Favorites",isOn:$m.favoritesOnly).toggleStyle(.checkbox).font(.system(size:14)).foregroundStyle(muted)
+            Toggle("Favorites",isOn:$m.favoritesOnly).toggleStyle(.checkbox).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             ScrollView{VStack(alignment:.leading,spacing:4){
                 ForEach(m.libraryGroups,id:\.category){group in
                     HStack(spacing:6){
-                        Text(group.category.uppercased()).font(.system(size:18,weight:.bold)).tracking(0.3)
+                        Text(group.category.uppercased()).font(.system(size:18,weight:palette.weight(.bold))).tracking(0.3)
                         Spacer(minLength:0)
-                        Text("\(group.sounds.count)").font(.system(size:13,weight:.semibold)).monospacedDigit()
-                    }.foregroundStyle(accent).padding(.horizontal,10).padding(.vertical,9)
+                        Text("\(group.sounds.count)").font(.system(size:13,weight:palette.weight(.semibold))).monospacedDigit()
+                    }.foregroundStyle(palette.accent).padding(.horizontal,10).padding(.vertical,9)
                         .frame(maxWidth:.infinity,alignment:.leading)
-                        .background(accent.opacity(0.17),in:RoundedRectangle(cornerRadius:7))
-                        .overlay(RoundedRectangle(cornerRadius:7).stroke(accent.opacity(0.25),lineWidth:1))
+                        .background(palette.accent.opacity(0.17),in:RoundedRectangle(cornerRadius:7))
+                        .overlay(RoundedRectangle(cornerRadius:7).stroke(palette.accent.opacity(0.25),lineWidth:1))
                         .padding(.top,12).padding(.bottom,4)
                     ForEach(group.sounds){p in presetRow(p)}
                 }
                 if m.library.isEmpty {
                     Text(m.collection == "Your sounds" && m.userPresets.isEmpty ? "Save a sound to begin your collection." : "No sounds match these filters.")
-                        .font(.system(size:15)).foregroundStyle(muted).padding(.vertical,20)
+                        .font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted).padding(.vertical,20)
                 }
             }}
             HStack(alignment:.center){
                 VStack(alignment:.leading,spacing:5){
-                    Text("\(m.library.count) of \(m.collectionSounds.count) sounds").font(.system(size:13)).foregroundStyle(muted)
-                    Text("by Ray Bridge Digital").font(.system(size:14,weight:.bold,design:.rounded)).foregroundStyle(Color(red:0.78,green:0.85,blue:1))
+                    Text("\(m.library.count) of \(m.collectionSounds.count) sounds").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                    Text("by Ray Bridge Digital").font(.system(size:14,weight:palette.weight(.bold),design:.rounded)).foregroundStyle(palette.accent)
                 }
                 Spacer(minLength:6)
-                Button{showingPatchBrowser=true}label:{Image(systemName:"square.grid.3x3.fill").font(.system(size:18)).foregroundStyle(accent).frame(width:34,height:34).background(buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle()).help("Browse all patches").accessibilityLabel("Open all patches")
+                Button{showingPatchBrowser=true}label:{Image(systemName:"square.grid.3x3.fill").font(.system(size:18,weight:palette.weight(.regular))).foregroundStyle(palette.accent).frame(width:34,height:34).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle()).help("Browse all patches").accessibilityLabel("Open all patches")
             }
         }.padding(16)
     }
     func presetRow(_ p:SoundPreset)->some View {
         HStack(spacing:0){
             Button{m.loadPreset(p)}label:{
-                Text(p.name).font(.system(size:15,weight:.medium)).lineLimit(2).frame(minHeight:36,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
+                Text(p.name).font(.system(size:15,weight:palette.weight(.medium))).lineLimit(2).frame(minHeight:36,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
             }.buttonStyle(AuroraFlatButtonStyle()).help(p.detail)
             if m.collection=="Deleted sounds" {
                 Button{m.restoreDeleted(p.id)}label:{Image(systemName:"arrow.uturn.backward")}.buttonStyle(AuroraIconButtonStyle()).help("Restore \(p.name)").accessibilityLabel("Restore \(p.name)").padding(.trailing,8)
             }else if m.userPresets.contains(where:{$0.id==p.id}) {
                 Menu{Button("Rename / category…"){m.renameName=p.name;m.renameCategory=p.category;m.renameID=p.id};Button("Delete",role:.destructive){m.deleteSound(p.id)}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:22).accessibilityLabel("Manage \(p.name)")
             }
-            Button{m.favorite(p.id)}label:{Image(systemName:m.favorites.contains(p.id) ? "star.fill":"star").font(.system(size:13)).foregroundStyle(Color.white)}
+            Button{m.favorite(p.id)}label:{Image(systemName:m.favorites.contains(p.id) ? "star.fill":"star").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)}
                 .buttonStyle(AuroraIconButtonStyle()).padding(.trailing,8).help("Favorite \(p.name)").accessibilityLabel("Favorite \(p.name)")
-        }.background(m.patch.id==p.id ? buttonSelected.opacity(0.25):buttonSurface.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
+        }.background(m.patch.id==p.id ? palette.buttonSelected.opacity(0.25):palette.buttonSurface.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
     }
     var play:some View {
-        VStack(alignment:.leading,spacing:23){HStack{Text("Make it yours").font(.system(size:20,weight:.medium));Spacer();Text("8 performance macros").font(.system(size:14)).foregroundStyle(muted)}
+        VStack(alignment:.leading,spacing:23){HStack{Text("Make it yours").font(.system(size:20,weight:palette.weight(.medium)));Spacer();Text("8 performance macros").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
             XYPadPanel(m:m)
             LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:4),spacing:16){ForEach(0..<8){MacroDial(model:m,index:$0)}}
-            VoiceStatus(telemetry:m.telemetry,running:m.running).font(.system(size:14)).foregroundStyle(muted).padding(13).background(surface,in:RoundedRectangle(cornerRadius:10))
+            VoiceStatus(telemetry:m.telemetry,running:m.running).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).padding(13).background(palette.surface,in:RoundedRectangle(cornerRadius:10))
             PianoView(model:m)
         }
     }

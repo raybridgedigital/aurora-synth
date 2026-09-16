@@ -13,6 +13,7 @@ import SwiftUI
     }
 }
 struct WavetablePreview:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:WavetableTelemetry
     let slot:Int
     var body:some View {
@@ -25,14 +26,15 @@ struct WavetablePreview:View {
                 let point=CGPoint(x:CGFloat(i)*size.width/CGFloat(samples.count-1),y:size.height*(0.5-CGFloat(value)*0.4))
                 if i==0{path.move(to:point)}else{path.addLine(to:point)}
             }
-            let color=slot%2==0 ? graphCyan:graphPink
+            let color=slot%2==0 ? palette.graphCyan:palette.graphPink
             context.stroke(path,with:.color(color.opacity(0.15)),lineWidth:7)
             context.stroke(path,with:.color(color),style:StrokeStyle(lineWidth:2.2,lineJoin:.round))
-        }.frame(height:66).padding(8).background(graphBackground,in:RoundedRectangle(cornerRadius:7))
+        }.frame(height:66).padding(8).background(palette.graphBackground,in:RoundedRectangle(cornerRadius:7))
             .accessibilityLabel("Oscillator \(slot%2+1) wavetable preview")
     }
 }
 struct WavetableOscillatorPanel:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let oscillator:Int
     var base:Int{44+oscillator*7}
@@ -40,10 +42,10 @@ struct WavetableOscillatorPanel:View {
     func choices(_ labels:[String],parameter:Int)->some View {
         HStack(spacing:4){ForEach(Array(labels.enumerated()),id:\.offset){i,label in
             Button{m.checkpoint();m.set(m.selectedLayer,parameter,Double(i))}label:{
-                Text(label).font(.system(size:12,weight:.medium)).frame(maxWidth:.infinity).padding(.vertical,5)
-                    .background(Int(m.patch.layers[m.selectedLayer][parameter])==i ? buttonSelected:buttonSurface,in:RoundedRectangle(cornerRadius:5))
-                    .foregroundStyle(Int(m.patch.layers[m.selectedLayer][parameter])==i ? Color.white:Color.white)
-            }.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("Oscillator \(oscillator+1) \(label)")
+                Text(label).font(.system(size:12,weight:Int(m.patch.layers[m.selectedLayer][parameter])==i ? .bold:.regular)).frame(maxWidth:.infinity).padding(.vertical,5)
+                    .background(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5))
+                    .foregroundStyle(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.selectedText:Color.white)
+            }.buttonStyle(AuroraFlatButtonStyle(selected:Int(m.patch.layers[m.selectedLayer][parameter])==i)).accessibilityLabel("Oscillator \(oscillator+1) \(label)")
         }}
     }
     var tableBinding:Binding<Int>{Binding(get:{Int(m.patch.layers[m.selectedLayer][base+1])},set:{m.checkpoint();m.set(m.selectedLayer,base+1,Double($0));m.set(m.selectedLayer,base,1)})}
@@ -53,7 +55,7 @@ struct WavetableOscillatorPanel:View {
                 Section(category){ForEach((0..<24).filter{WavetableCatalog.categories[$0]==category},id:\.self){index in Text(WavetableCatalog.names[index]).tag(index)}}
             }
             if m.hasCustomWavetable(oscillator:oscillator){Section("Imported"){Text(m.patch.importedWavetables?[m.selectedLayer*2+oscillator]?.name ?? "Imported").tag(24)}}
-        }.font(.system(size:14)).accessibilityLabel("Oscillator \(oscillator+1) table")
+        }.font(.system(size:14,weight:palette.weight(.regular))).accessibilityLabel("Oscillator \(oscillator+1) table")
     }
     var body:some View {
         Panel(title:"Wavetable · oscillator \(oscillator+1)"){
@@ -69,6 +71,7 @@ struct WavetableOscillatorPanel:View {
     }
 }
 struct WavetablePhasePanel:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     func phaseControls(_ oscillator:Int)->some View {
         VStack(spacing:10){
@@ -81,14 +84,15 @@ struct WavetablePhasePanel:View {
             phaseControls(0)
             phaseControls(1)
             HStack(spacing:8){ForEach(0..<2){o in
-                Button{m.importWavetable(oscillator:o)}label:{Label("Osc \(o+1)",systemImage:"square.and.arrow.down").font(.system(size:13)).frame(maxWidth:.infinity)}
+                Button{m.importWavetable(oscillator:o)}label:{Label("Osc \(o+1)",systemImage:"square.and.arrow.down").font(.system(size:13,weight:palette.weight(.regular))).frame(maxWidth:.infinity)}
                     .help("Import a WAV wavetable into oscillator \(o+1)")
             }}
-            Text(m.wavetableMessage.isEmpty ? "Import a WAV table with 1–64 frames. Your imported wave is saved inside the patch.":m.wavetableMessage).font(.system(size:12)).foregroundStyle(muted).fixedSize(horizontal:false,vertical:true)
+            Text(m.wavetableMessage.isEmpty ? "Import a WAV table with 1–64 frames. Your imported wave is saved inside the patch.":m.wavetableMessage).font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize(horizontal:false,vertical:true)
         }
     }
 }
 struct WavetableSection:View {
+    @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     var body:some View {
         EqualHeightRow(spacing:16){WavetableOscillatorPanel(m:m,oscillator:0);WavetableOscillatorPanel(m:m,oscillator:1);WavetablePhasePanel(m:m)}
