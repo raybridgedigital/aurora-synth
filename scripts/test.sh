@@ -31,6 +31,20 @@ printf 'Compiling and running DSP tests…\n'
     -o "$BUILD_DIR/tests/SynthEngineTests"
 "$BUILD_DIR/tests/SynthEngineTests"
 
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$ROOT_DIR/Tests/RecordingChecks.cpp" \
+    -framework AudioToolbox -framework CoreFoundation -o "$BUILD_DIR/tests/RecordingChecks"
+"$BUILD_DIR/tests/RecordingChecks"
+
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/WavetableTests.cpp" \
+    -framework AudioToolbox -framework CoreFoundation -o "$BUILD_DIR/tests/WavetableTests"
+"$BUILD_DIR/tests/WavetableTests"
+
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/MotionTests.cpp" -o "$BUILD_DIR/tests/MotionTests"
+"$BUILD_DIR/tests/MotionTests"
+
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/LayerToolsTests.cpp" -o "$BUILD_DIR/tests/LayerToolsTests"
+"$BUILD_DIR/tests/LayerToolsTests"
+
 if [[ "$RUN_BRIDGE" == true ]]; then
     if [[ ! -f "$ROOT_DIR/Tests/BridgeProbe.cpp" ]]; then
         printf 'Optional device probe is not present at Tests/BridgeProbe.cpp.\n' >&2

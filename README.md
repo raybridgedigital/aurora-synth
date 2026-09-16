@@ -1,8 +1,90 @@
 # Aurora
 
+## XY performance pad · 0.13
+
+In **Play**, the XY pad controls two distinct macros (including custom macro assignments). X moves left to right; Y moves bottom to top. Each axis has adjustable From/To endpoints and Reverse. Center moves both axes to their range midpoints. Release holds the position; the X/Y sliders provide precise and keyboard-accessible adjustment. Selecting the other axis’s macro swaps the assignments. Axis settings and macro values save with the patch, and a drag is one Undo step. The cursor follows the assigned macro values; values outside a restricted axis range appear at its nearest edge. Overlapping custom routes apply X first, then Y. Existing patches use Brightness on X and Movement on Y without changing sound until the pad is moved.
+
+## Creative tools · 0.12
+
+Open **Creative tools…** beside the A/B controls for three tabs:
+
+- **Macros:** customize any of the eight macros, rename it, and add up to 16 layer/shared-control assignments. Each assignment maps macro 0% and 100% to independent endpoints; Reverse swaps them. Custom assignments replace that macro's original behavior. Restore Original restores the factory mapping. Overlapping routes are applied in order, with the last route taking precedence. Assignments travel with presets and participate in Undo/Redo.
+- **MIDI Learn:** choose a layer or shared synthesis control and press Learn, then move a hardware knob. Cutoff, envelope, character, wavetable Position/Warp and detailed FX sliders also offer right-click Learn menus. Mappings are specific to the MIDI source, channel and CC; they persist separately from patches. Soft takeover requires crossing the current value after learning, loading a patch or manually editing a mapped control. Sustain and channel-mode CCs are reserved. Wheel/expression CCs still perform their native functions. These controls use the existing 20 Hz UI MIDI polling path, not sample-accurate automation.
+- **Variations:** choose an amount and the selected layer or all enabled layers. Lock Oscillators, Filter, Envelopes, Movement, Pitch and FX independently. Pitch, Envelopes and FX start locked. Pitch locks also preserve detune and pitch-targeted LFO settings; protected pitch/volume motion curves are retained. Master/layer levels, enabled layers, splits, routing, tempo and macro assignments are always preserved. Variations alter bounded continuous settings, not sample files or wavetable identities. Undo restores the previous sound; Save As keeps a separate copy.
+
+In **Motion envelope**, Tempo Sync offers quarter-beat through 32-beat lengths (bar labels assume 4/4), following internal or measured MIDI-clock tempo. Each note still starts its own curve; this is tempo synchronization rather than transport-position synchronization. Tempo changes preserve the current curve position. Snap offers 4/8/16/32 divisions for point times; existing points are unchanged until moved.
+
+**My shapes** saves reusable curve points independently of patches. Enter a name and Save New; choose a saved shape to load it, Update to replace its curve/name, or Delete to remove it. Loading a shape preserves the envelope's timing and destination ranges. The library is stored in `~/Library/Application Support/Aurora/motion-shapes.json`. All previous patches and free-time motion envelopes remain compatible.
+
+## Layer mixing and comparison · 0.11
+
+Each layer card now has **S** for Solo and an **…** menu for Copy/Paste. Solo temporarily fades other layers out without changing their enable switches or discarding held notes. Clear Solo restores them; loading another patch clears Solo. Existing shared FX tails can ring out. Solo is an audition state and is not saved into a patch.
+
+Copy/Paste transfers the layer's oscillator/filter/envelope/arp settings, Sound Matrix, motion envelope, Delay/Reverb sends and embedded imported wavetables. Paste supports Undo/Redo, and the clipboard remains available across patch changes. Global FX, keyboard routing and the patch-wide Performance Matrix stay with the destination patch.
+
+The **Delay send / Reverb send** sliders below the layer cards affect the selected layer. They feed separate buses before the shared Chorus/Phaser stage; the existing Delay/Reverb Mix knobs control the returns. Thus a layer with both sends at zero adds no new echo/room energy while another layer remains wet. Old patches default to 100% sends. Delay/Reverb receive the direct layer signal now, so their tails no longer inherit the shared Chorus/Phaser coloration.
+
+Beside the previous/next controls, **B · Edited — compare A** auditions the last saved factory/user patch; **A · Saved — return to B** restores the edited sound. The visible controls and session data retain your edits throughout. Changing a sound control automatically returns to B. Master volume is preserved. Previous/next browse the current sidebar filters alphabetically and wrap at the ends; patch changes remain undoable.
+
+## Drawable motion envelope · 0.10
+
+Open **Edit → Motion envelope**, below the wavetable row, and enable it for the selected layer. Drag points in the graph; double-click the background to insert a point (up to 16). Select a point to change its level or bend the segment toward the next point. Interior points can be deleted. The endpoints stay at the beginning and end of the duration.
+
+**Factory shapes** supplies 16 editable starting points in two complete rows: Swell, Fade Out, Triangle, Sine, Pulse, Pluck, Double Swell, Staircase, Descending Steps, Heartbeat, Bounce, Ripple, Duck & Rise, Ratchet, Bloom and Sample & Hold. Duck & Rise dips then recovers, Ratchet repeats four fading plucks, Bloom slowly opens and closes, and Sample & Hold steps through a fixed varied sequence. Choosing a shape preserves your duration and destination ranges. Sine and pulse are editable point approximations, with short transitions rather than discontinuous volume jumps.
+
+Duration spans 0.1–60 seconds. Every note starts its own envelope; Loop repeats while held, while a non-looping shape holds its last value. Mono mode retriggers; legato continues the current curve. Releasing a note freezes its position and uses the layer's Release setting to fade it out. The playhead represents the most recently started active note. A short onset ramp and smoothed movement reduce clicks.
+
+Enable any combination of Volume, Filter cutoff, Pitch, Pan, Oscillator 1/2 Position and Oscillator 1/2 Warp. Each destination has independent Minimum/Maximum sliders and a reverse button. The graph displays the selected destination's rescaled shape, so a volume floor of 30% lifts its valleys while leaving a 100% ceiling intact. The first point can be moved above that floor independently. Cutoff is displayed and interpolated logarithmically; pitch is a semitone offset and pan spans left to right.
+
+Volume replaces the layer's Attack/Decay/Sustain shaping while retaining Release, velocity, expression and layer/master levels. Other destinations replace their base controls; existing matrix/LFO modulation still adds on top and is bounded by the engine. Wavetable routes require Wavetable mode; Warp needs an active warp mode. Shared FX are not motion destinations in this release.
+
+All settings belong to each patch/layer, including Save As, export/import, session restoration and Undo/Redo. Existing patches default to disabled motion. Complete fixed-size configurations are published atomically without allocation or locks in the render callback.
+
+## Prism — 100 additional performances
+
+Aurora now includes **212 factory sounds**: the original 112 plus the new Prism collection. Search **Prism** in the Aurora library to find the new sounds. Each of the ten existing musical categories receives ten additions, including evolving vocal pads, elastic basses, sync leads, glass keys, metallic plucks, sequenced arps, atmospheric textures, spectral organs, synthetic ensembles and keyboard splits.
+
+Prism uses both wavetable oscillators, per-layer Sound Matrix movement, velocity-to-filter response, mod-wheel scanning and pressure-to-warp control. Layered designs combine complementary timbres; the ten splits divide at MIDI 60. Mono leads and basses use legato glide. Imported audio is not required.
+
+See [the complete Prism catalog](Patch%20Banks/Aurora%20Prism%20100%20Catalog.md) for individual playing suggestions. The grouped ZIP beside it contains all 100 portable presets. The build includes the bank automatically; the existing sounds and user saves remain available.
+
+## Wavetable update · 0.9
+
+In **Edit**, each layer now has two wavetable oscillator panels. Choose **Wavetable**, select a table, and move **Position** to scan between its frames. Oscillator Blend still balances oscillator 1 against oscillator 2. Selecting a classic waveform returns that oscillator to Classic mode; existing patches keep their original sound.
+
+The 24 original tables are grouped into Warm, Vocal, Metallic, Aggressive, Atmospheric and Pure. Both oscillators offer Off/Bend/Sync/Fold warp, phase and random starting phase. Preview curves follow the last rendered note's scan/warp values. Both matrices include oscillator 1/2 Position and Warp destinations; Performance Matrix layer targets remain independent.
+
+**Phase & import → Osc 1 / Osc 2** loads mono or stereo PCM/float WAV tables containing 1–64 consecutive frames of 256, 512, 1024 or 2048 samples. Choose the correct frame size in the file dialog. Stereo is averaged to mono, DC is removed per frame, and the table is peak-normalized. This imports prepared tables, not arbitrary recordings or proprietary Serum/Vital presets. Imported sample data travels inside saved/exported patches, session recovery and Undo/Redo.
+
+Tables and warped variants are prepared outside the audio callback with frequency-dependent mip levels and interpolated frame/warp scanning. Position and Warp controls are smoothed. Bank replacement retains old memory until the render callback has finished using it. This is a focused wavetable instrument feature set; it does not include a spectral editor, resynthesis or full Serum/Vital compatibility.
+
 A native standalone synthesizer for Apple silicon Macs, built around playing and creating sounds with USB MIDI keyboards. This project targets your MacBook Air M3 with 8 GB of RAM, M-Audio Oxygen Pro 25, Yamaha CK88, and Yamaha MODX7+.
 
-This is the playable 0.5 development milestone, including Aurora 100, a categorized bank of 100 new sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release; several of its advanced features remain future work.
+This is the playable 0.13 development milestone, including wavetable oscillators, drawable motion envelopes, creative tools and 212 factory sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release; several of its advanced features remain future work.
+
+## Hold, clock and recording · 0.8
+
+The performance bar below the layer strips provides Hold, a MIDI clock source selector, and Record / Stop recording. Hold latches released notes, including the chord feeding an arpeggiator. Turn it off to release latched keys; a physically held key or sustain pedal still owns its notes. Panic, audio stop and patch changes clear Hold. It adds notes until released, rather than automatically replacing a latched chord.
+
+Select a connected MIDI input under Clock to follow its 24-pulse-per-quarter-note timing. Arpeggiator steps follow incoming pulses; delay follows the measured tempo. MIDI Start resets the pattern, Stop releases arpeggiator notes, and Continue resumes. A half-second clock timeout stops the arpeggiator and shows Waiting / stopped. Select Internal to return to the patch tempo. Supported tempo is 30–240 BPM; MIDI is applied at audio-block boundaries. Clock and Hold start disabled each app session. These paths are tested with synthetic MIDI events; physical keyboard clock output still needs verification with the sending device configured to transmit clock.
+
+Record captures Aurora's final stereo output (including FX and Master) to 24-bit WAV at the current output sample rate. Since 0.8.1, files are saved in `~/Desktop/Aurora`; Show WAV reveals the completed file. After Stop, a background pass normalizes the stereo-linked sample peak to −3 dBFS, preserving channel balance and duration. Silence remains silent. The original file is replaced only after normalization succeeds; failures retain the unnormalized WAV. Normalization adjusts level and cannot repair distortion already in the sound.
+
+Recording uses Core Audio's preinitialized asynchronous writer and finalizes on Stop, audio shutdown, or app quit. A take stops automatically at one hour to stay within WAV size limits at supported sample rates. Errors are shown in the performance bar. This captures the synth output, not microphone input or a Yamaha's internal audio.
+
+## Expression and effects · 0.7
+
+Edit now includes per-layer Poly, Mono, and Legato modes, overlapping-note glide (0–2 seconds), and a pitch-bend range of ±0–24 semitones. Mono retriggers the envelope from its current level; Legato preserves the envelope. Both use last-note priority separately for each keyboard/channel and return to a held note when the latest key is released. Glide applies to connected mono/legato notes; the arpeggiator keeps its own note/gate behavior. Routing offers Linear, Soft touch, Hard touch, and Fixed (velocity 100) curves saved per MIDI input, independently of patches.
+
+The FX detail row adds phaser rate/depth/signed feedback, chorus rate/depth, and reverb size/approximate decay (0.2–8 seconds). Delay offers quarter, eighth, sixteenth, half, dotted eighth/quarter, and triplet eighth/quarter timing, synced to the header tempo. FX remain shared across the patch. New settings participate in Save, Save As, import/export and undo/redo. Old patches default to Poly, no glide, ±2-semitone bend, and quarter-note delay.
+
+## Sound design and saving · 0.6
+
+Each layer now has pulse width and LFO 1 pulse-width modulation, one to four unison voices with detune and stereo spread, and oscillator 2 sync with a tuning control. These controls occupy an additional three-panel row without enlarging existing panels. PWM follows LFO 1's waveform and rate independently of its main depth control. Sync resets oscillator 2 from oscillator 1 and smooths the reset discontinuity; it is not fully alias-free. Four-voice unison uses more CPU; the engine still supports 64 played layer voices.
+
+Assigned Matrix destinations show slim modulation indicators; each Matrix row also shows its current signed contribution. Polyphonic feedback represents the most recently rendered note, rather than every note's modulation range. Feedback updates independently of the main interface model.
+
+Save updates an existing user sound; Save As creates a separate copy with an editable category. Saving a factory sound opens Save As. Rename / category edits saved details without discarding current sound edits. Deleted sounds remain in the Deleted sounds collection and can be restored individually across app restarts. Existing patches use neutral oscillator defaults until the new controls are changed.
 
 ## Build and run
 
@@ -23,7 +105,7 @@ Typography is larger throughout: control labels are 15 pt, secondary text is 12�
 
 The app keeps native macOS scrolling and momentum. Live meters publish into a separate observable object instead of invalidating the entire interface. Stable audio status/device lists do not republish; routine refresh uses device-change notifications; unchanged sessions are not repeatedly written; maintenance is deferred during native event tracking. Eager panel/library layouts avoid estimated scroll heights. These changes reduce avoidable scroll work, but do not establish measured frame-rate parity with Safari.
 
-The interface regression check passed: 20 stable polls and 1,200 changed telemetry samples caused zero main-model publications, and 1,200 repeated samples caused no extra meter publications. Both original and expansion presets were found in the combined 112-sound collection. Run `bash check-interface.sh` after building to reproduce the check. This read-only test initializes macOS UI/MIDI facilities but never starts audio or saves preset/session edits.
+The interface regression check passed: 20 stable polls and 1,200 changed telemetry samples caused zero main-model publications, and 1,200 repeated samples caused no extra meter publications. Both original and expansion presets were found in the combined 112-sound collection. Run `bash check-interface.sh` after building to reproduce the check. It initializes macOS UI/MIDI facilities and exercises saving in a temporary test directory; it never starts audio or edits your saved sounds.
 
 ## First playing session
 
@@ -73,7 +155,7 @@ Arps play while you hold notes. Splits use MIDI notes 0–59 for the lower voice
 - Eight musical macros with source-specific MIDI Learn and hardware pickup.
 - On-screen piano and typing-key auditioning.
 
-The complete specification's four LFOs, dual filters, full modulation matrix, wavetable library/scanning, step editing/latch/external clock, expanded effects, recording, and AU/VST plug-ins are later milestones. The current fifth oscillator shape is an original harmonic blend. The amplitude envelope also drives the filter envelope amount; a separate filter ADSR is later scope. Pitch bend currently uses a fixed ±2-semitone range. MIDI is applied at audio-block boundaries. Hardware audio capture is outside this first build. Exact controller-panel mappings must be checked against the messages each keyboard sends.
+The complete specification's four LFOs, dual filters, wavetable library/scanning, step editing, per-layer effects sends, and AU/VST plug-ins are later milestones. The current fifth oscillator shape is an original harmonic blend. The amplitude envelope also drives the filter envelope amount; a separate filter ADSR is later scope. MIDI is applied at audio-block boundaries. Hardware audio capture is outside this build. Exact controller-panel mappings must be checked against the messages each keyboard sends.
 
 ## Verification
 

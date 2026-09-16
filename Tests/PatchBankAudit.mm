@@ -114,12 +114,13 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     for (int layer = 0; layer < 4; ++layer) {
         id entry = layers[layer];
         id values = [entry isKindOfClass:[NSDictionary class]] ? entry[@"values"] : nil;
-        if (![values isKindOfClass:[NSDictionary class]] || [values count] != APParameterCount) {
+        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 33)) {
             [errors addObject:[NSString stringWithFormat:@"Layer %d must contain all %d parameter values", layer, APParameterCount]];
             continue;
         }
         for (int parameter = 0; parameter < APParameterCount; ++parameter) {
             NSString *key = [NSString stringWithFormat:@"%d", parameter];
+            if(parameter>=33 && !values[key])continue; // Original bank uses legacy defaults.
             double value;
             if (!number(values[key], value)) {
                 [errors addObject:[NSString stringWithFormat:@"Layer %d parameter %d must be a finite number", layer, parameter]];
@@ -138,9 +139,9 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     }
     if (enabledLayers == 0) [errors addObject:@"At least one layer must be enabled"];
     id globals = patch[@"globals"];
-    if (![globals isKindOfClass:[NSArray class]] || [globals count] != AGGlobalCount)
+    if (![globals isKindOfClass:[NSArray class]] || [globals count] != 6)
         [errors addObject:@"Exactly six global values are required"];
-    else for (int parameter = 0; parameter < AGGlobalCount; ++parameter) {
+    else for (int parameter = 0; parameter < 6; ++parameter) {
         double value;
         if (!number(globals[parameter], value)) {
             [errors addObject:[NSString stringWithFormat:@"Global %d must be a finite number", parameter]];
@@ -149,6 +150,23 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
         engine.setGlobal(parameter, float(value));
         if (!closeEnough(value, engine.getGlobal(parameter)))
             [errors addObject:[NSString stringWithFormat:@"Global %d is out of range: %.8g", parameter, value]];
+    }
+    if(patch[@"phaserMix"])engine.setGlobal(AGPhaserMix,[patch[@"phaserMix"] floatValue]);
+    NSDictionary *fx=patch[@"fx"];
+    for(NSString *key in fx){
+        double value;int parameter=key.intValue;
+        if(parameter<7||parameter>=AGGlobalCount||!number(fx[key],value)){[errors addObject:@"Invalid extended FX value"];continue;}
+        engine.setGlobal(parameter,float(value));
+        if(!closeEnough(value,engine.getGlobal(parameter)))[errors addObject:@"Extended FX value out of range"];
+    }
+    for(int bank=0;bank<5;bank++){
+        NSArray *rows=bank==4?patch[@"performanceMatrix"]:(patch[@"soundMatrix"]?patch[@"soundMatrix"][bank]:nil);
+        if(!rows)continue;
+        if(rows.count!=6){[errors addObject:@"Matrix must contain six slots"];continue;}
+        for(int slot=0;slot<6;slot++){
+            NSDictionary *r=rows[slot];
+            engine.setMatrix(bank,slot,[r[@"enabled"] boolValue],[r[@"source"] intValue],[r[@"destination"] intValue],[r[@"target"] intValue],[r[@"cc"] intValue],[r[@"amount"] floatValue]);
+        }
     }
     id macros = patch[@"macros"];
     if (![macros isKindOfClass:[NSArray class]] || [macros count] != 8)
@@ -223,6 +241,7 @@ int main(int argc, const char *argv[]) {
                         else [warnings addObject:@"Long release still has active voices after eight seconds"];
                     }
                     bool panicPassed = checkPanic(engine, errors);
+                    engine.setGlobal(AGMaster,1); // Worst-case user listening level, preserved across patch changes.
                     std::vector<int> stressNotes = {36, 43, 48, 55, 60, 64, 67, 72};
                     notes(engine, stressNotes, true, 127);
                     auto stress = render(engine, 8);
@@ -272,7 +291,7 @@ int main(int argc, const char *argv[]) {
             @"highestPeak":@(highestPeak), @"highestStressPeak":@(highestStressPeak),
             @"lowestHoldRMS":@(lowestRMS == std::numeric_limits<double>::max() ? 0 : lowestRMS),
             @"elapsedSeconds":@(elapsed), @"possibleDuplicateRenders":duplicates, @"patches":results,
-            @"method":@"48 kHz stereo; four-second category-appropriate held phrase at velocity 100; eight-second release; eight notes at velocity 127 for eight seconds so slow attacks also reach full level; Panic verification. FNV-1a hash of 24-bit quantized held audio. Identical renders are reported for review, not automatically rejected."};
+            @"method":@"48 kHz stereo; four-second category-appropriate held phrase at velocity 100; eight-second release; eight notes at velocity 127 and Master 100% for eight seconds so slow attacks also reach full level; extended FX and modulation matrices enabled; Panic verification. FNV-1a hash of 24-bit quantized held audio. Identical renders are reported for review, not automatically rejected."};
         NSData *reportData = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted|NSJSONWritingSortedKeys error:&error];
         if (!reportData || ![reportData writeToFile:@(argv[2]) options:NSDataWritingAtomic error:&error]) {
             std::fprintf(stderr, "Cannot write report: %s\n", error.localizedDescription.UTF8String);

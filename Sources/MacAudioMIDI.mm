@@ -5,6 +5,9 @@
 #include <mach/mach_time.h>
 #include "AuroraBridge.h"
 #include "SynthEngine.hpp"
+#include "AudioRecorder.hpp"
+#include "WavNormalization.hpp"
+#include "WavetableImport.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -28,6 +31,7 @@ struct Source {
 struct Route { int mask = 1; int channel = 0; };
 struct State {
     aurora::SynthEngine engine;
+    AudioRecorder recorder;
     bool initialized = false;
     MIDIClientRef midiClient = 0;
     MIDIPortRef midiInput = 0;
@@ -36,6 +40,7 @@ struct State {
     // callback already in flight may still hold the refcon after disconnection.
     std::vector<std::unique_ptr<Source>> contexts;
     std::map<int32_t, Route> routes;
+    std::map<int32_t,int> velocityCurves;
     std::map<std::string, int32_t> fallbackIDs;
     int32_t nextFallback = INT32_MIN + 1;
     std::atomic<bool> devicesChanged{false};
@@ -141,6 +146,7 @@ void stopAudio(State &s) {
         AudioComponentInstanceDispose(s.output);
         s.output = nullptr;
     }
+    s.recorder.stop();
     s.running = false;
     s.currentDevice = 0;
     s.cpu.store(0, std::memory_order_relaxed);
@@ -161,6 +167,7 @@ OSStatus render(void *context, AudioUnitRenderActionFlags *, const AudioTimeStam
         buffers->mBuffers[1].mDataByteSize >= frames * sizeof(float)) {
         s.engine.render(static_cast<float *>(buffers->mBuffers[0].mData),
                         static_cast<float *>(buffers->mBuffers[1].mData), frames);
+        s.recorder.write(frames,buffers);
         for (UInt32 i = 2; i < buffers->mNumberBuffers; ++i)
             if (buffers->mBuffers[i].mData)
                 memset(buffers->mBuffers[i].mData, 0, buffers->mBuffers[i].mDataByteSize);
@@ -206,6 +213,10 @@ void receiveMIDI(State &s, const MIDIEventList *list, void *context) {
             const unsigned type = word >> 28;
             const unsigned length = lengths[type];
             if (i + length > packet->wordCount) break;
+            if(type==1&&s.acceptNotes.load(std::memory_order_acquire)){
+                uint8_t status=(word>>16)&0xff;
+                if(status==0xf8||status==0xfa||status==0xfb||status==0xfc)s.engine.clock(source->id,status,(packet->timeStamp ? packet->timeStamp:mach_absolute_time())*s.secondsPerTick);
+            }
             if (type == 2) { // CoreMIDI translates MIDI 2 sources to requested protocol 1.
                 const uint8_t status = (word >> 16) & 0xff;
                 const uint8_t data1 = (word >> 8) & 0x7f;
@@ -281,6 +292,7 @@ void refreshMIDI(State &s) {
         Source *context = source.get();
         s.contexts.push_back(std::move(source));
         s.engine.route(id, route.mask, route.channel);
+        if(auto curve=s.velocityCurves.find(id);curve!=s.velocityCurves.end())s.engine.velocityCurve(id,curve->second);
         context->connected.store(true, std::memory_order_release);
         const OSStatus result = MIDIPortConnectSource(s.midiInput, endpoint, context);
         if (result != noErr) {
@@ -462,10 +474,43 @@ uint32_t aurora_current_device() { return state().currentDevice; }
 double aurora_sample_rate() { return state().sampleRate; }
 uint32_t aurora_buffer_frames() { return state().bufferFrames; }
 void aurora_set_parameter(int layer, int parameter, float value) { state().engine.setParameter(layer, parameter, value); }
+int aurora_set_custom_wavetable(int layer,int oscillator,const float* samples,int frames,int frameSize){return state().engine.setCustomWavetable(layer,oscillator,samples,frames,frameSize);}
+void aurora_clear_custom_wavetable(int layer,int oscillator){state().engine.clearCustomWavetable(layer,oscillator);}
+int aurora_copy_wavetable_preview(int layer,int oscillator,float* samples,int capacity){return state().engine.copyWavetablePreview(layer,oscillator,samples,capacity);}
+const char* aurora_wavetable_name(int index){return aurora::SynthEngine::wavetableName(index);}
+const char* aurora_wavetable_category(int index){return aurora::SynthEngine::wavetableCategory(index);}
+int aurora_read_wavetable(const char* path,int frameSize,float* samples,int capacity,char* error,int errorCapacity){
+    auto result=readWavetableWAV(path,frameSize);
+    if(error&&errorCapacity>0){std::strncpy(error,result.error.c_str(),size_t(errorCapacity-1));error[errorCapacity-1]=0;}
+    if(!result.error.empty()||!samples||capacity<int(result.samples.size()))return 0;
+    std::copy(result.samples.begin(),result.samples.end(),samples);return result.frames;
+}
 float aurora_get_parameter(int layer, int parameter) { return state().engine.getParameter(layer, parameter); }
 void aurora_set_matrix(int bank,int slot,int enabled,int source,int destination,int target,int cc,float amount) { state().engine.setMatrix(bank,slot,enabled,source,destination,target,cc,amount); }
+int aurora_set_motion(int layer,const float* data,int count){return state().engine.setMotion(layer,data,count)?1:0;}
+float aurora_motion_phase(int layer){return state().engine.motionPhase(layer);}
+void aurora_layer_sends(int layer,float delay,float reverb){state().engine.setLayerSends(layer,delay,reverb);}
+void aurora_solo_layer(int layer){state().engine.soloLayer(layer);}
 void aurora_set_transpose(int semitones) { state().engine.setTranspose(semitones); }
 void aurora_set_global(int parameter, float value) { state().engine.setGlobal(parameter, value); }
+void aurora_velocity_curve(int32_t sourceID,int curve) {
+    auto& s=state();curve=std::clamp(curve,0,3);auto found=s.velocityCurves.find(sourceID);
+    if(found==s.velocityCurves.end()||found->second!=curve){s.velocityCurves[sourceID]=curve;s.engine.velocityCurve(sourceID,curve);}
+}
+void aurora_hold(int enabled){state().engine.hold(enabled!=0);}
+void aurora_clock_source(int enabled,int32_t sourceID){state().engine.clockSource(enabled!=0,sourceID);}
+float aurora_clock_tempo(){return state().engine.clockTempo();}
+int aurora_record_start(const char* path){
+    auto& s=state();if(!s.running||!path)return 0;
+    NSURL* url=[NSURL fileURLWithPath:[NSString stringWithUTF8String:path]];
+    OSStatus result=s.recorder.start((__bridge CFURLRef)url,s.sampleRate);
+    if(result)s.status=errorMessage("Could not start recording",result);
+    return result==noErr;
+}
+int aurora_record_stop(){auto& s=state();OSStatus result=s.recorder.stop();if(result)s.status=errorMessage("Recording could not be completed",result);return result==noErr;}
+int aurora_normalize_recording(const char* path){return path&&normalizeWAV(path)==noErr;}
+int aurora_recording(){return state().recorder.running();}
+double aurora_record_seconds(){return state().recorder.seconds();}
 float aurora_get_global(int parameter) { return state().engine.getGlobal(parameter); }
 void aurora_route_source(int32_t id, int layerMask, int channel) {
     auto &s = state();
@@ -486,6 +531,11 @@ void aurora_note_on(int note, int velocity) {
 }
 void aurora_note_off(int note) { if (state().running) state().engine.midi(0, 0x80, uint8_t(std::clamp(note, 0, 127)), 0); }
 void aurora_panic() { state().engine.panic(); }
+int aurora_copy_modulation(float *values,int capacity) {
+    if(!values||capacity<=0)return 0;
+    if(!state().running){int count=std::min(capacity,30);std::fill_n(values,count,0.f);return count;}
+    return state().engine.copyModulation(values,capacity);
+}
 int aurora_copy_scope(float *samples,int capacity) {
     if(!samples || capacity<=0)return 0;
     if(!state().running){int n=std::min(capacity,256);std::fill_n(samples,n,0.f);return n;}
