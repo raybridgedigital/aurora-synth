@@ -39,7 +39,8 @@ int main(int argc,char** argv){@autoreleasepool{
     changes.addParameterData(6002,queueIndex)->addPoint(64,.32,pointIndex); // New filter 2 cutoff, old IDs unchanged.
     changes.addParameterData(6397,queueIndex)->addPoint(96,.75,pointIndex); // Layer D oscillator modulation amount.
     data.inputParameterChanges=&changes;assert(processor->process(data)==kResultOk);data.inputParameterChanges=nullptr;
-    assert(std::abs(controller->getParamNormalized(2000)-.2)<1e-5);assert(std::abs(controller->getParamNormalized(2002)-.8)<1e-5);
+    // Spectrum's default patch maps X to Color (macro 1), Y to Ensemble (macro 2).
+    assert(std::abs(controller->getParamNormalized(2000)-.2)<1e-5);assert(std::abs(controller->getParamNormalized(2001)-.8)<1e-5);
     assert(std::abs(controller->getParamNormalized(6002)-.32)<1e-5);assert(std::abs(controller->getParamNormalized(6397)-.75)<1e-5);
     MemoryStream saved;assert(component->getState(&saved)==kResultOk);assert(saved.getSize()>100);
     processor->setProcessing(false);component->setActive(false);

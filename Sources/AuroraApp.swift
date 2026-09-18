@@ -215,7 +215,7 @@ enum FactoryBank {
         guard let url=AuroraResources.bundle.url(forResource:"AuroraReference",withExtension:"json"),let data=try? Data(contentsOf:url),let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = expansion + prism + nova + starter + references
+    static let all: [SoundPreset] = (expansion + prism + nova).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
@@ -401,7 +401,7 @@ struct VoiceStatus:View {
     var syncingPlugin=false
     var lastPluginRevision:UInt64=UInt64.max
     var lastPluginMappingsData:Data?
-    @Published var patch = FactoryBank.references.first ?? FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
+    @Published var patch = FactoryBank.all.first{$0.name=="Apricot Solstice"} ?? FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
     @Published var userPresets: [SoundPreset] = []
     @Published var selectedLayer = 0
     @Published var screen = "Play"
@@ -1016,6 +1016,14 @@ struct VoiceStatus:View {
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
         }
         if let data=try? Data(contentsOf:folder.appendingPathComponent("presets.json")),let list=try? JSONDecoder().decode([SoundPreset].self,from:data){userPresets=list.compactMap{Self.sanitized($0)}}
+        // Retired factory sounds should not remain the startup sound after the
+        // Spectrum replacement. User sounds, including imports, remain intact.
+        let retiredFactory=patch.id.hasPrefix("a100-") || patch.id.hasPrefix("prism-") || patch.id.hasPrefix("nova-") || FactoryBank.starter.contains{$0.id==patch.id} || FactoryBank.references.contains{$0.id==patch.id}
+        if retiredFactory && !userPresets.contains(where:{$0.id==patch.id}) {
+            let master=patch.globals[0]
+            patch=FactoryBank.all.first{$0.name=="Apricot Solstice"} ?? FactoryBank.all[0]
+            patch.globals[0]=master
+        }
     }
     func installKeyboard() {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]) { [weak self] event in
@@ -1507,6 +1515,16 @@ struct CategoryWrap:Layout {
     @Published var category:String?=nil
     @Published var userSavedOnly=false
 }
+struct UserPatchBadge:View {
+    @Environment(\.auroraPalette) private var palette
+    var body:some View {
+        Label("User",systemImage:"flag.fill").font(.system(size:10,weight:.bold))
+            .foregroundStyle(Color.white).padding(.horizontal,6).padding(.vertical,3)
+            .background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:4))
+            .overlay(RoundedRectangle(cornerRadius:4).stroke(palette.accent.opacity(0.8),lineWidth:1))
+            .fixedSize().accessibilityLabel("User-created patch")
+    }
+}
 struct PatchBrowserCard:View {
     @Environment(\.auroraPalette) private var palette
     let patch:SoundPreset
@@ -1524,9 +1542,10 @@ struct PatchBrowserCard:View {
                 }
                 Spacer(minLength:0)
                 HStack{
-                    Text(patch.category).font(.system(size:13,weight:palette.weight(.medium))).foregroundStyle(selected ? palette.accent:palette.muted)
+                    Text(patch.category).font(.system(size:13,weight:palette.weight(.medium))).foregroundStyle(selected ? palette.accent:palette.muted).lineLimit(1)
+                    if userSound{UserPatchBadge()}
                     Spacer()
-                    if userSound{Image(systemName:"person.crop.circle").foregroundStyle(palette.muted)}
+                    Color.clear.frame(width:25,height:1)
                 }
             }.padding(15).frame(height:104).frame(maxWidth:.infinity,alignment:.leading)
                 .background(selected ? palette.buttonSurface:palette.buttonSurface.opacity(0.4),in:RoundedRectangle(cornerRadius:12))
@@ -1740,7 +1759,10 @@ struct AuroraContentView:View {
     func presetRow(_ p:SoundPreset)->some View {
         HStack(spacing:0){
             Button{m.loadPreset(p)}label:{
-                Text(p.name).font(.system(size:15,weight:palette.weight(.medium))).lineLimit(2).frame(minHeight:36,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
+                HStack(spacing:5){
+                    Text(p.name).font(.system(size:15,weight:palette.weight(.medium))).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+                    if m.userPresets.contains(where:{$0.id==p.id}){UserPatchBadge()}
+                }.frame(minHeight:36,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
             }.buttonStyle(AuroraFlatButtonStyle()).help(p.detail)
             if m.collection=="Deleted sounds" {
                 Button{m.restoreDeleted(p.id)}label:{Image(systemName:"arrow.uturn.backward")}.buttonStyle(AuroraIconButtonStyle()).help("Restore \(p.name)").accessibilityLabel("Restore \(p.name)").padding(.trailing,8)

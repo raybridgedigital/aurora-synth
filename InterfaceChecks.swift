@@ -34,6 +34,7 @@ import SwiftUI
         print("PASS: triggered scope shows 2–3 cycles with bounded display gain and silent idle output.")
         let folder=FileManager.default.temporaryDirectory.appendingPathComponent("AuroraChecks-"+UUID().uuidString)
         let model=SynthModel(storageDirectory:folder)
+        let legacy=FactoryBank.make("test-legacy","Legacy test fixture","Templates","Neutral test fixture",a:[:])
         do {
             var original=FactoryBank.all[0];original.id="shared"
             var renamed=original;renamed.name="Renamed in another editor"
@@ -56,7 +57,7 @@ import SwiftUI
         precondition(SynthModel.restoredOutputGain(12,revision:2)==24)
         precondition(SynthModel.restoredOutputGain(6,revision:3)==6)
         precondition(SynthModel.restoredOutputGain(30,revision:3)==24)
-        precondition(FactoryBank.all.count == 314)
+        precondition(FactoryBank.all.count == 300)
         let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
         let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
         precondition(try! SynthModel.presets(in:singlePresetData).count==1)
@@ -73,7 +74,7 @@ import SwiftUI
         }
         model.checkpoint();let oldPhase=model.patch.layers[0][84];model.set(0,84,0.9);model.undo();precondition(model.patch.layers[0][84]==oldPhase);model.redo();precondition(model.patch.layers[0][84]==0.9)
         precondition(MatrixAssignment(enabled:true,source:5,destination:12).valid(performance:false))
-        model.loadPreset(FactoryBank.all[0]);precondition(aurora_get_parameter(0,79)==0 && aurora_get_parameter(0,82)==4 && aurora_get_parameter(0,93)==0)
+        model.loadPreset(legacy);precondition(aurora_get_parameter(0,79)==0 && aurora_get_parameter(0,82)==4 && aurora_get_parameter(0,93)==0)
         let upgradeOriginal=model.patch
         model.checkpoint();model.set(0,58,1);model.set(0,60,1900);model.set(0,64,2);model.set(0,68,0.7);model.set(0,70,2);model.set(0,71,0.4);model.set(0,73,3)
         let upgraded=model.patch
@@ -93,14 +94,14 @@ import SwiftUI
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
-        precondition(model.collectionSounds.count == 314)
+        precondition(model.collectionSounds.count == 300)
         precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==314)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==314)
+        precondition(Set(FactoryBank.all.map(\.id)).count==300)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==300)
         precondition(FactoryBank.nova.count==100)
-        model.search="Nova"
-        precondition(model.library.filter{$0.id.hasPrefix("nova-")}.count==100)
-        for sound in FactoryBank.nova {
+        model.search=""
+        precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
+        for sound in FactoryBank.all {
             model.loadPreset(sound)
             precondition(model.patch.id==sound.id && sound.motion?.count==4 && sound.motion!.allSatisfy(\.valid))
             precondition(sound.sends?.count==4 && sound.sends!.allSatisfy(\.valid))
@@ -108,7 +109,7 @@ import SwiftUI
             precondition(sound.soundMatrix!.flatMap{$0}.allSatisfy{$0.valid(performance:false)})
             precondition(sound.performanceMatrix!.allSatisfy{$0.valid(performance:true)})
             for index in 0..<8{model.macro(index,sound.macros[index])}
-            for l in 0..<4 {for p in 0..<58{
+            for l in 0..<4 {for p in 0..<97{
                 precondition(abs(model.patch.layers[l][p]-sound.layers[l][p])<0.00001,"Nova macro center changes the authored sound: \(sound.name) / \(l) / \(p)")
             }}
             for p in 1..<15{precondition(abs(model.patch.globalValue(p)-sound.globalValue(p))<0.00001)}
@@ -119,19 +120,19 @@ import SwiftUI
             precondition(decoded.customMacros==sound.customMacros && decoded.motion==sound.motion && decoded.xy==sound.xy && decoded.sends==sound.sends)
         }
         model.search="Prism"
-        precondition(model.library.filter{$0.id.hasPrefix("prism-")}.count==100)
+        precondition(!model.library.isEmpty)
         model.search=""
         for sound in FactoryBank.prism {
             model.loadPreset(sound)
-            precondition(model.patch.id==sound.id && aurora_get_parameter(0,44)==1)
+            precondition(model.patch.id==sound.id && aurora_get_parameter(0,44)==Float(sound.layers[0][44]))
         }
         model.category="Pads"
         precondition(model.library.count == FactoryBank.all.filter{$0.category == "Pads"}.count)
         model.category="All categories"
-        model.search="Velvet Horizon"
-        precondition(model.library.count == 1 && model.library[0].id == "velvet")
-        model.search="Amber Drift"
-        precondition(model.library.count == 1 && model.library[0].id == "a100-amber-drift")
+        model.search="Apricot Solstice"
+        precondition(model.library.count == 1 && model.library[0].id == "spectrum-apricot-solstice")
+        model.search="Atlas Submarine"
+        precondition(model.library.count == 1 && model.library[0].id == "spectrum-atlas-submarine")
         model.search="no-match-interface-test"
         precondition(model.library.isEmpty)
         model.search=""
@@ -155,7 +156,7 @@ import SwiftUI
         precondition(meterPublications == 1200,"Repeated telemetry should not publish")
         withExtendedLifetime((rootObserver,meterObserver)) {}
         model.global(0,1);precondition(model.patch.globals[0]==1)
-        model.setTranspose(12);model.loadPreset(FactoryBank.all[1])
+        model.setTranspose(12);model.loadPreset(legacy)
         precondition(model.transpose==12 && model.patch.globals[0]==1)
         model.tapTempo(at:100);model.tapTempo(at:100.5);model.tapTempo(at:101)
         precondition(model.patch.globals[1]==120)
@@ -180,7 +181,7 @@ import SwiftUI
         let saved=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:folder.appendingPathComponent("session.json")))
         precondition(saved.transpose==12 && saved.patch.globals[0]==1 && saved.patch.phaserMix==0.7 && saved.patch.layers[0][33]==4)
         precondition(saved.patch.soundMatrix?[2][5].amount == -0.5 && saved.patch.performanceMatrix?[0].cc==74)
-        model.loadPreset(FactoryBank.all[0]);precondition((model.patch.phaserMix ?? 0)==0 && model.patch.layers[0][33]==0)
+        model.loadPreset(legacy);precondition((model.patch.phaserMix ?? 0)==0 && model.patch.layers[0][33]==0)
         precondition(model.matrixRows(performance:false).allSatisfy{!$0.enabled} && model.matrixRows(performance:true).allSatisfy{!$0.enabled})
         precondition(model.patch.layers[0][34]==0.5 && model.patch.layers[0][36]==1 && model.patch.layers[0][39]==0)
         model.saveCurrent();precondition(model.showingSave);model.showingSave=false
@@ -209,13 +210,13 @@ import SwiftUI
         precondition(expressive.patch.globalValue(7)==2.5 && expressive.patch.globalValue(14)==5 && expressive.patch.layers[0][43]==12 && expressive.routes[12345]?.velocityCurve==2)
         model.undo();precondition(model.patch.globalValue(7)==0.22 && model.patch.layers[0][41]==0)
         model.redo();precondition(model.patch.globalValue(13)==4.2 && model.patch.layers[0][41]==2)
-        model.loadPreset(FactoryBank.all[0]);precondition(model.patch.globalValue(14)==0 && model.patch.layers[0][43]==2)
+        model.loadPreset(legacy);precondition(model.patch.globalValue(14)==0 && model.patch.layers[0][43]==2)
         precondition(aurora_get_global(7)==Float(0.22) && aurora_get_parameter(0,43)==2)
         print("PASS: extended FX and expressive settings save, undo/redo, reset on old patch load; per-source velocity curve persists.")
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")
         print("PASS: 100% master, persistent global transpose, tap tempo, rename preserving edits, delete and undo.")
-        print("PASS: Aurora contains 314 distinct sounds; all 100 Nova and 100 Prism patches load and appear in search. Nova macro centers, motion, XY and save round trips pass.")
+        print("PASS: Aurora contains 300 distinct Spectrum sounds; all 300 load and all 97 parameters retain macro-center values. Motion, XY and save round trips pass.")
         print("PASS: 20 stable polls and 1,200 meter changes caused ZERO main-interface publications.")
         print("PASS: 1,200 unchanged meter samples caused ZERO additional publications.")
         model.selectedLayer=0
@@ -231,7 +232,7 @@ import SwiftUI
         let savedWave=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:folder.appendingPathComponent("session.json")))
         precondition(savedWave.patch.importedWavetables?[0]==imported && savedWave.patch.layers[0][45]==24)
         let portable=model.patch
-        model.loadPreset(FactoryBank.all[0]);precondition(model.patch.layers[0][44]==0 && model.patch.layers[0][51]==0)
+        model.loadPreset(legacy);precondition(model.patch.layers[0][44]==0 && model.patch.layers[0][51]==0)
         model.undo();precondition(model.patch.importedWavetables?[0]==imported && aurora_get_parameter(0,45)==24)
         model.redo();precondition(model.patch.importedWavetables==nil)
         model.loadPreset(portable);model.set(0,1,2);precondition(model.patch.layers[0][44]==0)
@@ -259,7 +260,7 @@ import SwiftUI
         let restored=SynthModel(storageDirectory:folder)
         precondition(restored.patch.importedWavetables?[0]==imported)
         precondition(restored.motionSettings==designedMotion)
-        restored.loadPreset(FactoryBank.all[0]);precondition(!restored.motionSettings.enabled)
+        restored.loadPreset(legacy);precondition(!restored.motionSettings.enabled)
         restored.undo();precondition(restored.motionSettings==designedMotion)
         precondition(restored.patch.layers[0][44]==1 && restored.patch.layers[0][45]==24)
         precondition(aurora_get_parameter(0,45)==24 && aurora_get_parameter(0,47)==3)
@@ -272,7 +273,8 @@ import SwiftUI
         print("PASS: fresh model restores embedded table, oscillator settings and saved preset with audio stopped.")
         print("PASS: 16 factory motion shapes validate through the DSP bridge; motion saves, restores, undoes, resets on legacy patches and stays layer-independent.")
         let toolsModel=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
-        toolsModel.loadPreset(FactoryBank.all[0]);let originalCutoff=toolsModel.patch.layers[0][7]
+        toolsModel.userPresets=[legacy]
+        toolsModel.loadPreset(legacy);let originalCutoff=toolsModel.patch.layers[0][7]
         toolsModel.set(0,7,1234);toolsModel.toggleComparison()
         precondition(toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==1234 && aurora_get_parameter(0,7)==Float(originalCutoff))
         toolsModel.persist();toolsModel.toggleComparison()
@@ -289,14 +291,14 @@ import SwiftUI
         toolsModel.redo();precondition(toolsModel.patch.importedWavetables?[2]==imported)
         toolsModel.toggleSolo(1);precondition(toolsModel.soloLayer==1)
         toolsModel.saveName="Layer tools";toolsModel.saveUserPreset();let savedTools=toolsModel.patch
-        toolsModel.loadPreset(FactoryBank.all[0]);precondition(toolsModel.soloLayer == -1 && toolsModel.patch.sends==nil)
+        toolsModel.loadPreset(legacy);precondition(toolsModel.soloLayer == -1 && toolsModel.patch.sends==nil)
         toolsModel.loadPreset(savedTools);precondition(toolsModel.patch.sends?[1].reverb==0.6)
         toolsModel.collection="Aurora";toolsModel.category="Bass";toolsModel.search="";toolsModel.browsePatch(1)
         precondition(toolsModel.patch.category=="Bass");let browsedID=toolsModel.patch.id;toolsModel.browsePatch(1);precondition(toolsModel.patch.id != browsedID)
         let toolsHost=NSHostingView(rootView:ContentView(m:toolsModel))
         toolsHost.frame=NSRect(x:0,y:0,width:1440,height:900);toolsHost.layoutSubtreeIfNeeded()
         if let bitmap=toolsHost.bitmapImageRepForCachingDisplay(in:toolsHost.bounds){toolsHost.cacheDisplay(in:toolsHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-layer-tools.png"))}
-        toolsModel.selectedLayer=0;toolsModel.loadPreset(FactoryBank.all[0])
+        toolsModel.selectedLayer=0;toolsModel.loadPreset(legacy)
         toolsModel.changeMotion{$0.beats=8;$0.grid=16;$0.points=MotionShapes.points("Heartbeat")}
         precondition(toolsModel.motionSettings.snapped(0.17)==0.1875)
         toolsModel.saveShape(name:"My Heartbeat");let shapeID=toolsModel.savedShapes[0].id
@@ -353,7 +355,7 @@ import SwiftUI
             themeHost.frame=NSRect(x:0,y:0,width:1440,height:900);themeHost.layoutSubtreeIfNeeded()
             if let bitmap=themeHost.bitmapImageRepForCachingDisplay(in:themeHost.bounds){themeHost.cacheDisplay(in:themeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-theme-\(theme.rawValue).png"))}
         }
-        toolsModel.loadPreset(FactoryBank.all[0]);precondition(toolsModel.theme == .graphiteOrange)
+        toolsModel.loadPreset(legacy);precondition(toolsModel.theme == .graphiteOrange)
         toolsModel.undo()
         let creativeID=toolsModel.patch.id
         let creativeHost=NSHostingView(rootView:CreativeToolsView(m:toolsModel))

@@ -12,13 +12,13 @@ Edit now includes dual filters, an independent modulation envelope, oscillator p
 
 Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, the automated host tests, and standalone regression checks pass; Logic application testing and Ableton save/export testing were skipped because of activation/license limits.
 
-## Nova — 100 new performances · 0.15
+## Spectrum — rebuilt 300-sound factory bank
 
-Search **Nova** in the Aurora library to browse 100 additional patches, with ten in each existing musical category. Aurora now includes **312 factory sounds**. Each Nova patch combines individually authored layer roles with drawable motion, eight custom macros, an assigned XY pad and separate layer Delay/Reverb sends. Many performances use layers C and D for attacks, upper harmonics, bass foundations or independent rhythmic voices. The bank uses built-in oscillators and wavetables without external samples.
+Aurora includes **300 Spectrum factory sounds**, with 30 in each of ten categories. The rebuilt library uses the full synthesis engine: dual filters, independent modulation envelopes, oscillator interaction, per-layer Character, LFO timing and articulation, Mirror/Quant warp, Formant/Tone shaping, and per-note modulation. There are 240 four-layer performances and 60 three-layer sounds. Each has eight custom macros, an XY pad, keyboard-expression routes and separate layer Delay/Reverb sends. No external samples are required.
 
-X transforms timbre; Y shifts the layer balance. The six remaining macros control Drift, Room, Contour, Release, Width and Echo. Saved macro positions preserve each patch's authored settings; dry effect macros start at zero so effects can be introduced smoothly. Motion uses free or tempo-synced curves for volume, filter, pan, pitch and wavetable movement, with destinations chosen per sound. Macro routes avoid base controls replaced by motion. Layer count and unison are restrained for the MacBook Air.
+X transforms timbre; Y shifts the layer balance. The six remaining macros control Motion, Space, Contour, Release, Width and Echo. Centered macro positions preserve each patch's authored settings. Drawable motion uses free or tempo-synced curves for filter, pan and wavetable movement, with destinations chosen per sound. Macro routes avoid base controls replaced by motion. Layer count and unison are restrained for the MacBook Air.
 
-See the [Nova catalog](Patch%20Banks/Aurora%20Nova%20100%20Catalog.md) for playing notes and the [grouped preset archive](Patch%20Banks/Aurora%20Nova%20100%20Patches.zip) for portable copies. Nova is bundled automatically when building Aurora. Existing factory sounds and saved user sounds remain available.
+See the [Spectrum catalog](Patch%20Banks/Aurora%20Spectrum%20300%20Catalog.md) for layer roles and playing notes, and the [preset archive](Patch%20Banks/Aurora%20Spectrum%20300%20Patches.zip) for portable copies. Spectrum replaces the older factory bank. Saved user sounds remain separate, with a small User flag in both browsers. The factory count excludes user saves.
 
 ## Color themes · 0.14
 
@@ -84,7 +84,7 @@ Tables and warped variants are prepared outside the audio callback with frequenc
 
 A native standalone synthesizer for Apple silicon Macs, built around playing and creating sounds with USB MIDI keyboards. This project targets your MacBook Air M3 with 8 GB of RAM, M-Audio Oxygen Pro 25, Yamaha CK88, and Yamaha MODX7+.
 
-This is the playable 0.15 development milestone, including wavetable oscillators, drawable motion envelopes, creative tools, an XY performance pad and 312 factory sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release; several of its advanced features remain future work.
+This development build includes wavetable oscillators, drawable motion envelopes, creative tools, an XY performance pad and 300 Spectrum factory sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release.
 
 ## Hold, clock and recording · 0.8
 
@@ -160,7 +160,7 @@ Choose **Aurora** in **Sound library**, then use the category menu to browse ten
 | Brass & Strings | Synthesized brass attacks and bowed ensemble colors |
 | Splits | Left/right combinations divided at MIDI note 60 |
 
-All 100 expansion sounds and the original 12 are bundled together under **Aurora**, for 112 factory sounds total. There is no separate Starter sounds collection. **Your sounds** contains saved and imported copies; **All sounds** brings the collections together. Search matches names, categories, and descriptions. Favorites apply within the selected collection and category. Saving or importing a sound keeps its category and opens Your sounds.
+All 300 Spectrum sounds are bundled under **Aurora**. **Your sounds** contains saved and imported copies, visibly marked User; **All sounds** brings the collections together. Search matches names, categories, and descriptions. Favorites apply within the selected collection and category. Saving or importing a sound keeps its category and opens Your sounds.
 
 The [complete catalog](<Patch Banks/Aurora 100 Catalog.md>) describes every sound. The [grouped patch archive](<Patch Banks/Aurora 100 Patches.zip>) contains individual `.aurora.json` files for import or backup. It does not need to be imported into the updated app.
 

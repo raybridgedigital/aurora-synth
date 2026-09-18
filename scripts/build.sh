@@ -6,9 +6,7 @@ BUILD_DIR="$ROOT_DIR/build"
 APP_DIR="$BUILD_DIR/Aurora.app"
 MODULE_CACHE_DIR="$BUILD_DIR/ModuleCache"
 
-python3 "$ROOT_DIR/scripts/assemble_patch_bank.py"
-python3 "$ROOT_DIR/scripts/assemble_prism_bank.py"
-python3 "$ROOT_DIR/scripts/assemble_nova_bank.py"
+python3 "$ROOT_DIR/scripts/rebuild_factory_bank.py"
 
 for source_file in Sources/AuroraApp.swift Sources/AuroraBridge.h Sources/SynthEngine.cpp Sources/MacAudioMIDI.mm Resources/Info.plist Resources/Aurora100.json; do
     if [[ ! -f "$ROOT_DIR/$source_file" ]]; then
