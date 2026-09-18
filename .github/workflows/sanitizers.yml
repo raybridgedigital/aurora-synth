@@ -1,0 +1,42 @@
+name: Native Sanitizers
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sanitize:
+    name: ${{ matrix.label }}
+    runs-on: macos-14
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: address-undefined
+            label: ASan + UBSan
+          - sanitizer: thread
+            label: TSan
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select runner architecture
+        shell: bash
+        run: |
+          echo "AURORA_TEST_TARGET=$(uname -m)-apple-macosx14.0" >> "$GITHUB_ENV"
+
+      - name: Run native test suite
+        shell: bash
+        env:
+          AURORA_SANITIZER: ${{ matrix.sanitizer }}
+          ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          TSAN_OPTIONS: halt_on_error=1:history_size=7
+        run: |
+          rm -rf build/tests build/ModuleCache
+          scripts/test.sh
