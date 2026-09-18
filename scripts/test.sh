@@ -21,7 +21,31 @@ fi
 SDK_DIR="$(xcrun --sdk macosx --show-sdk-path)"
 CLANGXX="$(xcrun --find clang++)"
 mkdir -p "$BUILD_DIR/tests" "$BUILD_DIR/ModuleCache"
-COMMON_FLAGS=(-std=c++20 -O2 -pthread -target arm64-apple-macosx14.0 -isysroot "$SDK_DIR" -I "$ROOT_DIR/Sources" -fmodules-cache-path="$BUILD_DIR/ModuleCache")
+
+TARGET="${AURORA_TEST_TARGET:-arm64-apple-macosx14.0}"
+OPTIMIZATION="-O2"
+SANITIZER_FLAGS=()
+case "${AURORA_SANITIZER:-none}" in
+    none|"") ;;
+    address-undefined)
+        OPTIMIZATION="-O1"
+        SANITIZER_FLAGS=(-g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined)
+        ;;
+    thread)
+        OPTIMIZATION="-O1"
+        SANITIZER_FLAGS=(-g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread)
+        ;;
+    *)
+        printf 'Unknown AURORA_SANITIZER=%s (expected none, address-undefined, or thread).\n' "$AURORA_SANITIZER" >&2
+        exit 2
+        ;;
+esac
+
+COMMON_FLAGS=(-std=c++20 "$OPTIMIZATION" -pthread -target "$TARGET" -isysroot "$SDK_DIR" -I "$ROOT_DIR/Sources" -fmodules-cache-path="$BUILD_DIR/ModuleCache" "${SANITIZER_FLAGS[@]}")
+
+if [[ "${AURORA_SANITIZER:-none}" != "none" ]]; then
+    printf 'Sanitizer mode: %s · target: %s\n' "$AURORA_SANITIZER" "$TARGET"
+fi
 
 printf 'Compiling and running DSP tests…\n'
 "$CLANGXX" "${COMMON_FLAGS[@]}" -c "$ROOT_DIR/Sources/SynthEngine.cpp" \
