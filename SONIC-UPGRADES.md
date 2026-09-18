@@ -26,7 +26,7 @@ New controls are available to custom macros and MIDI Learn, are stored in patche
 
 Aurora intentionally attenuates individual voices to reserve headroom for polyphony and layered sounds. Older factory patches also commonly store a 25% master value. This can sound considerably quieter than instruments with hotter factory presets.
 
-Output boost adds 0–18 dB after the original master stage, with stereo-linked peak protection at 0.98 full scale. It defaults to +6 dB for standalone sessions without a saved boost and new plug-in instances. It stays constant while browsing patches, saves with the standalone session or DAW project, and can be automated in a DAW. Old DAW projects missing this field restore at 0 dB to preserve their original level. This is a gain control, not automatic loudness normalization; presets retain their relative dynamics. Heavy boost on dense chords can engage the peak protection.
+Output boost adds 0–24 dB after the master stage, with stereo-linked peak protection at 0.98 full scale. The pre-1.0 reference calibration now defaults to +24 dB and migrates older sessions once, as requested. It stays constant across patches and saves with the standalone session or DAW project. Presets retain their dynamics; dense chords may engage peak protection.
 
 The large scope offers Auto scale and Actual level, with a separate stereo peak reading in dBFS. Auto scale changes only the drawing. Scopes now show the left output instead of averaging left and right, avoiding cancellation from opposing stereo phases. A hard-right signal can therefore appear flat in the waveform while the stereo meter still shows its output.
 
@@ -47,3 +47,20 @@ Every patch browser card has an independent favorite star. Top-right previous/ne
 - UI layouts were rendered and inspected; the updated standalone app launches as v0.17.
 
 Logic application testing and Ableton save/export testing remain skipped by request because of licensing. No new commercial-host certification is implied.
+
+## Final synthesis refinement
+
+- Both filters: low-pass, high-pass, band-pass, and Notch; independent 12/24 dB selectors. The 24 dB mode cascades two state-variable sections. Existing filter routing remains available.
+- Both LFOs: Hz or tempo sync (4 bars through 1/32, dotted eighth and eighth triplet), free-run or per-note retrigger, phase offset, up to eight seconds of delay and fade-in. Delay/fade affect direct destinations, Sound Matrix and PWM. Free-run follows a continuous layer clock; it is tempo-locked in rate, not snapped to DAW song position. Mono retriggers; legato continues.
+- Mirror and Quant warp variants are prepared and band-limited outside the render callback. Formant moves harmonics through windowed harmonic multiplication, crossfading adjacent ratios. Tone progressively removes upper harmonics through the existing mip filters. Both shape controls are neutral at zero and are visible in the wavetable preview.
+- Sound Matrix: Key Tracking is bipolar around MIDI 60 (one unit per five octaves, clamped); Random is a fixed bipolar value for each note, retained through its release.
+- Unison now supports 1–8 oscillator lanes per layer voice, with a shared 256-lane budget (up to 32 note voices at eight-lane unison). Older/releasing voices fade out when the budget is reached, including when unison is increased while notes are held. Higher unison, four active layers, and Formant all increase DSP cost.
+- Eighteen appended layer parameters retain existing parameter IDs and participate in preset serialization, macro targets, MIDI Learn, undo/redo, and layer copy/paste. Missing fields select neutral shaping, 12 dB slopes and free-running LFOs.
+
+### Pre-1.0 output calibration
+
+At the user's request, older standalone/plug-in gain settings migrate once to +24 dB. Subsequent adjustments persist normally. Master remains 0–100%, and Output boost remains 0–24 dB; the stereo-linked peak ceiling is 0.98 full scale. No automatic patch normalization or OS volume changes are applied.
+
+Two newly authored Reference sounds are included without deleting existing patches: Copper Focus and Prism Motion. At Master 100%, boost +24 dB, velocity 110, and 48 kHz, sustained single-note stereo RMS measures approximately −13.0/−14.7 dBFS; three-note chords measure −9.3/−10.3 dBFS. Peak ceiling checks pass. These are digital level measurements, not an acoustic match to macOS notifications.
+
+The eight-voice unison budget test rendered 30 seconds of audio (32 notes × 8 unison, four FX, 30 matrix routes, 44.1 kHz/128 frames) in 12.01 seconds. The 99th-percentile callback was 1.246 ms against a 2.902 ms deadline. This is an offline benchmark, not a guarantee against device underruns at every setting.

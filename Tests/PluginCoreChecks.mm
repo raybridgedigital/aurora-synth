@@ -7,10 +7,11 @@ using namespace auroraPlugin;
 static std::string json(id object){NSData* data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)data.bytes,data.length);}
 int main(){@autoreleasepool {
     Core a,b;int tested=0;
+    assert(a.values[outputGainID]==24);
     static_assert(layerID(3,57)==231 && layerID(0,58)==6000 && layerID(3,78)==6404);
-    for(NSString* file in @[@"Aurora100",@"AuroraPrism100",@"AuroraNova100"]){
+    for(NSString* file in @[@"Aurora100",@"AuroraPrism100",@"AuroraNova100",@"AuroraReference"]){
         NSData* data=[NSData dataWithContentsOfFile:[NSString stringWithFormat:@"Resources/%@.json",file]];
-        NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count==100);
+        NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count==([file isEqualToString:@"AuroraReference"]?2:100));
         for(NSDictionary* patch in bank){
             if(!a.setPatchJSON(json(patch).c_str(),true)){std::cerr<<"Rejected patch: "<<[patch[@"name"] UTF8String]<<std::endl;return 1;}
             a.setActual(transposeID,3);a.setActual(2000,.71);a.setActual(xyX,.23);a.setActual(xyY,.82);
@@ -48,9 +49,9 @@ int main(){@autoreleasepool {
     assert(b.setMappingsJSON(direct));b.setActual(layerID(3,71),.5);b.midi(0xb0,21,64);b.midi(0xb0,21,110);assert(std::abs(b.normalized(layerID(3,71))-110./127)<1e-5);
     // A pre-upgrade DAW state has no boost and no added layer values.
     NSMutableDictionary* legacy=[NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:extended.data() length:extended.size()] options:NSJSONReadingMutableContainers error:nil];
-    [legacy removeObjectForKey:@"outputGain"];
+    [legacy removeObjectForKey:@"outputGain"];[legacy removeObjectForKey:@"outputGainRevision"];
     for(NSMutableDictionary* layer in legacy[@"patch"][@"layers"])for(int p=58;p<APParameterCount;p++)[layer[@"values"] removeObjectForKey:[NSString stringWithFormat:@"%d",p]];
-    assert(b.restoreState(json(legacy).c_str()));assert(b.values[outputGainID]==0);
+    assert(b.restoreState(json(legacy).c_str()));assert(b.values[outputGainID]==24);
     for(int l=0;l<4;l++){assert(b.values[layerID(l,58)]==0);assert(b.values[layerID(l,68)]==0);assert(b.values[layerID(l,70)]==0);assert(b.values[layerID(l,73)]==0);assert(b.values[layerID(l,60)]==3200);}
     std::cout<<"Extended layer automation/state, layer D MIDI Learn and legacy project defaults passed\n";
     std::cout<<tested<<" factory patches: host state round-trip, finite audio, XY/macros and instance isolation passed\n";

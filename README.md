@@ -1,5 +1,9 @@
 # Aurora
 
+## Patch workflow and scrolling · 0.18
+
+The large patch browser now has a dedicated **User Saved** tab with direct batch import and export controls. Import accepts multiple individual preset files as well as JSON preset banks; export writes all user sounds to one portable bank. Long sound-design, library and browser lists use lazy rendering so macOS can maintain native inertial scrolling while Aurora's live meters continue updating.
+
 ## Sound design upgrades · 0.17
 
 Edit now includes dual filters, an independent modulation envelope, oscillator phase/FM/ring modulation, and per-layer Character processing. Copper Orange, patch-browser favorites and navigation, output boost with peak protection, and selectable scope scaling are included. Existing patches and DAW parameter IDs are preserved. See [Sound design upgrades](SONIC-UPGRADES.md) for routing, gain behavior and validation details.
@@ -233,3 +237,7 @@ Open **Matrix** beside Play, Edit and Routing. Enable a slot, choose its source 
 Sound sources: LFO 1, LFO 2 (full waveform, independent of each Depth slider), and the per-voice amplitude envelope. Destinations: cutoff, pitch, pan, amplitude, oscillator blend, and drive. Performance sources: mod wheel, note velocity, channel pressure, expression pedal, sustain pedal, and a selectable MIDI CC number (0–127). Performance destinations add LFO 1/2 depth, chorus, phaser, reverb and delay mix. Shared FX always target the whole patch and use the latest received value across keyboards; layer destinations use the note's own MIDI source/channel. Existing wheel vibrato, expression, sustain, and macro MIDI Learn still operate.
 
 Amount is bipolar and additive. 100% corresponds to four octaves for cutoff, 12 semitones for pitch, and one normalized unit elsewhere. Bounds protect the resulting parameter. Routes are published atomically and evaluated in the audio engine without locks or allocation; UI meter/scope updates remain separate from the main interface.
+
+### Final synthesis refinement
+
+Both filters now offer Notch and 12/24 dB slopes. Each LFO has tempo sync, per-note retrigger/free-run, phase, delay and fade. Wavetables add Mirror/Quant warp and separate Formant/Tone shaping. Sound Matrix adds Key Tracking and per-note Random. Unison extends to eight voices with a shared oscillator budget. New Reference sounds—Copper Focus and Prism Motion—provide the basis for +24 dB default output calibration. All previous sounds remain installed. See SONIC-UPGRADES.md for behavior and measured levels.

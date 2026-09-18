@@ -71,6 +71,9 @@ printf 'Compiling and running DSP tests…\n'
 "$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/SonicUpgrades.cpp" -o "$BUILD_DIR/tests/SonicUpgrades"
 "$BUILD_DIR/tests/SonicUpgrades"
 
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/RefinementChecks.cpp" -o "$BUILD_DIR/tests/RefinementChecks"
+"$BUILD_DIR/tests/RefinementChecks"
+
 if [[ "$RUN_BRIDGE" == true ]]; then
     if [[ ! -f "$ROOT_DIR/Tests/BridgeProbe.cpp" ]]; then
         printf 'Optional device probe is not present at Tests/BridgeProbe.cpp.\n' >&2

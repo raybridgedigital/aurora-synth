@@ -19,8 +19,11 @@ float bounded(float x,float lo,float hi,float fallback=0) {
 }
 float parameterValue(int p,float v) {
     switch(p) {
+        case APFilter1Slope:case APFilter2Slope:case APLFO1Sync:case APLFO2Sync:case APLFO1Retrigger:case APLFO2Retrigger:return std::round(bounded(v,0,1));
+        case APLFO1Division:case APLFO2Division:return std::round(bounded(v,0,9,4));
+        case APLFO1Delay:case APLFO2Delay:case APLFO1Fade:case APLFO2Fade:return bounded(v,0,8);
         case APFilter2Enabled:return bounded(v,0,1)>=.5f?1:0;
-        case APFilter2Type:case APFilterRouting:return std::round(bounded(v,0,2));
+        case APFilterRouting:return std::round(bounded(v,0,2));
         case APFilter2Cutoff:return bounded(v,30,18000,3200);
         case APFilter2Resonance:return bounded(v,0,.9f);
         case APModAttack:return bounded(v,.001f,8,.01f);
@@ -33,13 +36,13 @@ float parameterValue(int p,float v) {
         case APCharacterBits:return std::round(bounded(v,4,16,12));
         case APCharacterRate:return bounded(v,.02f,1,1);
         case APWT1Table: case APWT2Table: return std::round(bounded(v,0,24));
-        case APWT1WarpMode: case APWT2WarpMode: return std::round(bounded(v,0,3));
+        case APWT1WarpMode: case APWT2WarpMode: return std::round(bounded(v,0,5));
         case APVoiceMode: return std::round(bounded(v,0,2));
         case APGlide: return bounded(v,0,2);
         case APBendRange: return std::round(bounded(v,0,24,2));
         case APEnabled: case APArpEnabled: case APSync: return bounded(v,0,1)>=.5f?1:0;
         case APPulseWidth: return bounded(v,.05f,.95f,.5f);
-        case APUnison: return std::round(bounded(v,1,4,1));
+        case APUnison: return std::round(bounded(v,1,8,1));
         case APUnisonDetune: return bounded(v,0,30);
         case APSyncTune: return bounded(v,0,36);
         case APWave1: case APWave2: case APLFOShape: case APLFO2Shape: return std::round(bounded(v,0,4));
@@ -51,7 +54,7 @@ float parameterValue(int p,float v) {
         case APLFORate: case APLFO2Rate: return bounded(v,.01f,30,1);
         case APLFODestination: case APLFO2Destination: case APArpRate: case APArpMode:
             return std::round(bounded(v,0,3));
-        case APFilterType: return std::round(bounded(v,0,2));
+        case APFilterType:case APFilter2Type: return std::round(bounded(v,0,3));
         case APArpOctaves: return std::round(bounded(v,1,4,1));
         case APArpGate: return bounded(v,.05f,.95f,.65f);
         case APKeyLow: case APKeyHigh: return std::round(bounded(v,0,127));
@@ -59,7 +62,7 @@ float parameterValue(int p,float v) {
     }
 }
 float globalValue(int p,float v) {
-    if(p==AGOutputGain)return bounded(v,0,18);
+    if(p==AGOutputGain)return bounded(v,0,24);
     if(p==AGPhaserRate||p==AGChorusRate)return bounded(v,.03f,5,.23f);
     if(p==AGPhaserFeedback)return bounded(v,-.85f,.85f);
     if(p==AGReverbDecay)return bounded(v,.2f,8,1);
@@ -137,6 +140,7 @@ static_assert(std::atomic<float>::is_always_lock_free);
 static_assert(std::atomic<size_t>::is_always_lock_free);
 struct OscillatorLane {
     float phase1=0,phase2=.17f,subphase=0,ic1=0,ic2=0,syncCorrection=0;
+    float f1b1=0,f1b2=0,f2b1=0,f2b2=0;
     float f2ic1=0,f2ic2=0,held=0,holdPhase=1,tone=0,previousCharacter=0;
 };
 struct Voice {
@@ -148,7 +152,9 @@ struct Voice {
     uint64_t serial=0; float phase1=0,phase2=.17f,subphase=0,frequency=440,targetFrequency=440;
     float envelope=0,velocity=1,ic1=0,ic2=0,filterG=.2f,filterK=1,lastL=0,lastR=0;
     float modEnvelope=0,filter2G=.2f,filter2K=1;int modStage=0;
-    std::array<OscillatorLane,4> lanes{};
+    std::array<OscillatorLane,8> lanes{};
+    std::array<float,2> lfoPhase{},lfoRandom{};
+    double age=0;float noteRandom=0;
 };
 struct Tail { float left=0,right=0;int remaining=0;int layer=0; };
 struct MatrixRoute {int source=0,destination=0,target=4,cc=1,slot=0;float amount=0;};
@@ -171,7 +177,7 @@ struct Layer {
     int previousMode=0;
     float glideStep=1;
     std::array<float,APParameterCount> p{};
-    std::array<float,4> unisonRatios{1,1,1,1};
+    std::array<float,8> unisonRatios{1,1,1,1,1,1,1,1};
     float syncRatio=1,syncDecay=0;
     float attack=.01f,decay=.99f,release=.99f,detune=1;
     float modAttack=.01f,modDecay=.99f,modRelease=.99f,characterTone=1,characterSteps=2048;
@@ -213,7 +219,7 @@ struct SynthEngine::Impl {
     std::vector<RetiredBank> retiredBanks;
     std::array<std::atomic<float>,8> previewPosition{},previewAmount{};
     std::atomic<unsigned> previewActiveLayers{0};
-    uint32_t phaseRandom=0x17253819;
+    uint32_t phaseRandom=0x17253819,modulationRandom=0x936a8d21;
     std::array<std::atomic<float>,30> modulationFeedback{};
     std::array<float,30> frameFeedback{};
     std::array<std::array<std::atomic<uint64_t>,6>,5> matrix{};
@@ -267,6 +273,7 @@ struct SynthEngine::Impl {
         defaults[APLFO2Destination]=1;
         defaults[APPulseWidth]=.5f;defaults[APUnison]=1;defaults[APUnisonDetune]=8;defaults[APStereoSpread]=.6f;
         defaults[APBendRange]=2;
+        defaults[APLFO1Division]=defaults[APLFO2Division]=4;
         defaults[APFilter2Cutoff]=3200;defaults[APFilterBalance]=.5f;
         defaults[APModAttack]=.01f;defaults[APModDecay]=.35f;defaults[APModRelease]=.35f;
         defaults[APOscModRatio]=1;defaults[APCharacterDrive]=.25f;defaults[APCharacterMix]=1;
@@ -342,10 +349,25 @@ struct SynthEngine::Impl {
     void fadeStolen(const Voice& voice) {
         if(voice.active)tails[nextTail++%tails.size()]={voice.lastL,voice.lastR,std::max(1,int(sampleRate*.005)),voice.layer};
     }
+    void reserveOscillators(int reserve=0) {
+        int used=reserve;
+        for(const auto& v:voices)if(v.active)used+=int(layers[v.layer].p[APUnison]);
+        while(used>256){
+            Voice* oldest=nullptr;
+            for(auto& v:voices)if(v.active&&(!oldest||(v.stage==3&&oldest->stage!=3)||((v.stage==3)==(oldest->stage==3)&&v.serial<oldest->serial)))oldest=&v;
+            if(!oldest)break;
+            used-=int(layers[oldest->layer].p[APUnison]);fadeStolen(*oldest);oldest->active=false;
+        }
+    }
     void releaseSource(int si,int channel=-1,int key=-1,bool force=false) {
         for(auto& v:voices)if(v.active&&v.source==si&&(channel<0||v.channel==channel)&&(key<0||v.key==key)) {
             if(force){fadeStolen(v);v.active=false;}else v.stage=3;
         }
+    }
+    float lfoRate(const std::array<float,APParameterCount>& p,int o) const {
+        constexpr float beats[]={16,8,4,2,1,.5f,.25f,.125f,.75f,1.f/3};
+        int base=APLFO1Sync+o*6;
+        return p[base]>.5f?global[AGTempo]/(60.f*beats[int(p[base+1])]):p[o?APLFO2Rate:APLFORate];
     }
     void startVoice(int si,int ch,int key,int pitch,float velocity,int layer,bool arp) {
         auto& settings=layers[layer].p;
@@ -354,12 +376,13 @@ struct SynthEngine::Impl {
             v.key=key;v.targetFrequency=targetHz;v.velocity=velocity;v.serial=++serial;
             v.untransposedPitch=pitch;
             if(settings[APGlide]<=0)v.frequency=targetHz;
-            if(settings[APVoiceMode]<1.5f){v.stage=0;v.modStage=0;v.modEnvelope=0;v.motionTime=0;v.motionStarted=false;v.motionFade=0;v.motionRelease=1;}
+            if(settings[APVoiceMode]<1.5f){v.age=0;v.lfoPhase={};v.lfoRandom={randomUnit(modulationRandom),randomUnit(modulationRandom)};v.noteRandom=randomUnit(modulationRandom);v.stage=0;v.modStage=0;v.modEnvelope=0;v.motionTime=0;v.motionStarted=false;v.motionFade=0;v.motionRelease=1;}
             return;
         }
         // Repeated note-ons from the same physical key retrigger without losing
         // the ownership of equal pitches on a different source or channel.
         if(!arp)for(auto& v:voices)if(v.active&&!v.arp&&v.source==si&&v.channel==ch&&v.key==key&&v.layer==layer)v.stage=3;
+        reserveOscillators(int(settings[APUnison]));
         Voice* target=nullptr;
         for(auto& v:voices)if(!v.active){target=&v;break;}
         if(!target) {
@@ -372,6 +395,7 @@ struct SynthEngine::Impl {
         fadeStolen(*target);
         *target=Voice{};target->active=true;target->arp=arp;target->source=si;target->channel=ch;
         target->key=key;target->layer=layer;target->serial=++serial;target->velocity=velocity;
+        target->noteRandom=randomUnit(modulationRandom);target->lfoRandom={randomUnit(modulationRandom),randomUnit(modulationRandom)};
         target->untransposedPitch=pitch;
         pitch=std::clamp(pitch+int(layers[layer].p[APTranspose]),0,127);
         target->frequency=440.f*std::exp2((pitch-69)/12.f);
@@ -443,7 +467,7 @@ struct SynthEngine::Impl {
             layer.characterTone=1-std::exp(-tau*std::min(300*std::exp2(p[APCharacterTone]*5.9f),float(sampleRate)*.4f)/float(sampleRate));
             layer.characterSteps=std::exp2(p[APCharacterBits]-1);
             layer.detune=std::exp2(p[APDetune]/1200.f);
-            int count=std::clamp(int(p[APUnison]),1,4);
+            int count=std::clamp(int(p[APUnison]),1,8);
             for(int lane=0;lane<count;lane++)layer.unisonRatios[lane]=std::exp2((count==1?0.f:2.f*lane/(count-1)-1)*p[APUnisonDetune]/1200.f);
             layer.syncRatio=std::exp2((p[APSync]>.5f?p[APSyncTune]:0)/12.f);
             layer.syncDecay=std::exp(-1.f/float(sampleRate*.0002));
@@ -456,6 +480,7 @@ struct SynthEngine::Impl {
             }
             layer.previousEnabled=enabled;layer.previousArp=arp;
         }
+        reserveOscillators();
     }
     void processEvent(const Event& e) {
         if(e.kind==Event::Hold){
@@ -580,7 +605,6 @@ struct SynthEngine::Impl {
         for(uint32_t frame=0;frame<frames;frame++,sampleCounter++) {
             if(externalClock&&++clockAge==uint64_t(sampleRate*.5)){clockBPM=0;lastClock=clockInterval=0;for(int l=0;l<kLayers;l++)releaseLayerArp(l);}
             if(externalClock&&clockBPM>0)global[AGTempo]=clockBPM.load(std::memory_order_relaxed);
-            std::array<float,kLayers> cutoffMod{},pitchMod{},panMod{},ampMod{},rawLFO1{},rawLFO2{};
             for(int l=0;l<kLayers;l++) {
                 auto& layer=layers[l];auto& p=layer.p;
                 layer.gain+=smooth*(p[APLevel]*p[APEnabled]*(activeSolo<0||activeSolo==l?1.f:0.f)-layer.gain);
@@ -590,19 +614,9 @@ struct SynthEngine::Impl {
                     layer.wtPosition[o]+=smooth*(p[APWT1Position+o*7]-layer.wtPosition[o]);
                     layer.wtAmount[o]+=smooth*(p[APWT1Warp+o*7]-layer.wtAmount[o]);
                 }
-                rawLFO1[l]=shapeLFO(layer.lfoPhase,int(p[APLFOShape]),layer.heldRandom);rawLFO2[l]=shapeLFO(layer.lfo2Phase,int(p[APLFO2Shape]),layer.heldRandom2);
-                float v1=rawLFO1[l]*p[APLFODepth],v2=rawLFO2[l]*p[APLFO2Depth];
-                float values[2]={v1,v2};int dests[2]={int(p[APLFODestination]),int(p[APLFO2Destination])};
-                for(int i=0;i<2;i++)switch(dests[i]) {
-                    case 0:cutoffMod[l]+=values[i]*3;break;
-                    case 1:pitchMod[l]+=values[i]*2;break;
-                    case 2:panMod[l]+=values[i];break;
-                    default:ampMod[l]+=values[i]*.5f;break;
-                }
-                pitchMod[l]=std::exp2(pitchMod[l]/12.f);ampMod[l]=std::clamp(1+ampMod[l],0.f,2.f);
-                layer.lfoPhase+=p[APLFORate]/float(sampleRate);
+                layer.lfoPhase+=lfoRate(p,0)/float(sampleRate);
                 if(layer.lfoPhase>=1){layer.lfoPhase-=1;layer.heldRandom=randomUnit(random);}
-                layer.lfo2Phase+=p[APLFO2Rate]/float(sampleRate);if(layer.lfo2Phase>=1){layer.lfo2Phase-=1;layer.heldRandom2=randomUnit(layer.random2);}
+                layer.lfo2Phase+=lfoRate(p,1)/float(sampleRate);if(layer.lfo2Phase>=1){layer.lfo2Phase-=1;layer.heldRandom2=randomUnit(layer.random2);}
                 if(p[APEnabled]>.5f&&p[APArpEnabled]>.5f) {
                     if(layer.gateCountdown>0&&--layer.gateCountdown<=0)releaseLayerArp(l);
                     if(!externalClock&&!layer.arpWaiting){if(layer.arpCountdown<=0)arpStep(l);else --layer.arpCountdown;}
@@ -633,12 +647,28 @@ struct SynthEngine::Impl {
                 if(v.stage==3)v.modEnvelope*=layer.modRelease;
                 else if(v.modStage==0){v.modEnvelope=std::min(1.f,v.modEnvelope+layer.modAttack);if(v.modEnvelope>=1)v.modStage=1;}
                 else {v.modEnvelope=p[APModSustain]+(v.modEnvelope-p[APModSustain])*layer.modDecay;}
+                // Retrigger is polyphonic: a new note never resets another held note.
+                float noteLFO[2];float noteCutoff=0,notePitch=0,notePan=0,noteAmp=1;
+                for(int o=0;o<2;o++){
+                    int base=APLFO1Sync+o*6;
+                    bool retrigger=p[base+2]>.5f;
+                    float phase=(retrigger?v.lfoPhase[o]:(o?layer.lfo2Phase:layer.lfoPhase))+p[base+3];phase-=std::floor(phase);
+                    float held=retrigger?v.lfoRandom[o]:(o?layer.heldRandom2:layer.heldRandom);
+                    float elapsed=float(v.age)-p[base+4];
+                    float fade=elapsed<0?0:(p[base+5]>0?std::min(1.f,elapsed/p[base+5]):1.f);
+                    noteLFO[o]=shapeLFO(phase,int(p[o?APLFO2Shape:APLFOShape]),held)*fade;
+                    if(elapsed>=0){v.lfoPhase[o]+=lfoRate(p,o)/float(sampleRate);if(v.lfoPhase[o]>=1){v.lfoPhase[o]-=std::floor(v.lfoPhase[o]);v.lfoRandom[o]=randomUnit(modulationRandom);}}
+                    float amount=noteLFO[o]*p[o?APLFO2Depth:APLFODepth];
+                    switch(int(p[o?APLFO2Destination:APLFODestination])){case 0:noteCutoff+=amount*3;break;case 1:notePitch+=amount*2;break;case 2:notePan+=amount;break;default:noteAmp+=amount*.5f;}
+                }
+                v.age+=1/sampleRate;notePitch=std::exp2(notePitch/12.f);noteAmp=std::clamp(noteAmp,0.f,2.f);
                 std::array<float,21> mod{};
                 constexpr int modDestinations[]={0,16,1,18,19,12,13};
                 mod[modDestinations[int(p[APModDestination])]]+=v.modEnvelope*p[APModAmount];
                 for(int i=0;i<matrixCount[v.layer];i++){
                     const auto& r=activeMatrix[v.layer][i];
-                    float signal=r.source==0?rawLFO1[v.layer]:(r.source==1?rawLFO2[v.layer]:(r.source==2?v.envelope:v.modEnvelope));
+                    float signals[]={noteLFO[0],noteLFO[1],v.envelope,v.modEnvelope,std::clamp((v.key-60)/60.f,-1.f,1.f),v.noteRandom};
+                    float signal=signals[r.source];
                     mod[r.destination]+=signal*r.amount;
                     frameFeedback[v.layer*6+r.slot]=signal*r.amount;
                 }
@@ -650,16 +680,16 @@ struct SynthEngine::Impl {
                 float extraCutoff=0,extraPitch=0,extraPan=0,extraAmp=0;
                 for(int i=0;i<2;i++){
                     float depth=p[i?APLFO2Depth:APLFODepth];
-                    float amount=(std::clamp(depth+mod[6+i],0.f,1.f)-depth)*(i?rawLFO2[v.layer]:rawLFO1[v.layer]);
+                    float amount=(std::clamp(depth+mod[6+i],0.f,1.f)-depth)*noteLFO[i];
                     switch(int(p[i?APLFO2Destination:APLFODestination])){case 0:extraCutoff+=amount*3;break;case 1:extraPitch+=amount*2;break;case 2:extraPan+=amount;break;default:extraAmp+=amount*.5f;}
                 }
                 float blend=std::clamp(p[APBlend]+mod[4],0.f,1.f),drive=std::clamp(p[APDrive]+mod[5],0.f,1.f);
                 float wheelPitch=1+source.wheel[v.channel]*std::sin(tau*layer.lfo2Phase)*.0145f;
                 v.frequency+=layer.glideStep*(v.targetFrequency-v.frequency);
                 float motionPitch=motion.routed(2)?motion.value(2,v.motionValue):0;
-                float frequency=v.frequency*transposeRatio*std::exp2(source.bend[v.channel]*p[APBendRange]/12.f)*pitchMod[v.layer]*wheelPitch*std::exp2((std::clamp(mod[1],-2.f,2.f)*12+extraPitch+motionPitch)/12.f);
+                float frequency=v.frequency*transposeRatio*std::exp2(source.bend[v.channel]*p[APBendRange]/12.f)*notePitch*wheelPitch*std::exp2((std::clamp(mod[1],-2.f,2.f)*12+extraPitch+motionPitch)/12.f);
                 if((sampleCounter&15)==0||v.envelope<=layer.attack*1.1f) {
-                    float cutoff=(motion.routed(1)?motion.value(1,v.motionValue):layer.cutoff)*std::exp2(cutoffMod[v.layer]+p[APFilterEnvelope]*v.envelope*4+std::clamp(mod[0],-2.f,2.f)*4+extraCutoff);
+                    float cutoff=(motion.routed(1)?motion.value(1,v.motionValue):layer.cutoff)*std::exp2(noteCutoff+p[APFilterEnvelope]*v.envelope*4+std::clamp(mod[0],-2.f,2.f)*4+extraCutoff);
                     cutoff=std::clamp(cutoff,20.f,std::min(20000.f,float(sampleRate)*.42f));
                     v.filterG=std::tan(pi*cutoff/float(sampleRate));v.filterK=2-1.85f*p[APResonance];
                     if(p[APFilter2Enabled]>.5f){
@@ -668,8 +698,8 @@ struct SynthEngine::Impl {
                     }
                 }
                 float g=v.filterG,k=v.filterK,a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2;
-                int unison=std::clamp(int(p[APUnison]),1,4);
-                float width=std::clamp(p[APPulseWidth]+rawLFO1[v.layer]*p[APPWMDepth]*.45f,.05f,.95f);
+                int unison=std::clamp(int(p[APUnison]),1,8);
+                float width=std::clamp(p[APPulseWidth]+noteLFO[0]*p[APPWMDepth]*.45f,.05f,.95f);
                 v.lastL=v.lastR=0;
                 float positions[2],amounts[2];
                 for(int o=0;o<2;o++){
@@ -678,7 +708,7 @@ struct SynthEngine::Impl {
                     if(frame+1==frames){previewPosition[v.layer*2+o].store(positions[o]);previewAmount[v.layer*2+o].store(amounts[o]);}
                 }
                 auto wave=[&](int o,float phase,float step){
-                    return p[APWT1Enabled+o*7]>.5f&&layer.banks[o]?layer.banks[o]->sample(phase,step,positions[o],int(p[APWT1WarpMode+o*7]),amounts[o]):oscillator(phase,step,int(p[o?APWave2:APWave1]),width);
+                    return p[APWT1Enabled+o*7]>.5f&&layer.banks[o]?layer.banks[o]->shapedSample(phase,step,positions[o],int(p[APWT1WarpMode+o*7]),amounts[o],p[APWT1Formant+o*2],p[APWT1Tone+o*2]):oscillator(phase,step,int(p[o?APWave2:APWave1]),width);
                 };
                 for(int laneIndex=0;laneIndex<unison;laneIndex++) {
                     auto& lane=v.lanes[laneIndex];
@@ -715,12 +745,12 @@ struct SynthEngine::Impl {
                         float a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2;
                         float x=in-ic2,band=a1*ic1+a2*x,low=ic2+a2*ic1+a3*x;
                         ic1=2*band-ic1;ic2=2*low-ic2;
-                        return type==1?in-k*band-low:type==2?band:low;
+                        return type==1?in-k*band-low:type==2?band:type==3?in-k*band:low;
                     };
-                    auto f1=[&](float x){return filter(x,g,k,int(p[APFilterType]),lane.ic1,lane.ic2);};
-                    auto f2=[&](float x){return filter(x,v.filter2G,v.filter2K,int(p[APFilter2Type]),lane.f2ic1,lane.f2ic2);};
+                    auto f1=[&](float x){float y=filter(x,g,k,int(p[APFilterType]),lane.ic1,lane.ic2);if(p[APFilter1Slope]>.5f)y=filter(y,g,k,int(p[APFilterType]),lane.f1b1,lane.f1b2);else lane.f1b1=lane.f1b2=0;return y;};
+                    auto f2=[&](float x){float y=filter(x,v.filter2G,v.filter2K,int(p[APFilter2Type]),lane.f2ic1,lane.f2ic2);if(p[APFilter2Slope]>.5f)y=filter(y,v.filter2G,v.filter2K,int(p[APFilter2Type]),lane.f2b1,lane.f2b2);else lane.f2b1=lane.f2b2=0;return y;};
                     float filtered;
-                    if(p[APFilter2Enabled]<.5f){filtered=f1(input);lane.f2ic1=lane.f2ic2=0;}
+                    if(p[APFilter2Enabled]<.5f){filtered=f1(input);lane.f2ic1=lane.f2ic2=lane.f2b1=lane.f2b2=0;}
                     else if(p[APFilterRouting]<.5f)filtered=f2(f1(input));
                     else if(p[APFilterRouting]<1.5f)filtered=f1(f2(input));
                     else {float balance=std::clamp(p[APFilterBalance]+mod[20],0.f,1.f);filtered=f1(input)*(1-balance)+f2(input)*balance;}
@@ -739,8 +769,8 @@ struct SynthEngine::Impl {
                         filtered+=(lane.tone-filtered)*p[APCharacterMix];
                     }
                     float amplitude=motion.routed(0)?motion.value(0,v.motionValue)*v.motionRelease*v.motionFade:v.envelope;
-                    float value=filtered*amplitude*v.velocity*source.expression[v.channel]*layer.gain*std::clamp(ampMod[v.layer]+mod[3]+extraAmp,0.f,2.f)*.16f/unison;
-                    float pan=std::clamp((motion.routed(3)?motion.value(3,v.motionValue):p[APPan])+panMod[v.layer]+mod[2]+extraPan+position*p[APStereoSpread],-1.f,1.f);
+                    float value=filtered*amplitude*v.velocity*source.expression[v.channel]*layer.gain*std::clamp(noteAmp+mod[3]+extraAmp,0.f,2.f)*.16f/unison;
+                    float pan=std::clamp((motion.routed(3)?motion.value(3,v.motionValue):p[APPan])+notePan+mod[2]+extraPan+position*p[APStereoSpread],-1.f,1.f);
                     if(!std::isfinite(value)||!std::isfinite(lane.ic1)||!std::isfinite(lane.ic2)||!std::isfinite(lane.f2ic1)||!std::isfinite(lane.f2ic2)){lane=OscillatorLane{};continue;}
                     v.lastL+=value*std::sqrt(.5f*(1-pan));v.lastR+=value*std::sqrt(.5f*(1+pan));
                 }
@@ -858,7 +888,7 @@ int aurora::SynthEngine::copyScope(float* samples,int capacity) const {
 
 void aurora::SynthEngine::setMatrix(int bank,int slot,bool enabled,int source,int destination,int target,int cc,float amount) {
     if(bank<0||bank>4||slot<0||slot>=6)return;
-    if(source<0||source>(bank==4?5:3)||destination<0||destination>20||(bank!=4&&destination>5&&destination<12)||target<0||target>4||cc<0||cc>127||!std::isfinite(amount))enabled=false;
+    if(source<0||source>5||destination<0||destination>20||(bank!=4&&destination>5&&destination<12)||target<0||target>4||cc<0||cc>127||!std::isfinite(amount))enabled=false;
     unsigned a=unsigned(int(std::round(std::clamp(std::isfinite(amount)?amount:0.f,-1.f,1.f)*32767))+32768);
     uint64_t bits=enabled?(1ull|(uint64_t(source)<<1)|(uint64_t(destination)<<4)|(uint64_t(target)<<9)|(uint64_t(cc)<<12)|(uint64_t(a)<<19)):0;
     impl->matrix[bank][slot].store(bits,std::memory_order_relaxed);
@@ -902,7 +932,7 @@ int aurora::SynthEngine::copyWavetablePreview(int layer,int oscillator,float* sa
     float position=getParameter(layer,base+2),amount=getParameter(layer,base+4);
     if(impl->previewActiveLayers.load()&(1u<<layer)){position=impl->previewPosition[slot].load();amount=impl->previewAmount[slot].load();}
     int count=std::min(capacity,512);
-    for(int i=0;i<count;i++)samples[i]=bank?bank->sample(float(i)/float(std::max(1,count-1)),.0001f,position,int(getParameter(layer,base+3)),amount):0;
+    for(int i=0;i<count;i++)samples[i]=bank?bank->shapedSample(float(i)/float(std::max(1,count-1)),.0001f,position,int(getParameter(layer,base+3)),amount,getParameter(layer,APWT1Formant+oscillator*2),getParameter(layer,APWT1Tone+oscillator*2)):0;
     return count;
 }
 const char* aurora::SynthEngine::wavetableName(int index){return index>=0&&index<24?wt::names[index]:"Imported";}

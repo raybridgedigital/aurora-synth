@@ -65,7 +65,11 @@ struct WavetableOscillatorPanel:View {
             WavetablePreview(telemetry:m.wavetableTelemetry,slot:m.selectedLayer*2+oscillator).opacity(enabled ? 1:0.35)
             ParameterSlider(title:"Position",value:m.parameter(base+2),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:12+oscillator))
                 .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:base+2)))
-            choices(["Off","Bend","Sync","Fold"],parameter:base+3)
+            HStack{
+                ParameterSlider(title:"Formant",value:m.parameter(93+oscillator*2),onBegin:{m.checkpoint()}).modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:93+oscillator*2)))
+                ParameterSlider(title:"Tone",value:m.parameter(94+oscillator*2),onBegin:{m.checkpoint()}).modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:94+oscillator*2)))
+            }
+            choices(["Off","Bend","Sync","Fold","Mirror","Quant"],parameter:base+3)
             ParameterSlider(title:"Warp",value:m.parameter(base+4),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:14+oscillator))
                 .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:base+4)))
         }

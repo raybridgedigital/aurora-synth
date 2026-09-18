@@ -44,7 +44,7 @@ int main(){
         for(int i=0;i<256;i++)sig.push_back(bank->sample(i/256.f,.001f,.63f,0,0));
         for(const auto& old:signatures){float diff=0;for(int i=0;i<256;i++)diff+=std::abs(old[i]-sig[i]);assert(diff>.01f);}
         signatures.push_back(sig);
-        for(int mode=0;mode<4;mode++)for(float step:{.001f,.01f,.1f,.4f})for(int i=0;i<256;i++){
+        for(int mode=0;mode<6;mode++)for(float step:{.001f,.01f,.1f,.4f})for(int i=0;i<256;i++){
             float p=i/256.f,a=bank->sample(p,step,.5f,mode,.43f),b=bank->sample(p,step,.50001f,mode,.43001f);
             assert(std::isfinite(a)&&std::abs(a)<4&&std::abs(a-b)<.002f);
             assert(std::abs(bank->sample(p,step,.5f,mode,0)-bank->sample(p,step,.5f,0,0))<1e-6f);

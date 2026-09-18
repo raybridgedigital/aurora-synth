@@ -51,8 +51,29 @@ import SwiftUI
         }
         defer { aurora_shutdown() }
         precondition(model.collection == "Aurora")
-        precondition(FactoryBank.all.count == 312)
-        precondition(SynthModel.ranges.count==79 && ControlTarget.layerNames.count==79)
+        precondition(SynthModel.restoredOutputGain(nil,revision:nil)==24)
+        precondition(SynthModel.restoredOutputGain(6,revision:nil)==24)
+        precondition(SynthModel.restoredOutputGain(12,revision:2)==24)
+        precondition(SynthModel.restoredOutputGain(6,revision:3)==6)
+        precondition(SynthModel.restoredOutputGain(30,revision:3)==24)
+        precondition(FactoryBank.all.count == 314)
+        let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
+        let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
+        precondition(try! SynthModel.presets(in:singlePresetData).count==1)
+        precondition(try! SynthModel.presets(in:presetBankData).count==12)
+        precondition((try? SynthModel.presets(in:Data("not a preset".utf8)))==nil)
+        print("PASS: batch preset format accepts one preset or a multi-preset bank and rejects malformed data.")
+        precondition(SynthModel.ranges.count==97 && ControlTarget.layerNames.count==97)
+        for ref in FactoryBank.references {
+            model.loadPreset(ref)
+            precondition(SynthModel.sanitized(ref) != nil)
+            for l in 0..<4 {for p in 79..<97 {precondition(abs(Double(aurora_get_parameter(Int32(l),Int32(p)))-ref.layers[l][p])<0.0001)}}
+            let recalled=try! JSONDecoder().decode(SoundPreset.self,from:JSONEncoder().encode(ref))
+            precondition(recalled.layers==ref.layers)
+        }
+        model.checkpoint();let oldPhase=model.patch.layers[0][84];model.set(0,84,0.9);model.undo();precondition(model.patch.layers[0][84]==oldPhase);model.redo();precondition(model.patch.layers[0][84]==0.9)
+        precondition(MatrixAssignment(enabled:true,source:5,destination:12).valid(performance:false))
+        model.loadPreset(FactoryBank.all[0]);precondition(aurora_get_parameter(0,79)==0 && aurora_get_parameter(0,82)==4 && aurora_get_parameter(0,93)==0)
         let upgradeOriginal=model.patch
         model.checkpoint();model.set(0,58,1);model.set(0,60,1900);model.set(0,64,2);model.set(0,68,0.7);model.set(0,70,2);model.set(0,71,0.4);model.set(0,73,3)
         let upgraded=model.patch
@@ -63,6 +84,7 @@ import SwiftUI
         model.undo();precondition(model.patch.layers[0]==upgradeOriginal.layers[0]);model.redo();precondition(model.patch.layers[0]==upgraded.layers[0])
         model.loadPreset(upgradeOriginal);precondition(aurora_get_parameter(0,58)==0 && aurora_get_parameter(0,60)==3200 && aurora_get_parameter(0,73)==0)
         model.setOutputGain(9);model.loadPreset(upgradeOriginal);precondition(model.outputGain==9 && aurora_get_global(15)==9)
+        model.setOutputGain(24);precondition(model.outputGain==24 && aurora_get_global(15)==24)
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
         model.selectTheme(.copperOrange)
         let upgradeView=NSHostingView(rootView:EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
@@ -71,10 +93,10 @@ import SwiftUI
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
-        precondition(model.collectionSounds.count == 312)
+        precondition(model.collectionSounds.count == 314)
         precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==312)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==312)
+        precondition(Set(FactoryBank.all.map(\.id)).count==314)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==314)
         precondition(FactoryBank.nova.count==100)
         model.search="Nova"
         precondition(model.library.filter{$0.id.hasPrefix("nova-")}.count==100)
@@ -193,7 +215,7 @@ import SwiftUI
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")
         print("PASS: 100% master, persistent global transpose, tap tempo, rename preserving edits, delete and undo.")
-        print("PASS: Aurora contains 312 distinct sounds; all 100 Nova and 100 Prism patches load and appear in search. Nova macro centers, motion, XY and save round trips pass.")
+        print("PASS: Aurora contains 314 distinct sounds; all 100 Nova and 100 Prism patches load and appear in search. Nova macro centers, motion, XY and save round trips pass.")
         print("PASS: 20 stable polls and 1,200 meter changes caused ZERO main-interface publications.")
         print("PASS: 1,200 unchanged meter samples caused ZERO additional publications.")
         model.selectedLayer=0

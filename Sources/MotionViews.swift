@@ -262,7 +262,7 @@ struct MotionEnvelopePanel:View {
             HStack{Text(MotionSettings.formatted(settings.routes[editor.destination].minimum,editor.destination));Spacer();Text("Drag points · double-click to add · select a point to bend its curve");Spacer();Text(MotionSettings.formatted(settings.routes[editor.destination].maximum,editor.destination))}.font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             pointControls
             HStack(alignment:.top,spacing:18){destinations.frame(maxWidth:.infinity);MotionRouteCard(m:m,editor:editor,index:editor.destination).frame(width:320)}
-            Text("Each note starts its own shape. Once holds the final value; Loop repeats while held. Volume replaces the attack/decay/sustain envelope; Release still fades notes out. Other destinations replace their base value; existing modulation still adds movement. Wavetable destinations require that oscillator's Wavetable mode; Warp also needs Bend, Sync or Fold.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize(horizontal:false,vertical:true)
+            Text("Each note starts its own shape. Once holds the final value; Loop repeats while held. Volume replaces the attack/decay/sustain envelope; Release still fades notes out. Other destinations replace their base value; existing modulation still adds movement. Wavetable destinations require that oscillator's Wavetable mode; Warp also needs an active warp mode.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize(horizontal:false,vertical:true)
         }
     }
 }

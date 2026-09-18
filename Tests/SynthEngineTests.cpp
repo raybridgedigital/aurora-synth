@@ -308,9 +308,9 @@ void benchmark(int unison=1) {
         for(int i=0;i<128;i++)assert(std::isfinite(l[i])&&std::isfinite(r[i]));
     }
     double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-beginning).count();
-    assert(e.activeVoices()==64);std::sort(durations.begin(),durations.end());double deadline=128.0/44100*1e6;
-    std::printf("BENCHMARK: 30 s offline, 44.1 kHz/128, 64 voices x %d unison + 4 FX + 30 matrix slots: %.3f s wall; p99 %.1f us (%.1f%% of %.1f us deadline), max %.1f us. Not a real-device underrun test.\n",
-        unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
+    assert(e.activeVoices()==std::min(64,256/unison));std::sort(durations.begin(),durations.end());double deadline=128.0/44100*1e6;
+    std::printf("BENCHMARK: 30 s offline, 44.1 kHz/128, %d voices x %d unison + 4 FX + 30 matrix slots: %.3f s wall; p99 %.1f us (%.1f%% of %.1f us deadline), max %.1f us. Not a real-device underrun test.\n",
+        e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
 int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();scopeCapture();phaserEffect();globalTranspose();ownership();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

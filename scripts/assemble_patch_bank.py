@@ -66,7 +66,8 @@ def assemble():
     output.mkdir(exist_ok=True)
     with zipfile.ZipFile(output/"Aurora 100 Patches.zip","w",zipfile.ZIP_DEFLATED) as archive:
         for p in result:
-            archive.writestr(f"Aurora 100/{p['category']}/{p['id']}.aurora.json",json.dumps(p,indent=2,ensure_ascii=False)+"\n")
+            info=zipfile.ZipInfo(f"Aurora 100/{p['category']}/{p['id']}.aurora.json",date_time=(2026,9,17,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED
+            archive.writestr(info,json.dumps(p,indent=2,ensure_ascii=False)+"\n")
     lines=["# Aurora 100 — patch catalog","","100 new performances in ten categories. The original 12 starter sounds are also retained in the app.","","Select **Aurora 100** in the sound library, then choose a category. Use the same moderate Master setting when comparing sounds; loading a patch preserves your listening level.","","Each patch uses Aurora's actual oscillators, filters, two LFOs, envelopes, arpeggiator, and shared effects. Keys, organs, brass, and strings are synthesized interpretations, not sampled acoustic instruments.","","The grouped ZIP contains individual `.aurora.json` files. Extract it and use **Sound library → More → Import preset** for an individual sound. The updated app includes all 100 automatically.",""]
     for category in CATEGORIES:
         lines.extend([f"## {category} · 10 patches","","| Patch | Character and playing suggestion |","|---|---|"])

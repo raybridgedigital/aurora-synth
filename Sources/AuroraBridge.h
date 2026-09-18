@@ -21,6 +21,7 @@ enum AuroraParameter {
     APModAttack, APModDecay, APModSustain, APModRelease, APModAmount, APModDestination,
     APOscModMode, APOscModAmount, APOscModRatio,
     APCharacterMode, APCharacterDrive, APCharacterMix, APCharacterTone, APCharacterBits, APCharacterRate,
+    APFilter1Slope, APFilter2Slope, APLFO1Sync, APLFO1Division, APLFO1Retrigger, APLFO1Phase, APLFO1Delay, APLFO1Fade, APLFO2Sync, APLFO2Division, APLFO2Retrigger, APLFO2Phase, APLFO2Delay, APLFO2Fade, APWT1Formant, APWT1Tone, APWT2Formant, APWT2Tone,
     APParameterCount
 };
 // Parameter units: cutoff Hz; envelopes seconds; rate Hz; detune cents;

@@ -86,7 +86,7 @@ struct LayerPatch: Codable, Equatable {
         get { values[id] ?? Self.extensionDefaults[id] ?? (id==34 ? 0.5 : id==36 ? 1 : id==37 ? 8 : id==38 ? 0.6 : id==43 ? 2 : 0) }
         set { values[id] = newValue }
     }
-    static let extensionDefaults:[Int:Double]=[60:3200,63:0.5,64:0.01,65:0.35,67:0.35,72:1,74:0.25,75:1,76:0.5,77:12,78:1]
+    static let extensionDefaults:[Int:Double]=[60:3200,63:0.5,64:0.01,65:0.35,67:0.35,72:1,74:0.25,75:1,76:0.5,77:12,78:1,82:4,88:4]
     static var initial: LayerPatch {
         LayerPatch(values: [0:1,1:2,2:1,3:0.35,4:7,5:0.12,6:0,
             7:2600,8:0.15,9:0.025,10:0.35,11:0.75,12:0.7,13:0.65,
@@ -116,7 +116,7 @@ struct MatrixAssignment:Codable,Equatable {
     var amount=0.0
     static let empty=Array(repeating:MatrixAssignment(),count:6)
     func valid(performance:Bool)->Bool {
-        (0...(performance ? 5:3)).contains(source) && (performance ? (0...20).contains(destination):((0...5).contains(destination)||(12...20).contains(destination))) && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
+        (0...5).contains(source) && (performance ? (0...20).contains(destination):((0...5).contains(destination)||(12...20).contains(destination))) && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
     }
 }
 struct SoundPreset: Identifiable, Codable {
@@ -177,6 +177,7 @@ struct SavedSession: Codable {
     var deletedSound: SoundPreset? = nil
     var deletedPresets: [SoundPreset]? = nil
     var outputGain:Double?=nil
+    var outputGainRevision:Int?=nil
 }
 
 enum FactoryBank {
@@ -210,7 +211,11 @@ enum FactoryBank {
               let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = expansion + prism + nova + starter
+    static let references:[SoundPreset] = {
+        guard let url=AuroraResources.bundle.url(forResource:"AuroraReference",withExtension:"json"),let data=try? Data(contentsOf:url),let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
+        return sounds
+    }()
+    static let all: [SoundPreset] = expansion + prism + nova + starter + references
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
@@ -396,16 +401,21 @@ struct VoiceStatus:View {
     var syncingPlugin=false
     var lastPluginRevision:UInt64=UInt64.max
     var lastPluginMappingsData:Data?
-    @Published var patch = FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
+    @Published var patch = FactoryBank.references.first ?? FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
     @Published var userPresets: [SoundPreset] = []
     @Published var selectedLayer = 0
     @Published var screen = "Play"
     @Published var search = ""
     @Published var collection = "Aurora"
     @Published var category = "All categories"
-    @Published var outputGain=6.0
+    @Published var outputGain=24.0
+    static func restoredOutputGain(_ saved:Double?,revision:Int?)->Double {
+        // Pre-1.0 calibration: migrate every older session to the measured reference level.
+        guard revision == 3,let saved,saved.isFinite else{return 24}
+        return max(0,min(24,saved))
+    }
     func setOutputGain(_ gain:Double){
-        guard gain.isFinite else{return};outputGain=max(0,min(18,gain));backend.aurora_set_global(15,Float(outputGain));persist()
+        guard gain.isFinite else{return};outputGain=max(0,min(24,gain));backend.aurora_set_global(15,Float(outputGain));persist()
     }
     @Published var favoritesOnly = false
     @Published var favorites: Set<String> = []
@@ -613,8 +623,8 @@ struct VoiceStatus:View {
     private var outputUID: String?
     private var undoPatches: [SoundPreset] = []
     private var redoPatches: [SoundPreset] = []
-    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...3,0...3,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...2,0...4,0.05...0.95,0...1,1...4,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...3,0...1,0...1,0...1,0...1,0...24,0...1,0...3,0...1,0...1,0...1,0...1,0...2,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1]
-    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77]
+    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...3,0...3,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1]
+    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89]
     static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
@@ -933,23 +943,55 @@ struct VoiceStatus:View {
         guard panel.runModal() == .OK,let url=panel.url else{return}
         do {try JSONEncoder().encode(patch).write(to:url,options:.atomic);notice="Preset exported."}catch{notice="Could not export: \(error.localizedDescription)"}
     }
+    static func presets(in data:Data)throws->[SoundPreset] {
+        let decoder=JSONDecoder()
+        if let item=try? decoder.decode(SoundPreset.self,from:data){return [item]}
+        if let items=try? decoder.decode([SoundPreset].self,from:data),!items.isEmpty{return items}
+        throw CocoaError(.fileReadCorruptFile)
+    }
+    func importPresetURLs(_ urls:[URL]) {
+        var imported:[SoundPreset]=[],failed=0
+        for url in urls {
+            do {
+                // A bank may contain many embedded user wavetables, so its portable
+                // JSON can be much larger than a single-preset file.
+                guard (try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? Int.max)<512_000_000 else{throw CocoaError(.fileReadCorruptFile)}
+                let data=try Data(contentsOf:url);guard data.count<512_000_000 else{throw CocoaError(.fileReadCorruptFile)}
+                for decoded in try Self.presets(in:data) {
+                    guard var item=Self.sanitized(decoded) else{failed+=1;continue}
+                    item.id=UUID().uuidString;imported.append(item)
+                }
+            }catch{failed+=1}
+        }
+        guard !imported.isEmpty else{notice="No valid Aurora presets were found in the selected files.";return}
+        userPresets.insert(contentsOf:imported,at:0);loadPreset(imported[0])
+        collection="Your sounds";category="All categories";search="";favoritesOnly=false;persist()
+        notice="Imported \(imported.count) preset\(imported.count==1 ? "":"s")"+(failed>0 ? "; \(failed) item\(failed==1 ? "":"s") could not be imported.":".")
+    }
     func importPreset() {
         let panel=NSOpenPanel();panel.allowedContentTypes=[.json];panel.allowsMultipleSelection=false
+        guard panel.runModal() == .OK else{return};importPresetURLs(panel.urls)
+    }
+    func importPresets() {
+        let panel=NSOpenPanel();panel.allowedContentTypes=[.json];panel.allowsMultipleSelection=true
+        panel.message="Select individual Aurora presets or preset-bank JSON files."
+        guard panel.runModal() == .OK else{return};importPresetURLs(panel.urls)
+    }
+    func exportUserPresets() {
+        guard !userPresets.isEmpty else{notice="There are no user-saved presets to export yet.";return}
+        let panel=NSSavePanel();panel.nameFieldStringValue="Aurora User Patches.aurora.json";panel.allowedContentTypes=[.json]
         guard panel.runModal() == .OK,let url=panel.url else{return}
         do {
-            guard (try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? Int.max)<12_000_000 else{throw CocoaError(.fileReadCorruptFile)}
-            let data=try Data(contentsOf:url);guard data.count<12_000_000 else{throw CocoaError(.fileReadCorruptFile)}
-            let decoded=try JSONDecoder().decode(SoundPreset.self,from:data)
-            guard var item=Self.sanitized(decoded) else{throw CocoaError(.fileReadCorruptFile)}
-            item.id=UUID().uuidString;userPresets.insert(item,at:0);loadPreset(item)
-            collection="Your sounds";category="All categories";search="";favoritesOnly=false;persist()
-        } catch { notice="This preset could not be imported: \(error.localizedDescription)" }
+            let encoder=JSONEncoder();encoder.outputFormatting=[.prettyPrinted,.sortedKeys]
+            try encoder.encode(userPresets).write(to:url,options:.atomic)
+            notice="Exported \(userPresets.count) user preset\(userPresets.count==1 ? "":"s") in one bank file."
+        }catch{notice="Could not export the preset bank: \(error.localizedDescription)"}
     }
     func persist() {
         if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:3)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {
@@ -969,7 +1011,7 @@ struct VoiceStatus:View {
             var directIDs=Set<String>(),directTargets=Set<ControlTarget>()
             directMappings=Array((s.directMappings ?? []).filter{$0.valid && directIDs.insert($0.id).inserted && directTargets.insert($0.target).inserted}.prefix(256))
             patch=valid;favorites=s.favorites;routes=s.routes.filter{(0...15).contains($0.value.mask) && (0...16).contains($0.value.channel)}
-            outputGain=(s.outputGain?.isFinite == true) ? max(0,min(18,s.outputGain!)):6
+            outputGain=Self.restoredOutputGain(s.outputGain,revision:s.outputGainRevision)
             mappings=s.mappings.filter{(0..<8).contains($0.macro) && (0...127).contains($0.controller) && (1...16).contains($0.channel)}
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
         }
@@ -1108,7 +1150,7 @@ struct EditorView:View {
                     }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help(name).accessibilityLabel("\(label) \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
                 }
             }
-        }.frame(height:22)
+        }.frame(height:22).modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:parameter)))
     }
     var layerOctave:Int {Int(floor(m.patch.layers[m.selectedLayer][15]/12))}
     func shiftOctave(_ delta:Int) {
@@ -1137,8 +1179,25 @@ struct EditorView:View {
                 }
             }
     }
+    func lfoPanel(_ o:Int)->some View {
+        let base=81+o*6
+        return Panel(title:"LFO \(o+1) · movement"){
+            optionButtons("Shape",o==0 ? 19:33,["Sine","Triangle","Saw","Square","Random"])
+            optionButtons("Destination",o==0 ? 18:31,["Cutoff","Pitch","Pan","Amplitude"])
+            optionButtons("Clock",base,["Hz","Tempo"])
+            if m.patch.layers[m.selectedLayer][base] > 0.5 {
+                slider("Division",base+1,0...9,format:{["4 bars","2 bars","1 bar","1/2","1/4","1/8","1/16","1/32","1/8 dotted","1/8 triplet"][max(0,min(9,Int($0.rounded())))]})
+            } else {slider("Rate",o==0 ? 16:29,0.03...20,log:true,format:{String(format:"%.2f Hz",$0)})}
+            slider("Depth",o==0 ? 17:30)
+            optionButtons("Mode",base+2,["Free-run","Retrigger"])
+            DisclosureGroup("Phase · delay · fade"){
+                slider("Phase",base+3,format:{String(format:"%.0f°",$0*360)})
+                HStack{slider("Delay",base+4,0...8,format:timeText);slider("Fade in",base+5,0...8,format:timeText)}
+            }.font(.system(size:13))
+        }
+    }
     var body:some View {
-        VStack(alignment:.leading,spacing:16){
+        LazyVStack(alignment:.leading,spacing:16){
             HStack{Text("Layer \(layerLetters[m.selectedLayer]) · sound design").font(.system(size:21,weight:palette.weight(.medium)));Spacer();Text("Every control shapes the audio engine").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
             VStack(alignment:.leading,spacing:16){
                 EqualHeightRow(spacing:16){
@@ -1148,7 +1207,8 @@ struct EditorView:View {
                     HStack{slider("Sub",5);slider("Noise",6)}
                 }
                 Panel(title:"Filter 1"){
-                    optionButtons("Type",32,["Low-pass","High-pass","Band-pass"])
+                    optionButtons("Type",32,["Low-pass","High-pass","Band-pass","Notch"])
+                    optionButtons("Slope",79,["12 dB","24 dB"])
                     slider("Cutoff",7,30...18000,log:true,format:{$0>=1000 ? String(format:"%.1f kHz",$0/1000):String(format:"%.0f Hz",$0)})
                     slider("Resonance",8,0...0.9);slider("Envelope amount",20,-1...1)
                     slider("Drive",21)
@@ -1161,18 +1221,8 @@ struct EditorView:View {
                 }
                 }
                 EqualHeightRow(spacing:16){
-                Panel(title:"LFO 1 · movement"){
-                    optionButtons("Shape",19,["Sine","Triangle","Saw","Square","Random"])
-                    optionButtons("Destination",18,["Cutoff","Pitch","Pan","Amplitude"])
-                    slider("Rate",16,0.03...20,log:true,format:{String(format:"%.2f Hz",$0)})
-                    slider("Depth",17)
-                }
-                Panel(title:"LFO 2 · slow motion"){
-                    optionButtons("Shape",33,["Sine","Triangle","Saw","Square","Random"])
-                    optionButtons("Destination",31,["Cutoff","Pitch","Pan","Amplitude"])
-                    slider("Rate",29,0.03...20,log:true,format:{String(format:"%.2f Hz",$0)})
-                    slider("Depth",30)
-                }
+                lfoPanel(0)
+                lfoPanel(1)
                 Panel(title:"Layer range & balance"){
                     octaveControl.modifier(MatrixFeedback(model:m,destination:1))
                     slider("Low key",27,0...127,format:{"MIDI \(Int($0))"})
@@ -1184,7 +1234,8 @@ struct EditorView:View {
             EqualHeightRow(spacing:16){
                 Panel(title:"Filter 2 · routing"){
                     optionButtons("Filter 2",58,["Bypass","On"])
-                    optionButtons("Type",59,["Low-pass","High-pass","Band-pass"])
+                    optionButtons("Type",59,["Low-pass","High-pass","Band-pass","Notch"])
+                    optionButtons("Slope",80,["12 dB","24 dB"])
                     slider("Cutoff",60,30...18000,log:true,format:{String(format:"%.0f Hz",$0)})
                     slider("Resonance",61,0...0.9)
                     optionButtons("Routing",62,["1 → 2","2 → 1","Parallel"])
@@ -1218,7 +1269,7 @@ struct EditorView:View {
                 }
                 OutputScope(telemetry:m.scope,normalized:scopeAutoScale).frame(height:160)
                 HStack(spacing:24){
-                    ParameterSlider(title:"Output boost",value:Binding(get:{m.outputGain},set:{m.setOutputGain($0)}),range:0...18,format:{String(format:"+%.1f dB",$0)}).frame(width:280)
+                    ParameterSlider(title:"Output boost",value:Binding(get:{m.outputGain},set:{m.setOutputGain($0)}),range:0...24,format:{String(format:"+%.1f dB",$0)}).frame(width:280)
                     Text("Left output waveform · stereo peak meter · boost stays constant across patches, with peak protection. Auto scale changes only the graph.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }
@@ -1233,7 +1284,8 @@ struct EditorView:View {
                     Text("Select Pulse on either oscillator. PWM follows LFO 1’s waveform and rate, independent of its Depth.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
                 Panel(title:"Unison & stereo"){
-                    optionButtons("Voices",36,["1","2","3","4"],offset:1)
+                    optionButtons("Voices",36,["1","2","3","4","5","6","7","8"],offset:1)
+                    Text("8-voice unison: up to 32 notes across layers").font(.system(size:12)).foregroundStyle(palette.muted)
                     slider("Unison detune",37,0...30,format:{String(format:"%.1f cents",$0)})
                     slider("Stereo spread",38)
                     Text("2–4 copies per note; levels are balanced automatically.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
@@ -1323,7 +1375,7 @@ struct FXDetailView:View {
 struct MatrixView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    private let soundSources=["LFO 1","LFO 2","Amp envelope","Mod envelope"]
+    private let soundSources=["LFO 1","LFO 2","Amp envelope","Mod envelope","Key tracking","Per-note random"]
     private let performanceSources=["Mod wheel","Velocity","Channel pressure","Expression","Sustain","MIDI CC"]
     private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance"]
     func binding<T>(_ performance:Bool,_ slot:Int,_ key:WritableKeyPath<MatrixAssignment,T>)->Binding<T> {
@@ -1453,6 +1505,7 @@ struct CategoryWrap:Layout {
 @MainActor final class PatchBrowserState:ObservableObject {
     @Published var visible=false
     @Published var category:String?=nil
+    @Published var userSavedOnly=false
 }
 struct PatchBrowserCard:View {
     @Environment(\.auroraPalette) private var palette
@@ -1491,7 +1544,7 @@ struct PatchBrowser:View {
     let close:()->Void
     @StateObject private var state=PatchBrowserState()
     var category:String?{get{state.category} nonmutating set{state.category=newValue}}
-    var sounds:[SoundPreset]{(m.userPresets+FactoryBank.all).filter{category==nil || $0.category==category}.sorted{
+    var sounds:[SoundPreset]{(state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{category==nil || $0.category==category}.sorted{
         let order=$0.name.localizedStandardCompare($1.name)
         return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
     }}
@@ -1504,8 +1557,12 @@ struct PatchBrowser:View {
         let patches=sounds
         VStack(alignment:.leading,spacing:18){
             HStack(spacing:16){
-                VStack(alignment:.leading,spacing:4){Text("All patches").font(.system(size:26,weight:palette.weight(.semibold)));Text("Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
+                VStack(alignment:.leading,spacing:4){Text(state.userSavedOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)));Text(state.userSavedOnly ? "Your saved and imported sounds, ready to audition.":"Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
                 Spacer()
+                if state.userSavedOnly{
+                    Button("Import…"){m.importPresets()}.buttonStyle(AuroraButtonStyle())
+                    Button("Export all"){m.exportUserPresets()}.buttonStyle(AuroraButtonStyle()).disabled(m.userPresets.isEmpty)
+                }
                 Button{step(-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.leftArrow,modifiers:[]).accessibilityLabel("Previous patch in this category")
                 Button{step(1)}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.rightArrow,modifiers:[]).accessibilityLabel("Next patch in this category")
                 Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
@@ -1513,12 +1570,13 @@ struct PatchBrowser:View {
             }
             CategoryWrap{
                 categoryButton("All",nil)
+                Button{state.userSavedOnly=true;category=nil}label:{Text("User Saved").font(.system(size:15,weight:state.userSavedOnly ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(state.userSavedOnly ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(state.userSavedOnly ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:state.userSavedOnly)).accessibilityLabel("Browse user saved patches").accessibilityAddTraits(state.userSavedOnly ? .isSelected:[])
                 ForEach(m.orderedCategories(m.userPresets+FactoryBank.all),id:\.self){categoryButton($0,$0)}
             }
             Divider().opacity(0.2)
             ScrollViewReader{proxy in
                 ScrollView{
-                    VStack(spacing:12){
+                    LazyVStack(spacing:12){
                         ForEach(0..<((patches.count+6)/7),id:\.self){row in
                             EqualHeightRow(spacing:12){
                                 ForEach(0..<7,id:\.self){column in
@@ -1530,8 +1588,10 @@ struct PatchBrowser:View {
                                 }
                             }
                         }
+                        if patches.isEmpty{Text("No user-saved patches yet. Save or import a sound to add it here.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
                     }.padding(2)
                 }.onChange(of:category){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:state.userSavedOnly){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
                 .onChange(of:m.patch.id){_,id in withAnimation(.easeOut(duration:0.18)){proxy.scrollTo(id,anchor:.center)}}
             }
             HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
@@ -1540,7 +1600,8 @@ struct PatchBrowser:View {
             .shadow(color:.black.opacity(0.45),radius:30,y:12)
     }
     func categoryButton(_ label:String,_ value:String?)->some View{
-        Button{category=value}label:{Text(label).font(.system(size:15,weight:category==value ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(category==value ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(category==value ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:category==value)).accessibilityLabel("Browse \(label)").accessibilityAddTraits(category==value ? .isSelected:[])
+        let selected = !state.userSavedOnly && category==value
+        return Button{state.userSavedOnly=false;category=value}label:{Text(label).font(.system(size:15,weight:selected ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(selected ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(selected ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:selected)).accessibilityLabel("Browse \(label)").accessibilityAddTraits(selected ? .isSelected:[])
     }
 }
 struct ContentView:View {
@@ -1556,7 +1617,7 @@ struct AuroraContentView:View {
         VStack(spacing:0){header;Divider().opacity(0.15)
             HStack(spacing:0){sidebar.frame(width:270);Divider().opacity(0.15)
                 ScrollView{
-                    VStack(alignment:.leading,spacing:23){
+                    LazyVStack(alignment:.leading,spacing:23){
                         HStack(alignment:.top){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}
                         HStack(spacing:10){
                             Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the filtered library")
@@ -1629,7 +1690,7 @@ struct AuroraContentView:View {
         Menu{ForEach(AuroraTheme.allCases){theme in Button{m.selectTheme(theme)}label:{Label(theme.rawValue,systemImage:m.theme==theme ? "checkmark.circle.fill":"circle")}}}label:{Image(systemName:"paintpalette.fill").foregroundStyle(Color.white).frame(width:26,height:26).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))}.menuStyle(.borderlessButton).fixedSize().help("Color theme · \(m.theme.rawValue)").accessibilityLabel("Color theme · \(m.theme.rawValue)")
     }
     var sidebar:some View {
-        VStack(alignment:.leading,spacing:16){HStack{Text("Sound library").font(.system(size:18,weight:palette.weight(.semibold)));Spacer();themeMenu;Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Button("Import preset…"){m.importPreset()};Button("Export current preset…"){m.exportPreset()}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:20)}
+        VStack(alignment:.leading,spacing:16){HStack{Text("Sound library").font(.system(size:18,weight:palette.weight(.semibold)));Spacer();themeMenu;Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Divider();Button("Import one preset…"){m.importPreset()};Button("Import multiple presets…"){m.importPresets()};Button("Export current preset…"){m.exportPreset()};Button("Export all user presets…"){m.exportUserPresets()}.disabled(m.userPresets.isEmpty)}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:20)}
             TextField("Search sounds",text:$m.search).textFieldStyle(.roundedBorder).font(.system(size:15,weight:palette.weight(.regular)))
             VStack(alignment:.leading,spacing:9){
                 Picker("Collection",selection:$m.collection){
@@ -1645,7 +1706,7 @@ struct AuroraContentView:View {
             }.font(.system(size:15,weight:palette.weight(.regular)))
                 .onChange(of:m.collection){_,_ in m.category="All categories"}
             Toggle("Favorites",isOn:$m.favoritesOnly).toggleStyle(.checkbox).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-            ScrollView{VStack(alignment:.leading,spacing:4){
+            ScrollView{LazyVStack(alignment:.leading,spacing:4){
                 ForEach(m.libraryGroups,id:\.category){group in
                     HStack(spacing:6){
                         Text(group.category.uppercased()).font(.system(size:18,weight:palette.weight(.bold))).tracking(0.3)

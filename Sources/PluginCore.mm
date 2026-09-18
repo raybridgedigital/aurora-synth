@@ -57,10 +57,10 @@ Core::Core():storage(std::make_unique<Storage>()){
         storage->mappings=@{@"mappings":@[],@"directMappings":@[]};for(auto& target:learnedTargets)target=-1;
         engine.route(0,15,0);engine.route(1,15,0);
         values[routeMaskID]=15;
-        setActual(outputGainID,6);
+        setActual(outputGainID,24);
         for(int ch=0;ch<16;ch++){values[midiBase+ch*130+7]=1;values[midiBase+ch*130+11]=1;values[midiBase+ch*130+129]=.5;}
         xyMacros[0]=0;xyMacros[1]=2;xyEnds[0]=xyEnds[1]=1;
-        NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"Aurora100.json"]];
+        NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"AuroraReference.json"]];
         NSArray* bank=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
         if(bank.count){NSData* patch=[NSJSONSerialization dataWithJSONObject:bank[0] options:0 error:nil];NSString* json=[[NSString alloc] initWithData:patch encoding:NSUTF8StringEncoding];setPatchJSON(json.UTF8String,true);}
         else {for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)setActual(layerID(l,p),p==0?(l==0):defaults[p]);for(int p=0;p<15;p++)setActual(globalBase+p,engine.getGlobal(p));}
@@ -71,7 +71,7 @@ Spec Core::spec(int id){
     if(parameterForID(id)>=0)return layers[parameterForID(id)];
     if(id>=globalBase&&id<globalBase+15)return globals[id-globalBase];
     if(id==transposeID)return {"Transpose",-24,24,false,true};
-    if(id==outputGainID)return {"Output boost",0,18,false,false};
+    if(id==outputGainID)return {"Output boost",0,24,false,false};
     if(id==holdID)return {"Hold",0,1,false,true};
     if(id==routeMaskID)return {"MIDI layer mask",0,15,false,true};
     if(id==routeChannelID)return {"MIDI channel",0,16,false,true};
@@ -235,7 +235,7 @@ std::string Core::saveState(){@autoreleasepool{
     auto patch=patchJSON();NSData* data=[NSData dataWithBytes:patch.data() length:patch.size()];
     id p=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     std::lock_guard lock(storage->mutex);
-    NSDictionary* object=@{@"version":@1,@"patch":p?:@{},@"outputGain":@(values[outputGainID].load()),@"transpose":@(values[transposeID].load()),@"routeMask":@(values[routeMaskID].load()),@"routeChannel":@(values[routeChannelID].load()),@"velocityCurve":@(values[velocityID].load()),@"midiMappings":storage->mappings};
+    NSDictionary* object=@{@"version":@1,@"patch":p?:@{},@"outputGain":@(values[outputGainID].load()),@"outputGainRevision":@3,@"transpose":@(values[transposeID].load()),@"routeMask":@(values[routeMaskID].load()),@"routeChannel":@(values[routeChannelID].load()),@"velocityCurve":@(values[velocityID].load()),@"midiMappings":storage->mappings};
     NSData* state=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)state.bytes,state.length);
 }}
 bool Core::restoreState(const char* json){@autoreleasepool{
@@ -249,7 +249,7 @@ bool Core::restoreState(const char* json){@autoreleasepool{
     NSData* mappingData=[NSJSONSerialization dataWithJSONObject:mappings options:0 error:nil];NSString* mappingString=[[NSString alloc] initWithData:mappingData encoding:NSUTF8StringEncoding];
     if(!setMappingsJSON(mappingString.UTF8String,false)||!setPatchJSON(s.UTF8String,true))return false;
     setMappingsJSON(mappingString.UTF8String);
-    setActual(outputGainID,[state[@"outputGain"] doubleValue]); // Missing in old DAW projects: preserve their original gain.
+    setActual(outputGainID,[state[@"outputGainRevision"] intValue]==3?[state[@"outputGain"] doubleValue]:24); // User-authorized pre-1.0 level recalibration.
     setActual(transposeID,[state[@"transpose"] doubleValue]);setActual(routeMaskID,state[@"routeMask"]?[state[@"routeMask"] doubleValue]:15);
     setActual(routeChannelID,[state[@"routeChannel"] doubleValue]);setActual(velocityID,[state[@"velocityCurve"] doubleValue]);setActual(holdID,0);return true;
 }}

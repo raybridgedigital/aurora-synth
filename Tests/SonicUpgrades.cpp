@@ -40,7 +40,7 @@ int main(int argc,char** argv){
     SynthEngine envelope;setup(envelope);envelope.setParameter(0,APModAttack,.5);envelope.setParameter(0,APModSustain,.3);envelope.setMatrix(0,0,true,3,0,0,1,-.8);assert(difference(dry,render(envelope))>1e-4);
     SynthEngine boost;setup(boost);boost.setGlobal(AGOutputGain,6);auto louder=render(boost);double gain=std::sqrt(energy(louder)/energy(dry));assert(gain>1.9&&gain<2.01);
     std::cout<<"Reference RMS "<<20*std::log10(std::sqrt(energy(dry)))<<" dBFS; +6 dB boost measured "<<20*std::log10(gain)<<" dB\n";
-    SynthEngine loud;setup(loud);loud.setGlobal(AGMaster,1);loud.setGlobal(AGOutputGain,18);
+    SynthEngine loud;setup(loud);loud.setGlobal(AGMaster,1);loud.setGlobal(AGOutputGain,24);
     for(int l=0;l<4;l++){loud.setParameter(l,APEnabled,1);loud.setParameter(l,APLevel,1);loud.setParameter(l,APCharacterMode,2);loud.setParameter(l,APCharacterDrive,1);loud.setParameter(l,APUnison,4);}
     loud.route(0,15,0);for(int n=40;n<56;n++)loud.midi(0,0x90,n,127);auto limited=render(loud);assert(*std::max_element(limited.begin(),limited.end())<=.98001);
     for(int note:{24,72,120})for(int mode=1;mode<=3;mode++){

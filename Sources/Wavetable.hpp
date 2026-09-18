@@ -25,27 +25,36 @@ struct Cycle {
 struct Bank {
     int frames=0;
     std::vector<Cycle> cycles; // frame-major, base + 8 amounts per warp
-    float sample(float phase,float step,float position,int mode,float amount) const{
-        phase-=std::floor(phase);position=std::clamp(position,0.f,1.f);amount=std::clamp(amount,0.f,1.f);mode=std::clamp(mode,0,3);
+    float sample(float phase,float step,float position,int mode,float amount,float tone=0) const{
+        phase-=std::floor(phase);position=std::clamp(position,0.f,1.f);amount=std::clamp(amount,0.f,1.f);mode=std::clamp(mode,0,5);
         // One octave of guard band keeps both interpolated mip levels below Nyquist.
-        float lod=std::clamp(std::log2(std::max(1.f,step*1024.f/.45f)),0.f,8.f);
+        float lod=std::clamp(std::log2(std::max(1.f,step*1024.f/.45f))+std::clamp(tone,0.f,1.f)*7,0.f,8.f);
         int level=int(lod),next=std::min(8,level+1);float lm=lod-level;
         float frame=position*(frames-1);int a=int(frame),b=std::min(frames-1,a+1);float fm=frame-a;
         float warp=mode?amount*8:0;int wa=int(warp),wb=std::min(8,wa+1);float wm=warp-wa;
         auto index=[mode](int w){return w==0?0:1+(mode-1)*8+w-1;};
-        auto read=[&](int f,int w){const auto& c=cycles[f*25+index(w)];return c.at(phase,level)*(1-lm)+c.at(phase,next)*lm;};
+        auto read=[&](int f,int w){const auto& c=cycles[f*41+index(w)];return c.at(phase,level)*(1-lm)+c.at(phase,next)*lm;};
         float first=read(a,wa)*(1-fm)+read(b,wa)*fm;
         if(wm==0)return first;
         return first*(1-wm)+(read(a,wb)*(1-fm)+read(b,wb)*fm)*wm;
     }
+    float shapedSample(float phase,float step,float position,int mode,float amount,float formant,float tone) const{
+        if(formant<=0)return sample(phase,step,position,mode,amount,tone);
+        phase-=std::floor(phase);
+        float shift=1+std::clamp(formant,0.f,1.f)*7;int harmonic=int(shift);float mix=shift-harmonic;
+        float window=std::sin(tau*phase*.5f);window*=window;
+        auto shifted=[&](int h){return sample(phase*h,std::min(.49f,step*h),position,mode,amount,tone)*(h==1?1.f:window);};
+        return shifted(harmonic)*(1-mix)+shifted(harmonic+1)*mix;
+    }
+
 };
 inline std::unique_ptr<Bank> make(const float* input,int frames,int frameSize){
     if(!input||frames<1||frames>64||(frameSize!=256&&frameSize!=512&&frameSize!=1024&&frameSize!=2048))return nullptr;
     for(int i=0;i<frames*frameSize;i++)if(!std::isfinite(input[i])||std::abs(input[i])>4)return nullptr;
-    auto bank=std::make_unique<Bank>();bank->frames=frames;bank->cycles.resize(frames*25);
+    auto bank=std::make_unique<Bank>();bank->frames=frames;bank->cycles.resize(frames*41);
     for(int f=0;f<frames;f++){
         auto raw=[&](float phase){phase-=std::floor(phase);float x=phase*frameSize;int i=int(x)%frameSize;float m=x-std::floor(x);return input[f*frameSize+i]*(1-m)+input[f*frameSize+(i+1)%frameSize]*m;};
-        for(int variant=0;variant<25;variant++){
+        for(int variant=0;variant<41;variant++){
             int mode=variant?1+(variant-1)/8:0;float amount=variant?float(1+(variant-1)%8)/8:0;
             std::vector<std::complex<float>> spectrum(1024);
             for(int i=0;i<1024;i++){
@@ -54,10 +63,12 @@ inline std::unique_ptr<Bank> make(const float* input,int frames,int frameSize){
                 if(mode==2)phase*=1+7*amount;
                 float value=raw(phase);
                 if(mode==3){float x=value*(1+5*amount);float folded=std::fmod(x+1,4.f);if(folded<0)folded+=4;value=1-std::abs(folded-2);}
+                if(mode==4)value=value*(1-amount)+raw(phase<.5f?phase*2:2-phase*2)*amount;
+                if(mode==5){float steps=std::pow(2.f,8-7*amount);value=std::round(value*steps)/steps;}
                 spectrum[i]=value;
             }
             fft(spectrum,false);spectrum[0]=0;
-            auto& cycle=bank->cycles[f*25+variant];
+            auto& cycle=bank->cycles[f*41+variant];
             for(int level=0;level<9;level++){
                 int n=std::max(8,1024>>level),harmonics=256>>level;
                 std::vector<std::complex<float>> filtered(n);

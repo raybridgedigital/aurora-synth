@@ -197,7 +197,9 @@ def assemble():
     (ROOT/'Resources/AuroraPrism100.json').write_text(json.dumps(patches,indent=2)+'\n')
     output=ROOT/'Patch Banks';output.mkdir(exist_ok=True)
     with zipfile.ZipFile(output/'Aurora Prism 100 Patches.zip','w',zipfile.ZIP_DEFLATED) as archive:
-        for p in patches:archive.writestr(f"Aurora Prism 100/{p['category']}/{p['id']}.aurora.json",json.dumps(p,indent=2)+'\n')
+        for p in patches:
+            info=zipfile.ZipInfo(f"Aurora Prism 100/{p['category']}/{p['id']}.aurora.json",date_time=(2026,9,17,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED
+            archive.writestr(info,json.dumps(p,indent=2)+'\n')
     lines=['# Aurora Prism — 100 new patches','','Ten sounds in each of ten categories. All appear under **Aurora** alongside your existing sounds. Search “Prism” to browse this collection. Requires Aurora 0.9 or newer.','','Move the mod wheel to scan the primary wave; velocity opens the filter and channel pressure adds warp. Splits divide at MIDI 60 (C4). Layer octaves preserve the authored register. These are synthesized interpretations rather than acoustic samples.','']
     for category in CATEGORIES:
         lines += ['## '+category,'','| Patch | Playing notes |','|---|---|']
