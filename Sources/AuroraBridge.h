@@ -15,7 +15,13 @@ enum AuroraParameter {
     APWT1Enabled, APWT1Table, APWT1Position, APWT1WarpMode, APWT1Warp,
     APWT1Phase, APWT1RandomPhase,
     APWT2Enabled, APWT2Table, APWT2Position, APWT2WarpMode, APWT2Warp,
-    APWT2Phase, APWT2RandomPhase, APParameterCount
+    APWT2Phase, APWT2RandomPhase,
+    APFilter2Enabled, APFilter2Type, APFilter2Cutoff, APFilter2Resonance,
+    APFilterRouting, APFilterBalance,
+    APModAttack, APModDecay, APModSustain, APModRelease, APModAmount, APModDestination,
+    APOscModMode, APOscModAmount, APOscModRatio,
+    APCharacterMode, APCharacterDrive, APCharacterMix, APCharacterTone, APCharacterBits, APCharacterRate,
+    APParameterCount
 };
 // Parameter units: cutoff Hz; envelopes seconds; rate Hz; detune cents;
 // level/sub/noise/blend/resonance/depth/drive/sustain 0...1; pan -1...1;
@@ -26,7 +32,7 @@ enum AuroraParameter {
 enum AuroraGlobal { AGMaster=0, AGTempo, AGDelayMix, AGDelayFeedback,
     AGReverbMix, AGChorusMix, AGPhaserMix, AGPhaserRate, AGPhaserDepth,
     AGPhaserFeedback, AGChorusRate, AGChorusDepth, AGReverbSize, AGReverbDecay,
-    AGDelayTiming, AGGlobalCount };
+    AGDelayTiming, AGOutputGain, AGGlobalCount };
 // Main-thread API; MIDI receive and audio rendering run on platform threads.
 void aurora_initialize(void);
 void aurora_shutdown(void);

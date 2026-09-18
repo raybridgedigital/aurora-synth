@@ -1,12 +1,13 @@
 import SwiftUI
 
 @MainActor final class WavetableTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published var waves=[[Float]](repeating:[Float](repeating:0,count:128),count:8)
     func update(){
         var next=waves
         for slot in 0..<8 {
             var samples=[Float](repeating:0,count:128)
-            _=samples.withUnsafeMutableBufferPointer{aurora_copy_wavetable_preview(Int32(slot/2),Int32(slot%2),$0.baseAddress,128)}
+            _=samples.withUnsafeMutableBufferPointer{backend.aurora_copy_wavetable_preview(Int32(slot/2),Int32(slot%2),$0.baseAddress,128)}
             next[slot]=samples.map{($0*500).rounded()/500}
         }
         if next != waves{waves=next}

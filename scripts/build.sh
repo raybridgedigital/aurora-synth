@@ -8,6 +8,7 @@ MODULE_CACHE_DIR="$BUILD_DIR/ModuleCache"
 
 python3 "$ROOT_DIR/scripts/assemble_patch_bank.py"
 python3 "$ROOT_DIR/scripts/assemble_prism_bank.py"
+python3 "$ROOT_DIR/scripts/assemble_nova_bank.py"
 
 for source_file in Sources/AuroraApp.swift Sources/AuroraBridge.h Sources/SynthEngine.cpp Sources/MacAudioMIDI.mm Resources/Info.plist Resources/Aurora100.json; do
     if [[ ! -f "$ROOT_DIR/$source_file" ]]; then
@@ -36,7 +37,7 @@ printf 'Compiling native interface and linking Aurora…\n'
     -module-name Aurora -module-cache-path "$MODULE_CACHE_DIR" \
     -Xcc "-fmodules-cache-path=$MODULE_CACHE_DIR" \
     -import-objc-header "$ROOT_DIR/Sources/AuroraBridge.h" \
-    "$ROOT_DIR/Sources/AuroraApp.swift" "$ROOT_DIR/Sources/WavetableViews.swift" "$ROOT_DIR/Sources/MotionViews.swift" "$ROOT_DIR/Sources/CreativeTools.swift" \
+    "$ROOT_DIR/Sources/AuroraApp.swift" "$ROOT_DIR/Sources/AuroraBackend.swift" "$ROOT_DIR/Sources/PluginEditor.swift" "$ROOT_DIR/Sources/WavetableViews.swift" "$ROOT_DIR/Sources/MotionViews.swift" "$ROOT_DIR/Sources/CreativeTools.swift" \
     "$BUILD_DIR/objects/SynthEngine.o" "$BUILD_DIR/objects/MacAudioMIDI.o" \
     -lc++ -framework SwiftUI -framework AppKit -framework Foundation \
     -framework CoreAudio -framework AudioUnit -framework AudioToolbox -framework CoreMIDI \
@@ -46,6 +47,7 @@ cp "$BUILD_DIR/Aurora" "$APP_DIR/Contents/MacOS/Aurora"
 cp "$ROOT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$ROOT_DIR/Resources/Aurora100.json" "$APP_DIR/Contents/Resources/Aurora100.json"
 cp "$ROOT_DIR/Resources/AuroraPrism100.json" "$APP_DIR/Contents/Resources/AuroraPrism100.json"
+cp "$ROOT_DIR/Resources/AuroraNova100.json" "$APP_DIR/Contents/Resources/AuroraNova100.json"
 plutil -lint "$APP_DIR/Contents/Info.plist"
 xattr -cr "$APP_DIR"
 codesign --force --sign - "$APP_DIR"

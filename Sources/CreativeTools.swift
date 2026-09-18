@@ -29,8 +29,12 @@ extension SynthModel {
     }
     func moveXY(x:Double,y:Double){
         guard x.isFinite,y.isFinite else{return};finishComparison()
+#if AURORA_PLUGIN
+        aurora_plugin_xy(backend.context,x,y);syncPlugin();dirty=true
+#else
         let settings=xySettings
         macro(settings.x.macro,settings.x.value(x));macro(settings.y.macro,settings.y.value(y))
+#endif
     }
 }
 // Keep pointer feedback independent of SwiftUI's full sound-model redraws.
@@ -160,12 +164,12 @@ struct SavedMotionShape:Codable,Equatable,Identifiable {
 struct ControlTarget:Codable,Equatable,Hashable {
     var layer=0 // -1 = shared control
     var parameter=7
-    static let layerNames=["Enabled","Osc 1 wave","Osc 2 wave","Oscillator blend","Detune","Sub","Noise","Cutoff","Resonance","Attack","Decay","Sustain","Release","Level","Pan","Transpose","LFO 1 rate","LFO 1 depth","LFO 1 destination","LFO 1 shape","Filter envelope","Drive","Arp enabled","Arp rate","Arp mode","Arp octaves","Arp gate","Key low","Key high","LFO 2 rate","LFO 2 depth","LFO 2 destination","Filter type","LFO 2 shape","Pulse width","PWM depth","Unison","Unison detune","Stereo spread","Oscillator sync","Sync tune","Voice mode","Glide","Bend range","Osc 1 wavetable mode","Osc 1 table","Osc 1 position","Osc 1 warp mode","Osc 1 warp","Osc 1 phase","Osc 1 random phase","Osc 2 wavetable mode","Osc 2 table","Osc 2 position","Osc 2 warp mode","Osc 2 warp","Osc 2 phase","Osc 2 random phase"]
+    static let layerNames=["Enabled","Osc 1 wave","Osc 2 wave","Oscillator blend","Detune","Sub","Noise","Cutoff","Resonance","Attack","Decay","Sustain","Release","Level","Pan","Transpose","LFO 1 rate","LFO 1 depth","LFO 1 destination","LFO 1 shape","Filter envelope","Drive","Arp enabled","Arp rate","Arp mode","Arp octaves","Arp gate","Key low","Key high","LFO 2 rate","LFO 2 depth","LFO 2 destination","Filter type","LFO 2 shape","Pulse width","PWM depth","Unison","Unison detune","Stereo spread","Oscillator sync","Sync tune","Voice mode","Glide","Bend range","Osc 1 wavetable mode","Osc 1 table","Osc 1 position","Osc 1 warp mode","Osc 1 warp","Osc 1 phase","Osc 1 random phase","Osc 2 wavetable mode","Osc 2 table","Osc 2 position","Osc 2 warp mode","Osc 2 warp","Osc 2 phase","Osc 2 random phase","Filter 2 enabled","Filter 2 type","Filter 2 cutoff","Filter 2 resonance","Filter routing","Filter balance","Mod attack","Mod decay","Mod sustain","Mod release","Mod amount","Mod destination","Osc modulation mode","Osc modulation amount","Osc modulation ratio","Character mode","Character drive","Character mix","Character tone","Character bits","Character rate"]
     static let globalNames=["Master","Tempo","Delay mix","Delay feedback","Reverb mix","Chorus mix","Phaser mix","Phaser rate","Phaser depth","Phaser feedback","Chorus rate","Chorus depth","Reverb size","Reverb decay","Delay timing"]
     var valid:Bool{(-1...3).contains(layer) && (layer<0 ? Self.globalNames.indices:Self.layerNames.indices).contains(parameter)}
     var name:String{valid ? (layer<0 ? "Shared · "+Self.globalNames[parameter]:"\(layerLetters[layer]) · "+Self.layerNames[parameter]):"Unknown"}
     @MainActor var range:ClosedRange<Double>{layer<0 ? SynthModel.globalRanges[parameter]:SynthModel.ranges[parameter]}
-    var logarithmic:Bool{layer>=0 && [7,9,10,12,16,29].contains(parameter)}
+    var logarithmic:Bool{layer>=0 && [7,9,10,12,16,29,60,64,65,67,72,78].contains(parameter)}
     @MainActor func actual(_ normalized:Double)->Double{
         let n=max(0,min(1,normalized)),r=range
         return logarithmic ? r.lowerBound*pow(r.upperBound/r.lowerBound,n):r.lowerBound+(r.upperBound-r.lowerBound)*n
@@ -199,12 +203,12 @@ enum VariationGroup:String,CaseIterable,Identifiable {
     case oscillators="Oscillators", filter="Filter", envelopes="Envelopes", movement="Movement", pitch="Pitch", effects="FX"
     var id:String{rawValue}
     var parameters:[Int]{switch self{
-    case .oscillators:return [3,4,5,6,34,35,37,38,46,48,53,55]
-    case .filter:return [7,8,20,21]
-    case .envelopes:return [9,10,11,12]
+    case .oscillators:return [3,4,5,6,34,35,37,38,46,48,53,55,71,72]
+    case .filter:return [7,8,20,21,60,61,63]
+    case .envelopes:return [9,10,11,12,64,65,66,67,68]
     case .movement:return [16,17,29,30]
     case .pitch:return [15,42]
-    case .effects:return []
+    case .effects:return [74,75,76,77,78]
     }}
 }
 @MainActor final class CreativeEditorState:ObservableObject {

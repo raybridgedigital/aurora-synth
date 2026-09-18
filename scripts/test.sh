@@ -44,6 +44,8 @@ printf 'Compiling and running DSP tests…\n'
 
 "$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/LayerToolsTests.cpp" -o "$BUILD_DIR/tests/LayerToolsTests"
 "$BUILD_DIR/tests/LayerToolsTests"
+"$CLANGXX" "${COMMON_FLAGS[@]}" "$BUILD_DIR/tests/SynthEngine.o" "$ROOT_DIR/Tests/SonicUpgrades.cpp" -o "$BUILD_DIR/tests/SonicUpgrades"
+"$BUILD_DIR/tests/SonicUpgrades"
 
 if [[ "$RUN_BRIDGE" == true ]]; then
     if [[ ! -f "$ROOT_DIR/Tests/BridgeProbe.cpp" ]]; then

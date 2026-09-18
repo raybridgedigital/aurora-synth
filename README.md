@@ -1,5 +1,21 @@
 # Aurora
 
+## Sound design upgrades · 0.17
+
+Edit now includes dual filters, an independent modulation envelope, oscillator phase/FM/ring modulation, and per-layer Character processing. Copper Orange, patch-browser favorites and navigation, output boost with peak protection, and selectable scope scaling are included. Existing patches and DAW parameter IDs are preserved. See [Sound design upgrades](SONIC-UPGRADES.md) for routing, gain behavior and validation details.
+
+## DAW integration · 0.16
+
+Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, the automated host tests, and standalone regression checks pass; Logic application testing and Ableton save/export testing were skipped because of activation/license limits.
+
+## Nova — 100 new performances · 0.15
+
+Search **Nova** in the Aurora library to browse 100 additional patches, with ten in each existing musical category. Aurora now includes **312 factory sounds**. Each Nova patch combines individually authored layer roles with drawable motion, eight custom macros, an assigned XY pad and separate layer Delay/Reverb sends. Many performances use layers C and D for attacks, upper harmonics, bass foundations or independent rhythmic voices. The bank uses built-in oscillators and wavetables without external samples.
+
+X transforms timbre; Y shifts the layer balance. The six remaining macros control Drift, Room, Contour, Release, Width and Echo. Saved macro positions preserve each patch's authored settings; dry effect macros start at zero so effects can be introduced smoothly. Motion uses free or tempo-synced curves for volume, filter, pan, pitch and wavetable movement, with destinations chosen per sound. Macro routes avoid base controls replaced by motion. Layer count and unison are restrained for the MacBook Air.
+
+See the [Nova catalog](Patch%20Banks/Aurora%20Nova%20100%20Catalog.md) for playing notes and the [grouped preset archive](Patch%20Banks/Aurora%20Nova%20100%20Patches.zip) for portable copies. Nova is bundled automatically when building Aurora. Existing factory sounds and saved user sounds remain available.
+
 ## Color themes · 0.14
 
 Use the palette button beside **Sound library** to choose Midnight, Copper, Ocean, Forest, Graphite or Graphite Orange. Themes update immediately across panels, controls, dialogs and graphs with distinct selected/unselected button colors. Graphite Orange keeps Graphite's backgrounds and adds orange sliders and selected buttons with dark text; the other themes retain white button text. Copper is the default. The preference is saved separately in `~/Library/Application Support/Aurora/appearance.json`, so patch loading, patch sharing and Undo do not change the theme.
@@ -46,7 +62,7 @@ All settings belong to each patch/layer, including Save As, export/import, sessi
 
 ## Prism — 100 additional performances
 
-Aurora now includes **212 factory sounds**: the original 112 plus the new Prism collection. Search **Prism** in the Aurora library to find the new sounds. Each of the ten existing musical categories receives ten additions, including evolving vocal pads, elastic basses, sync leads, glass keys, metallic plucks, sequenced arps, atmospheric textures, spectral organs, synthetic ensembles and keyboard splits.
+The Prism update added 100 sounds to the original 112. Search **Prism** in the Aurora library to find them. Each of the ten existing musical categories receives ten additions, including evolving vocal pads, elastic basses, sync leads, glass keys, metallic plucks, sequenced arps, atmospheric textures, spectral organs, synthetic ensembles and keyboard splits.
 
 Prism uses both wavetable oscillators, per-layer Sound Matrix movement, velocity-to-filter response, mod-wheel scanning and pressure-to-warp control. Layered designs combine complementary timbres; the ten splits divide at MIDI 60. Mono leads and basses use legato glide. Imported audio is not required.
 
@@ -64,7 +80,7 @@ Tables and warped variants are prepared outside the audio callback with frequenc
 
 A native standalone synthesizer for Apple silicon Macs, built around playing and creating sounds with USB MIDI keyboards. This project targets your MacBook Air M3 with 8 GB of RAM, M-Audio Oxygen Pro 25, Yamaha CK88, and Yamaha MODX7+.
 
-This is the playable 0.13 development milestone, including wavetable oscillators, drawable motion envelopes, creative tools and 212 factory sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release; several of its advanced features remain future work.
+This is the playable 0.15 development milestone, including wavetable oscillators, drawable motion envelopes, creative tools, an XY performance pad and 312 factory sounds. The [full product specification](Aurora-Synthesizer-Specification.md) describes the larger release; several of its advanced features remain future work.
 
 ## Hold, clock and recording · 0.8
 
@@ -159,7 +175,7 @@ Arps play while you hold notes. Splits use MIDI notes 0–59 for the lower voice
 - Eight musical macros with source-specific MIDI Learn and hardware pickup.
 - On-screen piano and typing-key auditioning.
 
-The complete specification's four LFOs, dual filters, wavetable library/scanning, step editing, per-layer effects sends, and AU/VST plug-ins are later milestones. The current fifth oscillator shape is an original harmonic blend. The amplitude envelope also drives the filter envelope amount; a separate filter ADSR is later scope. MIDI is applied at audio-block boundaries. Hardware audio capture is outside this build. Exact controller-panel mappings must be checked against the messages each keyboard sends.
+Aurora has two LFOs per layer, dual filters, wavetable scanning, per-layer effects sends and AU/VST3 plug-ins. The fifth classic oscillator shape is an original harmonic blend. Filter 1 retains its amplitude-envelope amount, alongside the independent Mod envelope. Standalone MIDI is applied at audio-block boundaries; VST3 MIDI honors host sample offsets. Hardware audio capture remains outside this build. Exact controller-panel mappings depend on the messages each keyboard sends.
 
 ## Verification
 

@@ -34,13 +34,68 @@ import SwiftUI
         print("PASS: triggered scope shows 2–3 cycles with bounded display gain and silent idle output.")
         let folder=FileManager.default.temporaryDirectory.appendingPathComponent("AuroraChecks-"+UUID().uuidString)
         let model=SynthModel(storageDirectory:folder)
+        do {
+            var original=FactoryBank.all[0];original.id="shared"
+            var renamed=original;renamed.name="Renamed in another editor"
+            var added=original;added.id="new"
+            let base=SynthModel.PluginLibrary(presets:[original],favorites:["old"],deleted:[])
+            let local=SynthModel.PluginLibrary(presets:[original,added],favorites:["old","local"],deleted:[])
+            let disk=SynthModel.PluginLibrary(presets:[renamed],favorites:["remote"],deleted:[])
+            let merged=try! SynthModel.PluginLibrary.merge(local,baseline:base,latest:disk)
+            precondition(merged.presets.count==2 && merged.presets[0].name==renamed.name)
+            precondition(merged.favorites==Set(["local","remote"]))
+            let removed=SynthModel.PluginLibrary(presets:[],favorites:[],deleted:[original])
+            let deletion=try! SynthModel.PluginLibrary.merge(removed,baseline:base,latest:merged)
+            precondition(deletion.presets.map(\.id)==["new"] && deletion.deleted.count==1)
+            print("PASS: concurrent plug-in library additions, renames, favorites and deletions preserve unrelated edits.")
+        }
         defer { aurora_shutdown() }
         precondition(model.collection == "Aurora")
-        precondition(FactoryBank.all.count == 212)
-        precondition(model.collectionSounds.count == 212)
+        precondition(FactoryBank.all.count == 312)
+        precondition(SynthModel.ranges.count==79 && ControlTarget.layerNames.count==79)
+        let upgradeOriginal=model.patch
+        model.checkpoint();model.set(0,58,1);model.set(0,60,1900);model.set(0,64,2);model.set(0,68,0.7);model.set(0,70,2);model.set(0,71,0.4);model.set(0,73,3)
+        let upgraded=model.patch
+        let roundtrip=try! JSONDecoder().decode(SoundPreset.self,from:JSONEncoder().encode(upgraded))
+        precondition(SynthModel.sanitized(roundtrip)?.layers[0][73]==3)
+        precondition(MatrixAssignment(enabled:true,source:3,destination:20).valid(performance:false))
+        precondition(ControlTarget(layer:3,parameter:78).valid)
+        model.undo();precondition(model.patch.layers[0]==upgradeOriginal.layers[0]);model.redo();precondition(model.patch.layers[0]==upgraded.layers[0])
+        model.loadPreset(upgradeOriginal);precondition(aurora_get_parameter(0,58)==0 && aurora_get_parameter(0,60)==3200 && aurora_get_parameter(0,73)==0)
+        model.setOutputGain(9);model.loadPreset(upgradeOriginal);precondition(model.outputGain==9 && aurora_get_global(15)==9)
+        print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
+        model.selectTheme(.copperOrange)
+        let upgradeView=NSHostingView(rootView:EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
+        upgradeView.frame=NSRect(x:0,y:0,width:1100,height:3400);upgradeView.layoutSubtreeIfNeeded()
+        if let bitmap=upgradeView.bitmapImageRepForCachingDisplay(in:upgradeView.bounds){upgradeView.cacheDisplay(in:upgradeView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-editor.png"))}
+        let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
+        browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
+        if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
+        precondition(model.collectionSounds.count == 312)
         precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==212)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==212)
+        precondition(Set(FactoryBank.all.map(\.id)).count==312)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==312)
+        precondition(FactoryBank.nova.count==100)
+        model.search="Nova"
+        precondition(model.library.filter{$0.id.hasPrefix("nova-")}.count==100)
+        for sound in FactoryBank.nova {
+            model.loadPreset(sound)
+            precondition(model.patch.id==sound.id && sound.motion?.count==4 && sound.motion!.allSatisfy(\.valid))
+            precondition(sound.sends?.count==4 && sound.sends!.allSatisfy(\.valid))
+            precondition(sound.customMacros?.count==8 && sound.customMacros!.values.allSatisfy(\.valid) && sound.xy!.valid)
+            precondition(sound.soundMatrix!.flatMap{$0}.allSatisfy{$0.valid(performance:false)})
+            precondition(sound.performanceMatrix!.allSatisfy{$0.valid(performance:true)})
+            for index in 0..<8{model.macro(index,sound.macros[index])}
+            for l in 0..<4 {for p in 0..<58{
+                precondition(abs(model.patch.layers[l][p]-sound.layers[l][p])<0.00001,"Nova macro center changes the authored sound: \(sound.name) / \(l) / \(p)")
+            }}
+            for p in 1..<15{precondition(abs(model.patch.globalValue(p)-sound.globalValue(p))<0.00001)}
+            model.moveXY(x:1,y:0)
+            precondition(model.patch.macros[0]==1 && model.patch.macros[1]==0)
+            let data=try! JSONEncoder().encode(model.patch)
+            let decoded=try! JSONDecoder().decode(SoundPreset.self,from:data)
+            precondition(decoded.customMacros==sound.customMacros && decoded.motion==sound.motion && decoded.xy==sound.xy && decoded.sends==sound.sends)
+        }
         model.search="Prism"
         precondition(model.library.filter{$0.id.hasPrefix("prism-")}.count==100)
         model.search=""
@@ -138,7 +193,7 @@ import SwiftUI
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")
         print("PASS: 100% master, persistent global transpose, tap tempo, rename preserving edits, delete and undo.")
-        print("PASS: Aurora contains 212 distinct sounds; all 100 Prism patches load and appear in search.")
+        print("PASS: Aurora contains 312 distinct sounds; all 100 Nova and 100 Prism patches load and appear in search. Nova macro centers, motion, XY and save round trips pass.")
         print("PASS: 20 stable polls and 1,200 meter changes caused ZERO main-interface publications.")
         print("PASS: 1,200 unchanged meter samples caused ZERO additional publications.")
         model.selectedLayer=0
@@ -285,7 +340,7 @@ import SwiftUI
         toolsModel.shutdown()
         let creativeRestored=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
         precondition(creativeRestored.theme == .graphiteOrange)
-        print("PASS: all six themes leave patch data unchanged; theme survives patch loads and restart.")
+        print("PASS: all seven themes leave patch data unchanged; theme survives patch loads and restart.")
         precondition(creativeRestored.xySettings==savedXY)
         print("PASS: XY axis ranges, inversion, clamping, assignment swaps, undo/redo, invalid-state rejection and persistence.")
         precondition(creativeRestored.patch.id==creativeID && creativeRestored.macroNames[0]=="Intensity")

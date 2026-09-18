@@ -20,11 +20,12 @@ struct AuroraPalette {
     }
 }
 enum AuroraTheme:String,Codable,CaseIterable,Identifiable {
-    case midnight="Midnight",copper="Copper",ocean="Ocean",forest="Forest",graphite="Graphite",graphiteOrange="Graphite Orange"
+    case midnight="Midnight",copper="Copper",copperOrange="Copper Orange",ocean="Ocean",forest="Forest",graphite="Graphite",graphiteOrange="Graphite Orange"
     var id:String{rawValue}
     var palette:AuroraPalette{switch self{
     case .midnight:return AuroraPalette(0x0D1122,0x181E34,0x252E49,0xA7BDFF,0x283C60,0x8D471D,0x080D1A,0x5ADFFC,0xF3BC77)
     case .copper:return AuroraPalette(0x131815,0x1D2420,0x29302A,0xB8D995,0x2E476E,0xA64D1F,0x090E1A,0x33E0FF,0xFFC077)
+    case .copperOrange:return AuroraPalette(0x131815,0x1D2420,0x29302A,0xFFAA45,0x2E476E,0xFFAA45,0x090E1A,0x33E0FF,0xFFC077,selectedText:0x23180D)
     case .ocean:return AuroraPalette(0x071C26,0x102D3B,0x1A4051,0x8EE6E6,0x1D485C,0x7C3C69,0x04151F,0x55E3D0,0xB5B2FF)
     case .forest:return AuroraPalette(0x101E18,0x1E3026,0x2B4333,0xC8E3A2,0x2C4A3C,0x80522A,0x081710,0xA1EFBC,0xF4CC70)
     case .graphite:return AuroraPalette(0x141416,0x242429,0x33333B,0xD1D7E6,0x3B3B45,0x245B83,0x0B0B10,0xF6D17A,0xC7AAFF)
@@ -82,9 +83,10 @@ struct ImportedWavetable:Codable,Equatable {
 struct LayerPatch: Codable, Equatable {
     var values: [Int: Double]
     subscript(_ id: Int) -> Double {
-        get { values[id] ?? (id==34 ? 0.5 : id==36 ? 1 : id==37 ? 8 : id==38 ? 0.6 : id==43 ? 2 : 0) }
+        get { values[id] ?? Self.extensionDefaults[id] ?? (id==34 ? 0.5 : id==36 ? 1 : id==37 ? 8 : id==38 ? 0.6 : id==43 ? 2 : 0) }
         set { values[id] = newValue }
     }
+    static let extensionDefaults:[Int:Double]=[60:3200,63:0.5,64:0.01,65:0.35,67:0.35,72:1,74:0.25,75:1,76:0.5,77:12,78:1]
     static var initial: LayerPatch {
         LayerPatch(values: [0:1,1:2,2:1,3:0.35,4:7,5:0.12,6:0,
             7:2600,8:0.15,9:0.025,10:0.35,11:0.75,12:0.7,13:0.65,
@@ -114,7 +116,7 @@ struct MatrixAssignment:Codable,Equatable {
     var amount=0.0
     static let empty=Array(repeating:MatrixAssignment(),count:6)
     func valid(performance:Bool)->Bool {
-        (0...(performance ? 5:2)).contains(source) && (performance ? (0...15).contains(destination):((0...5).contains(destination)||(12...15).contains(destination))) && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
+        (0...(performance ? 5:3)).contains(source) && (performance ? (0...20).contains(destination):((0...5).contains(destination)||(12...20).contains(destination))) && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
     }
 }
 struct SoundPreset: Identifiable, Codable {
@@ -174,6 +176,7 @@ struct SavedSession: Codable {
     var transpose: Int? = nil
     var deletedSound: SoundPreset? = nil
     var deletedPresets: [SoundPreset]? = nil
+    var outputGain:Double?=nil
 }
 
 enum FactoryBank {
@@ -189,19 +192,25 @@ enum FactoryBank {
     }
     static let categoryOrder = ["Pads", "Bass", "Leads", "Keys", "Plucks", "Arps", "Textures", "Organs", "Brass & Strings", "Splits", "Templates"]
     static let expansion: [SoundPreset] = {
-        guard let url = Bundle.main.url(forResource: "Aurora100", withExtension: "json"),
+        guard let url = AuroraResources.bundle.url(forResource: "Aurora100", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let sounds = try? JSONDecoder().decode([SoundPreset].self, from: data),
               sounds.count == 100 else { return [] }
         return sounds
     }()
     static let prism: [SoundPreset] = {
-        guard let url=Bundle.main.url(forResource:"AuroraPrism100",withExtension:"json"),
+        guard let url=AuroraResources.bundle.url(forResource:"AuroraPrism100",withExtension:"json"),
               let data=try? Data(contentsOf:url),
               let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = expansion + prism + starter
+    static let nova: [SoundPreset] = {
+        guard let url=AuroraResources.bundle.url(forResource:"AuroraNova100",withExtension:"json"),
+              let data=try? Data(contentsOf:url),
+              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
+        return sounds
+    }()
+    static let all: [SoundPreset] = expansion + prism + nova + starter
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
@@ -255,6 +264,7 @@ struct MeterSnapshot: Equatable {
     }
 }
 @MainActor final class ScopeTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published private(set) var samples=Array(repeating:Float(0),count:256)
     @Published private(set) var levelSamples=Array(repeating:Float(0),count:256)
     // Trigger at upward zero crossings, selecting three complete cycles. This
@@ -283,11 +293,18 @@ struct MeterSnapshot: Equatable {
     }
     func update() {
         var raw=Array(repeating:Float(0),count:8192)
-        let count=raw.withUnsafeMutableBufferPointer{aurora_copy_scope($0.baseAddress,Int32($0.count))}
+        let count=raw.withUnsafeMutableBufferPointer{backend.aurora_copy_scope($0.baseAddress,Int32($0.count))}
         let next=Self.displayWave(Array(raw.prefix(Int(count)))).map{($0*500).rounded()/500}
         if next != samples {samples=next}
         let levels=Self.displayWave(Array(raw.prefix(Int(count))),normalize:false).map{($0*1000).rounded()/1000}
         if levels != levelSamples{levelSamples=levels}
+    }
+}
+struct OutputLevelReadout:View {
+    @ObservedObject var telemetry:AudioTelemetry
+    var body:some View{
+        Text(telemetry.snapshot.peak>0.00001 ? String(format:"Peak %.1f dBFS",20*log10(telemetry.snapshot.peak)):"Peak −∞ dBFS")
+            .font(.system(size:13,design:.monospaced)).foregroundStyle(telemetry.snapshot.peak>0.95 ? Color.orange:Color.white)
     }
 }
 struct OutputScope:View {
@@ -316,10 +333,11 @@ struct OutputScope:View {
     }
 }
 @MainActor final class ModulationTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published private(set) var values=Array(repeating:Float(0),count:30)
     func update() {
         var next=Array(repeating:Float(0),count:30)
-        _=next.withUnsafeMutableBufferPointer{aurora_copy_modulation($0.baseAddress,Int32($0.count))}
+        _=next.withUnsafeMutableBufferPointer{backend.aurora_copy_modulation($0.baseAddress,Int32($0.count))}
         next=next.map{($0*100).rounded()/100}
         if next != values{values=next}
     }
@@ -349,9 +367,10 @@ struct MatrixFeedback:ViewModifier {
     }
 }
 @MainActor final class PerformanceTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published var clockBPM:Double=0
     @Published var seconds:Int=0
-    func update(){let bpm=(Double(aurora_clock_tempo())*10).rounded()/10;let time=Int(aurora_record_seconds());if bpm != clockBPM{clockBPM=bpm};if time != seconds{seconds=time}}
+    func update(){let bpm=(Double(backend.aurora_clock_tempo())*10).rounded()/10;let time=Int(backend.aurora_record_seconds());if bpm != clockBPM{clockBPM=bpm};if time != seconds{seconds=time}}
 }
 struct ClockReadout:View {
     @Environment(\.auroraPalette) private var palette
@@ -373,13 +392,21 @@ struct VoiceStatus:View {
 }
 
 @MainActor final class SynthModel: ObservableObject {
-    @Published var patch = FactoryBank.all[0]
+    let backend:AuroraBackend
+    var syncingPlugin=false
+    var lastPluginRevision:UInt64=UInt64.max
+    var lastPluginMappingsData:Data?
+    @Published var patch = FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
     @Published var userPresets: [SoundPreset] = []
     @Published var selectedLayer = 0
     @Published var screen = "Play"
     @Published var search = ""
     @Published var collection = "Aurora"
     @Published var category = "All categories"
+    @Published var outputGain=6.0
+    func setOutputGain(_ gain:Double){
+        guard gain.isFinite else{return};outputGain=max(0,min(18,gain));backend.aurora_set_global(15,Float(outputGain));persist()
+    }
     @Published var favoritesOnly = false
     @Published var favorites: Set<String> = []
     @Published var devices: [AudioDevice] = []
@@ -436,7 +463,7 @@ struct VoiceStatus:View {
         let index=sounds.firstIndex{$0.id==patch.id} ?? (delta>0 ? -1:0)
         loadPreset(sounds[(index+delta+sounds.count)%sounds.count])
     }
-    func toggleSolo(_ layer:Int){soloLayer=soloLayer==layer ? -1:layer;aurora_solo_layer(Int32(soloLayer))}
+    func toggleSolo(_ layer:Int){soloLayer=soloLayer==layer ? -1:layer;backend.aurora_solo_layer(Int32(soloLayer))}
     func copyLayer(_ layer:Int){
         let waves=Dictionary(uniqueKeysWithValues:(0..<2).compactMap{o -> (Int,ImportedWavetable)? in guard let wave=patch.importedWavetables?[layer*2+o] else{return nil};return (o,wave)})
         layerClipboard=LayerClipboard(layer:patch.layers[layer],matrix:patch.soundMatrix?[layer] ?? MatrixAssignment.empty,motion:patch.motion?[layer] ?? MotionSettings(),sends:patch.sends?[layer] ?? LayerSends(),waves:waves)
@@ -444,7 +471,7 @@ struct VoiceStatus:View {
     }
     func pasteLayer(_ layer:Int){
         guard let copied=layerClipboard else{return};checkpoint()
-        aurora_panic();pressed=[];holding=false
+        backend.aurora_panic();pressed=[];holding=false
         patch.layers[layer]=copied.layer
         var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.empty,count:4);matrix[layer]=copied.matrix;patch.soundMatrix=matrix
         var motion=patch.motion ?? Array(repeating:MotionSettings(),count:4);motion[layer]=copied.motion;patch.motion=motion
@@ -457,7 +484,7 @@ struct VoiceStatus:View {
         if delay{sends[self.selectedLayer].delay=value}else{sends[self.selectedLayer].reverb=value}
         self.patch.sends=sends;self.applySends();self.dirty=true
     })}
-    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb))}}
+    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();backend.aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb))}}
     @Published var wavetableMessage=""
     private var appliedWavetables:[Int:ImportedWavetable]=[:]
     func hasCustomWavetable(oscillator:Int)->Bool{patch.importedWavetables?[selectedLayer*2+oscillator] != nil}
@@ -489,7 +516,7 @@ struct VoiceStatus:View {
     @discardableResult func installWavetable(_ imported:ImportedWavetable,layer:Int,oscillator:Int)->Bool{
         guard imported.valid else{wavetableMessage="This wavetable data is invalid.";return false}
         let samples=imported.samples
-        let success=samples.withUnsafeBufferPointer{aurora_set_custom_wavetable(Int32(layer),Int32(oscillator),$0.baseAddress,Int32(imported.frames),Int32(imported.frameSize))}==1
+        let success=samples.withUnsafeBufferPointer{backend.aurora_set_custom_wavetable(Int32(layer),Int32(oscillator),$0.baseAddress,Int32(imported.frames),Int32(imported.frameSize))}==1
         if !success{wavetableMessage="Could not prepare the wavetable. The previous table is still available."}
         return success
     }
@@ -498,7 +525,7 @@ struct VoiceStatus:View {
             let imported=patch.importedWavetables?[slot]
             if imported != appliedWavetables[slot]{
                 if let imported{if installWavetable(imported,layer:slot/2,oscillator:slot%2){appliedWavetables[slot]=imported}}
-                else{aurora_clear_custom_wavetable(Int32(slot/2),Int32(slot%2));appliedWavetables[slot]=nil}
+                else{backend.aurora_clear_custom_wavetable(Int32(slot/2),Int32(slot%2));appliedWavetables[slot]=nil}
             }
         }
     }
@@ -511,8 +538,8 @@ struct VoiceStatus:View {
     @Published var recordingMessage=""
     @Published var normalizingRecording=false
     private let normalizationQueue=DispatchQueue(label:"Aurora.RecordingNormalization",qos:.utility)
-    func setHold(_ enabled:Bool){holding=enabled;aurora_hold(enabled ? 1:0)}
-    func setClock(_ enabled:Bool,source:Int32){externalClock=enabled;clockSourceID=source;aurora_clock_source(enabled ? 1:0,source)}
+    func setHold(_ enabled:Bool){holding=enabled;backend.aurora_hold(enabled ? 1:0)}
+    func setClock(_ enabled:Bool,source:Int32){externalClock=enabled;clockSourceID=source;backend.aurora_clock_source(enabled ? 1:0,source)}
     func toggleRecording(){
         if recording{finishRecording();return}
         guard running else{recordingMessage="Enable audio first.";return}
@@ -522,12 +549,12 @@ struct VoiceStatus:View {
             try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
             let stamp=ISO8601DateFormatter().string(from:Date()).replacingOccurrences(of:":",with:"-")
             let url=directory.appendingPathComponent("Aurora-\(stamp)-\(UUID().uuidString.prefix(6)).wav")
-            if aurora_record_start(url.path)==1{recordingURL=url;recording=true;recordingMessage=""}else{recordingMessage=String(cString:aurora_status())}
+            if backend.aurora_record_start(url.path)==1{recordingURL=url;recording=true;recordingMessage=""}else{recordingMessage=String(cString:backend.aurora_status())}
         }catch{recordingMessage="Could not create recording: \(error.localizedDescription)"}
     }
     func finishRecording(){
-        let success=aurora_record_stop()==1;recording=false
-        guard success,let url=recordingURL else{recordingMessage="Recording error: "+String(cString:aurora_status());return}
+        let success=backend.aurora_record_stop()==1;recording=false
+        guard success,let url=recordingURL else{recordingMessage="Recording error: "+String(cString:backend.aurora_status());return}
         normalizingRecording=true;recordingMessage="Normalizing…"
         normalizationQueue.async{[weak self] in
             let normalized=aurora_normalize_recording(url.path)==1
@@ -535,7 +562,7 @@ struct VoiceStatus:View {
         }
     }
     func setTranspose(_ value:Int) {
-        transpose=max(-24,min(24,value));aurora_set_transpose(Int32(transpose));persist()
+        transpose=max(-24,min(24,value));backend.aurora_set_transpose(Int32(transpose));persist()
     }
     func tapTempo(at time:TimeInterval = ProcessInfo.processInfo.systemUptime) {
         if let last=tapTimes.last, time-last > 3 || time <= last {tapTimes=[]}
@@ -577,7 +604,7 @@ struct VoiceStatus:View {
     }
     private var timer: Timer?
     private var lastSessionData:Data?
-    private var lastPresetData:Data?
+    var lastPresetData:Data?
     private var ticks = 0
     private var lastCCCount: UInt64 = 0
     private var pickup: Set<Int> = []
@@ -586,10 +613,10 @@ struct VoiceStatus:View {
     private var outputUID: String?
     private var undoPatches: [SoundPreset] = []
     private var redoPatches: [SoundPreset] = []
-    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...3,0...3,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...2,0...4,0.05...0.95,0...1,1...4,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...3,0...1,0...1,0...1,0...1,0...24,0...1,0...3,0...1,0...1,0...1]
-    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54]
+    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...3,0...3,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...2,0...4,0.05...0.95,0...1,1...4,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...3,0...1,0...1,0...1,0...1,0...24,0...1,0...3,0...1,0...1,0...1,0...1,0...2,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1]
+    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77]
     static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7]
-    private static func sanitized(_ input:SoundPreset) -> SoundPreset? {
+    static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
         guard (input.phaserMix ?? 0).isFinite else{return nil}
@@ -666,18 +693,21 @@ struct VoiceStatus:View {
         if let storageDirectory {return storageDirectory}
         return FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Aurora",isDirectory:true)
     }
-    init(storageDirectory:URL? = nil) {
+    init(storageDirectory:URL? = nil,backend:AuroraBackend=AuroraBackend()) {
+        self.backend=backend
+        scope.backend=backend;modulation.backend=backend;performanceTelemetry.backend=backend
+        motionTelemetry.backend=backend;wavetableTelemetry.backend=backend
         self.storageDirectory=storageDirectory
         if let data=try? Data(contentsOf:folder.appendingPathComponent("appearance.json")),let saved=try? JSONDecoder().decode(AuroraTheme.self,from:data){theme=saved}
-        aurora_initialize()
-        restore()
+        backend.aurora_initialize()
+        if !backend.isPlugin{restore()}else{restorePluginLibrary();syncPlugin()}
         restoreShapeLibrary()
         if FactoryBank.expansion.isEmpty || FactoryBank.prism.isEmpty {
             notice="A factory sound bank could not be loaded. Rebuild or reopen the complete app bundle."
         }
-        applyPatch()
+        if !backend.isPlugin{applyPatch()}
         refresh()
-        installKeyboard()
+        if !backend.isPlugin{installKeyboard()}
         let updateTimer = Timer(timeInterval:0.05,repeats:true) { [weak self] _ in
             Task { @MainActor in self?.poll() }
         }
@@ -686,16 +716,20 @@ struct VoiceStatus:View {
         timer=updateTimer
     }
     func applyPatch() {
+#if AURORA_PLUGIN
+        commitPluginPatch(apply:true);return
+#endif
         directPickup.removeAll();directPrevious.removeAll()
         applySends()
         applyMotion()
         applyWavetables()
         applyMatrix()
-        aurora_set_transpose(Int32(transpose))
-        aurora_set_global(6,Float(patch.phaserMix ?? 0))
-        for p in 7...14{aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
-        for i in 0..<4 {for p in 0..<Self.ranges.count {aurora_set_parameter(Int32(i),Int32(p),Float(patch.layers[i][p]))}}
-        for (p,v) in patch.globals.enumerated() { aurora_set_global(Int32(p),Float(v)) }
+        backend.aurora_set_transpose(Int32(transpose))
+        backend.aurora_set_global(15,Float(outputGain))
+        backend.aurora_set_global(6,Float(patch.phaserMix ?? 0))
+        for p in 7...14{backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
+        for i in 0..<4 {for p in 0..<Self.ranges.count {backend.aurora_set_parameter(Int32(i),Int32(p),Float(patch.layers[i][p]))}}
+        for (p,v) in patch.globals.enumerated() { backend.aurora_set_global(Int32(p),Float(v)) }
     }
     func matrixRows(performance:Bool)->[MatrixAssignment] {
         performance ? (patch.performanceMatrix ?? MatrixAssignment.empty):(patch.soundMatrix?[selectedLayer] ?? MatrixAssignment.empty)
@@ -724,7 +758,7 @@ struct VoiceStatus:View {
     func applyMatrix() {
         for bank in 0..<5 {
             let rows=bank==4 ? (patch.performanceMatrix ?? MatrixAssignment.empty):(patch.soundMatrix?[bank] ?? MatrixAssignment.empty)
-            for (slot,row) in rows.enumerated(){aurora_set_matrix(Int32(bank),Int32(slot),row.enabled ? 1:0,Int32(row.source),Int32(row.destination),Int32(row.target),Int32(row.cc),Float(row.amount))}
+            for (slot,row) in rows.enumerated(){backend.aurora_set_matrix(Int32(bank),Int32(slot),row.enabled ? 1:0,Int32(row.source),Int32(row.destination),Int32(row.target),Int32(row.cc),Float(row.amount))}
         }
     }
     func checkpoint() {
@@ -738,9 +772,9 @@ struct VoiceStatus:View {
     func loadPreset(_ preset: SoundPreset) {
         checkpoint()
         directPickup.removeAll();directPrevious.removeAll()
-        soloLayer = -1;aurora_solo_layer(-1)
+        soloLayer = -1;backend.aurora_solo_layer(-1)
         let master=patch.globals[0]
-        aurora_panic();pressed=[];holding=false
+        backend.aurora_panic();pressed=[];holding=false
         patch=preset; patch.globals[0]=master
         applyPatch();dirty=false;pickup=[];previousCC=[:]
         notice="Loaded \(preset.name). Previous edits are available with Undo."
@@ -756,15 +790,15 @@ struct VoiceStatus:View {
         if parameter==27{value=min(value,patch.layers[layer][28])}
         if parameter==28{value=max(value,patch.layers[layer][27])}
         patch.layers[layer][parameter]=value
-        if parameter==1 || parameter==2{let mode=parameter==1 ? 44:51;patch.layers[layer][mode]=0;aurora_set_parameter(Int32(layer),Int32(mode),0)}
-        aurora_set_parameter(Int32(layer),Int32(parameter),Float(value));dirty=true
+        if parameter==1 || parameter==2{let mode=parameter==1 ? 44:51;patch.layers[layer][mode]=0;backend.aurora_set_parameter(Int32(layer),Int32(mode),0)}
+        backend.aurora_set_parameter(Int32(layer),Int32(parameter),Float(value));dirty=true
     }
     func global(_ parameter:Int,_ value:Double) {
         if parameter != 0{finishComparison()}
         if !applyingDirectCC{for mapping in directMappings where mapping.target==ControlTarget(layer:-1,parameter:parameter){directPickup.remove(mapping.id);directPrevious[mapping.id]=nil}}
         guard Self.globalRanges.indices.contains(parameter),value.isFinite else{return}
         let r=Self.globalRanges[parameter],value=max(r.lowerBound,min(r.upperBound,parameter==14 ? value.rounded():value))
-        if parameter>6{if patch.fx==nil{patch.fx=[:]};patch.fx?[parameter]=value}else if parameter==6{patch.phaserMix=value}else{patch.globals[parameter]=value};aurora_set_global(Int32(parameter),Float(value));dirty=true
+        if parameter>6{if patch.fx==nil{patch.fx=[:]};patch.fx?[parameter]=value}else if parameter==6{patch.phaserMix=value}else{patch.globals[parameter]=value};backend.aurora_set_global(Int32(parameter),Float(value));dirty=true
     }
     func parameter(_ parameter:Int, layer:Int?=nil) -> Binding<Double> {
         let l=layer ?? selectedLayer
@@ -774,6 +808,9 @@ struct VoiceStatus:View {
         Binding(get:{self.patch.globalValue(parameter)},set:{self.global(parameter,$0)})
     }
     func macro(_ index:Int,_ value:Double) {
+#if AURORA_PLUGIN
+        aurora_plugin_macro(backend.context,Int32(index),value);syncPlugin();dirty=true;return
+#endif
         finishComparison()
         let value=max(0,min(1,value));let delta=value-patch.macros[index]
         patch.macros[index]=value
@@ -796,34 +833,35 @@ struct VoiceStatus:View {
         dirty=true
     }
     func refresh(force:Bool=true) {
-        if force { aurora_refresh_devices() }
+        if force { backend.aurora_refresh_devices() }
         func decode<T:Decodable>(_ type:T.Type,_ pointer:UnsafePointer<CChar>?) -> T? {
             guard let pointer else {return nil};return try? JSONDecoder().decode(type,from:Data(String(cString:pointer).utf8))
         }
-        let nextDevices=decode([AudioDevice].self,aurora_audio_devices_json()) ?? []
-        let nextSources=decode([MIDISource].self,aurora_midi_sources_json()) ?? []
+        let nextDevices=decode([AudioDevice].self,backend.aurora_audio_devices_json()) ?? []
+        let nextSources=decode([MIDISource].self,backend.aurora_midi_sources_json()) ?? []
         if devices != nextDevices { devices=nextDevices }
         if sources != nextSources { sources=nextSources }
         if output==0, let uid=outputUID,let d=devices.first(where:{$0.uid==uid}) { output=d.id }
         for source in sources {
             if let route=routes[source.id] {
-                aurora_velocity_curve(source.id,Int32(max(0,min(3,route.velocityCurve ?? 0))))
-                if source.layerMask != route.mask || source.channel != route.channel {aurora_route_source(source.id,Int32(route.mask),Int32(route.channel))}
+                backend.aurora_velocity_curve(source.id,Int32(max(0,min(3,route.velocityCurve ?? 0))))
+                if source.layerMask != route.mask || source.channel != route.channel {backend.aurora_route_source(source.id,Int32(route.mask),Int32(route.channel))}
             }
             else { routes[source.id]=SourceRoute(mask:source.layerMask ?? ((source.enabled ?? true) ? 1:0),channel:source.channel ?? 0) }
         }
     }
     func poll() {
+        syncPlugin()
         performanceTelemetry.update()
-        if recording&&aurora_recording()==0{finishRecording()}
+        if recording&&backend.aurora_recording()==0{finishRecording()}
         ticks += 1
         // Keep disk work and device-list updates out of live scroll/drag tracking.
         if RunLoop.main.currentMode != .eventTracking {
             if ticks % 40 == 0 { refresh(force:false) }
             if ticks % 100 == 0 { persist() }
         }
-        let nextRunning=aurora_audio_running() != 0
-        let nextRate=aurora_sample_rate(), nextFrames=aurora_buffer_frames()
+        let nextRunning=backend.aurora_audio_running() != 0
+        let nextRate=backend.aurora_sample_rate(), nextFrames=backend.aurora_buffer_frames()
         if running != nextRunning { running=nextRunning;if !running{holding=false} }
         if sampleRate != nextRate { sampleRate=nextRate }
         if actualFrames != nextFrames { actualFrames=nextFrames }
@@ -831,16 +869,17 @@ struct VoiceStatus:View {
         modulation.update()
         wavetableTelemetry.update()
         motionTelemetry.update()
-        telemetry.update(peak:aurora_output_peak(),load:aurora_cpu_load(),voices:Int(aurora_active_voices()),midiEvents:aurora_midi_event_count())
-        if let p=aurora_status() {
+        telemetry.update(peak:backend.aurora_output_peak(),load:backend.aurora_cpu_load(),voices:Int(backend.aurora_active_voices()),midiEvents:backend.aurora_midi_event_count())
+        if let p=backend.aurora_status() {
             let nextStatus=String(cString:p)
             if status != nextStatus { status=nextStatus }
         }
-        let count=aurora_cc_count()
+        let count=backend.aurora_cc_count()
         if count != lastCCCount {
             lastCCCount=count
-            let cc=aurora_last_cc_snapshot();guard cc != UInt64.max else{return}
+            let cc=backend.aurora_last_cc_snapshot();guard cc != UInt64.max else{return}
             let source=Int32(bitPattern:UInt32(cc>>32)),channel=Int((cc>>16)&255),controller=Int((cc>>8)&255),value=Double(cc&255)/127
+            if backend.isPlugin && learningMacro==nil && learningControl==nil{return}
             if learningMacro==nil && handleDirectCC(source:source,channel:channel,controller:controller,value:value){return}
             if let index=learningMacro {
                 if controller==64 || controller>=120 {notice="Sustain and channel-mode controls stay reserved. Move a knob to learn it.";return}
@@ -860,23 +899,24 @@ struct VoiceStatus:View {
         }
     }
     func setRoute(_ source:Int32,_ route:SourceRoute) {
-        routes[source]=route;aurora_route_source(source,Int32(route.mask),Int32(route.channel));aurora_velocity_curve(source,Int32(max(0,min(3,route.velocityCurve ?? 0))));persist()
+        routes[source]=route;backend.aurora_route_source(source,Int32(route.mask),Int32(route.channel));backend.aurora_velocity_curve(source,Int32(max(0,min(3,route.velocityCurve ?? 0))));persist()
     }
     func toggleAudio() {
+        guard !backend.isPlugin else{return}
         holding=false
         if recording{finishRecording()}
         notice=""
-        if running {aurora_stop_audio();pressed=[]}
-        else { _=aurora_start_audio(output,UInt32(buffer));output=aurora_current_device() }
+        if running {backend.aurora_stop_audio();pressed=[]}
+        else { _=backend.aurora_start_audio(output,UInt32(buffer));output=backend.aurora_current_device() }
         poll()
     }
     func changeOutput(_ id:UInt32) {
-        if running { aurora_stop_audio();pressed=[];notice="Output changed. Enable audio when you're ready." }
+        if running { backend.aurora_stop_audio();pressed=[];notice="Output changed. Enable audio when you're ready." }
         output=id;outputUID=devices.first(where:{$0.id==id})?.uid;persist()
     }
-    func noteOn(_ note:Int) { guard !pressed.contains(note) else{return};pressed.insert(note);aurora_note_on(Int32(note),90) }
-    func noteOff(_ note:Int) { guard pressed.contains(note) else{return};pressed.remove(note);aurora_note_off(Int32(note)) }
-    func panic() {aurora_panic();pressed=[];holding=false;notice="All notes and effect tails stopped."}
+    func noteOn(_ note:Int) { guard !pressed.contains(note) else{return};pressed.insert(note);backend.aurora_note_on(Int32(note),90) }
+    func noteOff(_ note:Int) { guard pressed.contains(note) else{return};pressed.remove(note);backend.aurora_note_off(Int32(note)) }
+    func panic() {backend.aurora_panic();pressed=[];holding=false;notice="All notes and effect tails stopped."}
     func favorite(_ id:String) { if favorites.contains(id){favorites.remove(id)}else{favorites.insert(id)};persist() }
     func saveUserPreset() {
         finishComparison()
@@ -906,9 +946,10 @@ struct VoiceStatus:View {
         } catch { notice="This preset could not be imported: \(error.localizedDescription)" }
     }
     func persist() {
+        if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {
@@ -928,6 +969,7 @@ struct VoiceStatus:View {
             var directIDs=Set<String>(),directTargets=Set<ControlTarget>()
             directMappings=Array((s.directMappings ?? []).filter{$0.valid && directIDs.insert($0.id).inserted && directTargets.insert($0.target).inserted}.prefix(256))
             patch=valid;favorites=s.favorites;routes=s.routes.filter{(0...15).contains($0.value.mask) && (0...16).contains($0.value.channel)}
+            outputGain=(s.outputGain?.isFinite == true) ? max(0,min(18,s.outputGain!)):6
             mappings=s.mappings.filter{(0..<8).contains($0.macro) && (0...127).contains($0.controller) && (1...16).contains($0.channel)}
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
         }
@@ -943,7 +985,7 @@ struct VoiceStatus:View {
             Task { @MainActor in guard let self else{return};for note in Array(self.pressed){self.noteOff(note)} }
         }
     }
-    func shutdown() {if recording{finishRecording()};normalizationQueue.sync{};persist();timer?.invalidate();for m in monitors{NSEvent.removeMonitor(m)};aurora_shutdown()}
+    func shutdown() {if recording{finishRecording()};normalizationQueue.sync{};persist();timer?.invalidate();for m in monitors{NSEvent.removeMonitor(m)};backend.aurora_shutdown()}
 }
 
 struct EqualHeightRow: Layout {
@@ -994,7 +1036,7 @@ struct MacroDial:View {
             }.frame(width:88,height:88).accessibilityHidden(true)
             HStack{Text(model.macroNames[index]);Spacer();Text("\(Int(value*100))").foregroundStyle(palette.muted).monospacedDigit()}.font(.system(size:15,weight:palette.weight(.medium)))
             Slider(value:Binding(get:{value},set:{model.macro(index,$0)}),in:0...1,onEditingChanged:{if $0{model.checkpoint()}}).tint(palette.accent).accessibilityLabel(model.macroNames[index])
-            Button{model.learningControl=nil;model.learningMacro = model.learningMacro==index ? nil:index;model.notice=model.learningMacro==nil ? "MIDI Learn cancelled.":"Move a hardware knob for \(model.macroNames[index])."}label:{Label(model.learningMacro==index ? "Move a knob…":model.mappings.contains(where:{$0.macro==index}) ? "Mapped":"MIDI Learn",systemImage:"cable.connector")}.buttonStyle(AuroraIconButtonStyle()).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)
+                Button{model.learningControl=nil;model.learningMacro = model.learningMacro==index ? nil:index;model.notice=model.learningMacro==nil ? "MIDI Learn cancelled.":"Move a hardware knob for \(model.macroNames[index])."}label:{Label(model.learningMacro==index ? "Move a knob…":model.mappings.contains(where:{$0.macro==index}) ? "Mapped":"MIDI Learn",systemImage:"cable.connector")}.buttonStyle(AuroraIconButtonStyle()).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)
         }.frame(maxWidth:.infinity).padding(.vertical,8)
     }
 }
@@ -1043,9 +1085,12 @@ struct PianoView:View {
     }
 }
 
+@MainActor final class EditorDisplayState:ObservableObject {@Published var autoScale=true}
 struct EditorView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
+    @StateObject private var display=EditorDisplayState()
+    var scopeAutoScale:Bool{get{display.autoScale} nonmutating set{display.autoScale=newValue}}
     let waves=["Sine","Triangle","Saw","Pulse","Harmonic"]
     func choice(_ label:String,_ p:Int,_ options:[String])->some View {
         Picker(label,selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][p])},set:{m.checkpoint();m.set(m.selectedLayer,p,Double($0))})){ForEach(Array(options.enumerated()),id:\.offset){i,s in Text(s).tag(i)}}.font(.system(size:15,weight:palette.weight(.regular)))
@@ -1086,7 +1131,7 @@ struct EditorView:View {
         ParameterSlider(title:label,value:m.parameter(p),range:range,logarithmic:log,format:format,onBegin:{m.checkpoint()})
             .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:p)))
             .overlay(alignment:.bottom){
-                if let destination=[7:0,15:1,14:2,13:3,3:4,21:5,17:6,30:7][p] {
+                if let destination=[7:0,15:1,14:2,13:3,3:4,21:5,17:6,30:7,60:16,61:17,71:18,74:19,63:20][p] {
                     let slots=m.modulationSlots(destination:destination)
                     if !slots.isEmpty{ModulationIndicator(telemetry:m.modulation,slots:slots).offset(y:3)}
                 }
@@ -1102,7 +1147,7 @@ struct EditorView:View {
                     slider("Oscillator blend",3);slider("Detune",4,0...30,format:{String(format:"%.1f cents",$0)})
                     HStack{slider("Sub",5);slider("Noise",6)}
                 }
-                Panel(title:"Filter"){
+                Panel(title:"Filter 1"){
                     optionButtons("Type",32,["Low-pass","High-pass","Band-pass"])
                     slider("Cutoff",7,30...18000,log:true,format:{$0>=1000 ? String(format:"%.1f kHz",$0/1000):String(format:"%.0f Hz",$0)})
                     slider("Resonance",8,0...0.9);slider("Envelope amount",20,-1...1)
@@ -1136,9 +1181,46 @@ struct EditorView:View {
                 }
                 }
             }
+            EqualHeightRow(spacing:16){
+                Panel(title:"Filter 2 · routing"){
+                    optionButtons("Filter 2",58,["Bypass","On"])
+                    optionButtons("Type",59,["Low-pass","High-pass","Band-pass"])
+                    slider("Cutoff",60,30...18000,log:true,format:{String(format:"%.0f Hz",$0)})
+                    slider("Resonance",61,0...0.9)
+                    optionButtons("Routing",62,["1 → 2","2 → 1","Parallel"])
+                    slider("Parallel balance",63).disabled(m.patch.layers[m.selectedLayer][62] != 2)
+                    Text("Serial combines the filters; Parallel blends their separate outputs.").font(.system(size:13)).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Mod envelope"){
+                    HStack{slider("Attack",64,0.001...8,log:true,format:timeText);slider("Decay",65,0.01...12,log:true,format:timeText)}
+                    HStack{slider("Sustain",66);slider("Release",67,0.01...12,log:true,format:timeText)}
+                    VStack(alignment:.leading,spacing:5){
+                        Text("Destination").font(.system(size:14)).foregroundStyle(palette.muted)
+                        LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:4),count:4),spacing:4){ForEach(Array(["Filter 1","Filter 2","Pitch","Osc mod","Character","WT 1","WT 2"].enumerated()),id:\.offset){i,title in
+                            Button(title){m.checkpoint();m.set(m.selectedLayer,69,Double(i))}.font(.system(size:12)).buttonStyle(AuroraButtonStyle(selected:Int(m.patch.layers[m.selectedLayer][69])==i))
+                        }}
+                    }
+                    slider("Amount",68,-1...1)
+                    Text("Independent per note. Also available as a source in Sound Matrix; follows Mono/Legato mode.").font(.system(size:13)).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Character · layer insert"){
+                    optionButtons("Mode",73,["Off","Warm","Clip","Fold","Crush"])
+                    slider("Drive",74);slider("Tone",76);slider("Mix",75)
+                    HStack{slider("Bits",77,4...16,format:{"\(Int($0)) bit"});slider("Sample rate",78,0.02...1,log:true)}.disabled(m.patch.layers[m.selectedLayer][73] != 4)
+                    Text("After both filters, before layer balance and Delay/Reverb sends.").font(.system(size:13)).foregroundStyle(palette.muted)
+                }
+            }
             Panel(title:"Live waveform · output"){
-                OutputScope(telemetry:m.scope,normalized:false).frame(height:160)
-                Text("Final mixed output · follows all four layers and FX · actual level, with a triggered view of a few cycles").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                HStack{
+                    Button("Auto scale"){scopeAutoScale=true}.buttonStyle(AuroraButtonStyle(selected:scopeAutoScale))
+                    Button("Actual level"){scopeAutoScale=false}.buttonStyle(AuroraButtonStyle(selected:!scopeAutoScale))
+                    Spacer();OutputLevelReadout(telemetry:m.telemetry)
+                }
+                OutputScope(telemetry:m.scope,normalized:scopeAutoScale).frame(height:160)
+                HStack(spacing:24){
+                    ParameterSlider(title:"Output boost",value:Binding(get:{m.outputGain},set:{m.setOutputGain($0)}),range:0...18,format:{String(format:"+%.1f dB",$0)}).frame(width:280)
+                    Text("Left output waveform · stereo peak meter · boost stays constant across patches, with peak protection. Auto scale changes only the graph.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
             }
             WavetableSection(m:m)
             MotionEnvelopePanel(m:m).id(m.selectedLayer)
@@ -1156,10 +1238,13 @@ struct EditorView:View {
                     slider("Stereo spread",38)
                     Text("2–4 copies per note; levels are balanced automatically.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
-                Panel(title:"Oscillator sync"){
+                Panel(title:"Oscillator interaction"){
+                    optionButtons("Modulation",70,["Off","Phase","FM","Ring"])
+                    slider("Mod amount",71)
+                    slider("Osc 2 ratio",72,0.25...8,log:true,format:{String(format:"%.2f×",$0)})
                     Toggle("Sync oscillator 2 to 1",isOn:Binding(get:{m.patch.layers[m.selectedLayer][39]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,39,$0 ? 1:0)})).tint(palette.accent)
                     slider("Sync tuning",40,0...36,format:{String(format:"%.1f semitones",$0)})
-                    Text("Raise Oscillator blend to hear oscillator 2. Sync resets its cycle to oscillator 1 for a sharper harmonic character.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                    Text("Oscillator 2 modulates oscillator 1. Lower Blend to hear the carrier alone. Works with classic and wavetable waves.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }
             Panel(title:"Playing · layer \(layerLetters[m.selectedLayer])"){
@@ -1238,16 +1323,16 @@ struct FXDetailView:View {
 struct MatrixView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    private let soundSources=["LFO 1","LFO 2","Amp envelope"]
+    private let soundSources=["LFO 1","LFO 2","Amp envelope","Mod envelope"]
     private let performanceSources=["Mod wheel","Velocity","Channel pressure","Expression","Sustain","MIDI CC"]
-    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp"]
+    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance"]
     func binding<T>(_ performance:Bool,_ slot:Int,_ key:WritableKeyPath<MatrixAssignment,T>)->Binding<T> {
         Binding(get:{m.matrixRows(performance:performance)[slot][keyPath:key]},set:{value in m.checkpoint();m.updateMatrix(performance:performance,slot:slot){$0[keyPath:key]=value}})
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16){
             Panel(title:"Sound Matrix · layer \(layerLetters[m.selectedLayer])"){
-                Text("Add movement from either LFO or the amplitude envelope. These routes add to the controls in Edit; LFO sources use their full waveform, independent of the Depth slider.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                Text("Route either LFO, Amp envelope or Mod envelope to a sound control. Routes add to Edit settings; Mod envelope is independent of its direct Amount.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 ForEach(0..<6){row in routeRow(false,row)}
             }
             Panel(title:"Performance Matrix · this patch"){
@@ -1270,7 +1355,7 @@ struct MatrixView:View {
             } else if performance {Color.clear.frame(width:65,height:1)}
             Image(systemName:"arrow.right").foregroundStyle(palette.muted)
             Picker("Destination",selection:binding(performance,slot,\.destination)){
-                ForEach(performance ? Array(0..<destinations.count):Array(0..<6)+Array(12..<16),id:\.self){i in Text(destinations[i]).tag(i)}
+                ForEach(performance ? Array(0..<destinations.count):Array(0..<6)+Array(12..<destinations.count),id:\.self){i in Text(destinations[i]).tag(i)}
             }.labelsHidden().frame(width:150).accessibilityLabel("Slot \(slot+1) destination")
             if performance {
                 if (8...11).contains(row.destination){Text("Whole patch").foregroundStyle(palette.accent).frame(width:100)}else{
@@ -1295,7 +1380,9 @@ struct RoutingView:View {
             Text("Choose the layers each MIDI source plays. MIDI inputs and the audio output are independent.").foregroundStyle(palette.muted).font(.system(size:15,weight:palette.weight(.regular)))
             if m.sources.isEmpty {Panel(title:"No MIDI sources detected"){Text("Connect a keyboard by USB, then Refresh. The on-screen keyboard still works.").foregroundStyle(palette.muted);Text("Yamaha keyboards use USB TO HOST and the Yamaha Steinberg USB Driver.").font(.system(size:15,weight:palette.weight(.regular)))}}
             ForEach(m.sources){source in sourceRow(source)}
-            Panel(title:"Audio output"){
+            if m.backend.isPlugin {Panel(title:"DAW connection"){
+                Text("Your DAW supplies MIDI, audio output, buffer size, and tempo. Aurora’s MIDI Learn assignments save with this project and work with the editor closed. You can also use your DAW’s automation and MIDI mapping. Record and bounce from the instrument track.").foregroundStyle(palette.muted)
+            }} else {Panel(title:"Audio output"){
                 Text(m.running ? "Audio is enabled. Changing the output stops playback until you enable audio again.":"Audio is stopped. Choose the output connected to your headphones or speakers.").font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 HStack{Picker("Output",selection:Binding(get:{m.output},set:{m.changeOutput($0)})){Text("System default").tag(UInt32(0));ForEach(m.devices){Text($0.name).tag($0.id)}}
                     Picker("Buffer",selection:$m.buffer){ForEach([64,128,256,512],id:\.self){Text("\($0) frames").tag($0)}}.frame(width:220).disabled(m.running)}
@@ -1305,6 +1392,7 @@ struct RoutingView:View {
                 Text("Use Preset mode and the musical USB MIDI port. Click MIDI Learn below any macro, then move one of your eight knobs. Cross the macro's current position to take control without a jump.").font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 if m.mappings.isEmpty{Text("No knobs mapped yet.").font(.system(size:15,weight:palette.weight(.regular)))}
                 ForEach(m.mappings,id:\.macro){mapping in HStack{Text(m.macroNames[mapping.macro]);Spacer();Text("CC \(mapping.controller) · ch \(mapping.channel)").foregroundStyle(palette.muted);Button("Remove"){m.mappings.removeAll{$0.macro==mapping.macro};m.persist()}}.font(.system(size:15,weight:palette.weight(.regular)))}
+            }
             }
         }
     }
@@ -1331,6 +1419,7 @@ struct PerformanceTools:View {
         VStack(alignment:.leading,spacing:8){
             HStack(spacing:18){
                 Button("Hold"){m.setHold(!m.holding)}.buttonStyle(AuroraButtonStyle(selected:m.holding)).accessibilityAddTraits(m.holding ? .isSelected:[]).disabled(!m.running).help("Hold released notes and arpeggios until Hold is turned off or Panic is pressed.")
+                if m.backend.isPlugin {Text("DAW tempo · Record and bounce in your DAW").foregroundStyle(palette.muted);Spacer()} else {
                 Picker("Clock",selection:Binding(get:{m.externalClock ? m.clockSourceID:0},set:{m.setClock($0 != 0,source:$0)})){
                     Text("Internal").tag(Int32(0));ForEach(m.sources){Text($0.name).tag($0.id)}
                 }.frame(maxWidth:360)
@@ -1339,6 +1428,7 @@ struct PerformanceTools:View {
                 Button(m.recording ? "Stop recording":"Record",systemImage:m.recording ? "stop.circle.fill":"record.circle"){m.toggleRecording()}.buttonStyle(AuroraButtonStyle(selected:m.recording)).disabled(m.normalizingRecording || (!m.running && !m.recording))
                 if m.recording{Text(String(format:"%02d:%02d",telemetry.seconds/60,telemetry.seconds%60)).monospacedDigit().frame(width:48)}
                 if let url=m.recordingURL,!m.recording,!m.normalizingRecording{Button("Show WAV"){NSWorkspace.shared.activateFileViewerSelecting([url])}}
+                }
             }
             if !m.recordingMessage.isEmpty{Text(m.recordingMessage).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
         }.padding(12).background(palette.surface,in:RoundedRectangle(cornerRadius:10))
@@ -1369,6 +1459,8 @@ struct PatchBrowserCard:View {
     let patch:SoundPreset
     let selected:Bool
     let userSound:Bool
+    let favorite:Bool
+    let toggleFavorite:()->Void
     let select:()->Void
     var body:some View{
         Button(action:select){
@@ -1388,6 +1480,9 @@ struct PatchBrowserCard:View {
                 .overlay(RoundedRectangle(cornerRadius:12).stroke(selected ? palette.buttonSelected:palette.graphCyan.opacity(0.25),lineWidth:selected ? 1.5:1))
                 .contentShape(RoundedRectangle(cornerRadius:12))
         }.buttonStyle(AuroraFlatButtonStyle()).help(patch.name+" · "+patch.detail).accessibilityLabel("Load patch \(patch.name)").accessibilityAddTraits(selected ? .isSelected:[])
+        .overlay(alignment:.bottomTrailing){
+            Button(action:toggleFavorite){Image(systemName:favorite ? "star.fill":"star").foregroundStyle(favorite ? palette.accent:Color.white).frame(width:32,height:32).background(palette.surface,in:RoundedRectangle(cornerRadius:6))}.buttonStyle(AuroraFlatButtonStyle()).padding(8).accessibilityLabel("\(favorite ? "Unfavorite":"Favorite") \(patch.name)")
+        }
     }
 }
 struct PatchBrowser:View {
@@ -1400,12 +1495,19 @@ struct PatchBrowser:View {
         let order=$0.name.localizedStandardCompare($1.name)
         return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
     }}
+    func step(_ delta:Int){
+        let list=sounds;guard !list.isEmpty else{return}
+        let next=list.firstIndex{$0.id==m.patch.id}.map{($0+delta+list.count)%list.count} ?? (delta>0 ? 0:list.count-1)
+        m.loadPreset(list[next])
+    }
     var body:some View{
         let patches=sounds
         VStack(alignment:.leading,spacing:18){
             HStack(spacing:16){
                 VStack(alignment:.leading,spacing:4){Text("All patches").font(.system(size:26,weight:palette.weight(.semibold)));Text("Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
                 Spacer()
+                Button{step(-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.leftArrow,modifiers:[]).accessibilityLabel("Previous patch in this category")
+                Button{step(1)}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.rightArrow,modifiers:[]).accessibilityLabel("Next patch in this category")
                 Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
                 Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:palette.weight(.semibold))).frame(width:36,height:36).background(palette.buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
             }
@@ -1423,13 +1525,14 @@ struct PatchBrowser:View {
                                     let index=row*7+column
                                     if index<patches.count{
                                         let p=patches[index]
-                                        PatchBrowserCard(patch:p,selected:m.patch.id==p.id,userSound:m.userPresets.contains(where:{$0.id==p.id})){m.loadPreset(p)}.id(p.id)
+                                        PatchBrowserCard(patch:p,selected:m.patch.id==p.id,userSound:m.userPresets.contains(where:{$0.id==p.id}),favorite:m.favorites.contains(p.id),toggleFavorite:{m.favorite(p.id)}){m.loadPreset(p)}.id(p.id)
                                     }else{Color.clear.frame(height:104).accessibilityHidden(true)}
                                 }
                             }
                         }
                     }.padding(2)
                 }.onChange(of:category){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.patch.id){_,id in withAnimation(.easeOut(duration:0.18)){proxy.scrollTo(id,anchor:.center)}}
             }
             HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }.padding(24).background(palette.surface,in:RoundedRectangle(cornerRadius:20))
@@ -1500,9 +1603,10 @@ struct AuroraContentView:View {
             HStack(spacing:3){ForEach(["Play","Edit","Matrix","Routing"],id:\.self){name in Button{m.screen=name}label:{Text(name).font(.system(size:13,weight:m.screen==name ? .bold:.regular)).frame(maxWidth:.infinity).frame(height:28).background(m.screen==name ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(m.screen==name ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:m.screen==name)).accessibilityAddTraits(m.screen==name ? .isSelected:[])}}.frame(width:250)
             OutputScope(telemetry:m.scope).frame(minWidth:65,idealWidth:120,maxWidth:160).frame(height:30)
             HStack(spacing:6){
-                if m.externalClock{ClockReadout(telemetry:m.performanceTelemetry)}else{TextField("Tempo",value:Binding(get:{Int(m.patch.globals[1])},set:{m.global(1,Double($0))}),format:.number).textFieldStyle(.roundedBorder).frame(width:48).monospacedDigit().accessibilityLabel("Tempo")}
+                if m.backend.isPlugin {Text(String(format:"%.1f",m.patch.globals[1])).monospacedDigit().help("Tempo supplied by your DAW")}
+                else if m.externalClock{ClockReadout(telemetry:m.performanceTelemetry)}else{TextField("Tempo",value:Binding(get:{Int(m.patch.globals[1])},set:{m.global(1,Double($0))}),format:.number).textFieldStyle(.roundedBorder).frame(width:48).monospacedDigit().accessibilityLabel("Tempo")}
                 Text("BPM").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-                Button("Tap"){m.tapTempo()}.disabled(m.externalClock).help("Tap repeatedly to set the tempo")
+                if !m.backend.isPlugin{Button("Tap"){m.tapTempo()}.disabled(m.externalClock).help("Tap repeatedly to set the tempo")}
             }.fixedSize()
             Divider().frame(height:24)
             HStack(spacing:0){
@@ -1516,6 +1620,7 @@ struct AuroraContentView:View {
             }
             HStack(spacing:6){Text("Master").foregroundStyle(palette.muted);Slider(value:m.globalBinding(0),in:0...1).frame(minWidth:65,idealWidth:95,maxWidth:115).tint(palette.accent).accessibilityLabel("Master volume");Text(String(format:"%.0f%%",m.patch.globals[0]*100)).frame(width:40).monospacedDigit()}
             Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:17,weight:m.running ? .bold:.regular)).foregroundStyle(m.running ? palette.selectedText:Color.white).frame(width:34,height:30).background(m.running ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle(selected:m.running)).accessibilityLabel(m.running ? "Turn audio off":"Turn audio on").help(m.status+String(format:" · %.1f kHz · %d frames",m.sampleRate/1000,m.actualFrames))
+            .disabled(m.backend.isPlugin)
             Button("Panic",systemImage:"stop.circle"){m.panic()}.help("Stop all notes and effect tails").fixedSize().keyboardShortcut(".",modifiers:.command)
             EngineReadout(telemetry:m.telemetry).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted).frame(width:130,alignment:.trailing)
         }.font(.system(size:14,weight:palette.weight(.regular))).padding(.horizontal,20).padding(.vertical,14)
@@ -1562,6 +1667,9 @@ struct AuroraContentView:View {
                 VStack(alignment:.leading,spacing:5){
                     Text("\(m.library.count) of \(m.collectionSounds.count) sounds").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     Text("by Ray Bridge Digital").font(.system(size:14,weight:palette.weight(.bold),design:.rounded)).foregroundStyle(palette.accent)
+                    if let version=AuroraResources.bundle.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String {
+                        Text("v"+version.split(separator:".").prefix(2).joined(separator:".")).font(.system(size:13,weight:.regular)).foregroundStyle(palette.muted).accessibilityLabel("Aurora version \(version)")
+                    }
                 }
                 Spacer(minLength:6)
                 Button{showingPatchBrowser=true}label:{Image(systemName:"square.grid.3x3.fill").font(.system(size:18,weight:palette.weight(.regular))).foregroundStyle(palette.accent).frame(width:34,height:34).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle()).help("Browse all patches").accessibilityLabel("Open all patches")

@@ -92,8 +92,9 @@ enum MotionShapes {
     @Published var libraryID:String?=nil
 }
 @MainActor final class MotionTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published var phases=[Float](repeating:-1,count:4)
-    func update(){let next=(0..<4).map{(aurora_motion_phase(Int32($0))*300).rounded()/300};if next != phases{phases=next}}
+    func update(){let next=(0..<4).map{(backend.aurora_motion_phase(Int32($0))*300).rounded()/300};if next != phases{phases=next}}
 }
 extension SynthModel {
     var motionSettings:MotionSettings{patch.motion?[selectedLayer] ?? MotionSettings()}
@@ -105,7 +106,7 @@ extension SynthModel {
     }
     func applyMotion(){
         for layer in 0..<4 {let data=(patch.motion?[layer] ?? MotionSettings()).packet
-            _=data.withUnsafeBufferPointer{aurora_set_motion(Int32(layer),$0.baseAddress,Int32($0.count))}
+            _=data.withUnsafeBufferPointer{backend.aurora_set_motion(Int32(layer),$0.baseAddress,Int32($0.count))}
         }
     }
 }

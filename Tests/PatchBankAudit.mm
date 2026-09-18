@@ -114,7 +114,7 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     for (int layer = 0; layer < 4; ++layer) {
         id entry = layers[layer];
         id values = [entry isKindOfClass:[NSDictionary class]] ? entry[@"values"] : nil;
-        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 33)) {
+        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 58 && [values count] != 33)) {
             [errors addObject:[NSString stringWithFormat:@"Layer %d must contain all %d parameter values", layer, APParameterCount]];
             continue;
         }
@@ -168,6 +168,22 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
             engine.setMatrix(bank,slot,[r[@"enabled"] boolValue],[r[@"source"] intValue],[r[@"destination"] intValue],[r[@"target"] intValue],[r[@"cc"] intValue],[r[@"amount"] floatValue]);
         }
     }
+    NSArray *motion=patch[@"motion"], *sends=patch[@"sends"];
+    if(motion && motion.count!=4)[errors addObject:@"Motion must describe four layers"];
+    if(sends && sends.count!=4)[errors addObject:@"Sends must describe four layers"];
+    for(int layer=0;layer<4;layer++){
+        if(motion.count==4){
+            NSDictionary *m=motion[layer];NSArray *points=m[@"points"],*routes=m[@"routes"];
+            if(points.count<2 || points.count>16 || routes.count!=8){[errors addObject:@"Invalid motion dimensions"];continue;}
+            std::array<float,85> packet{};
+            packet[0]=[m[@"enabled"] boolValue];packet[1]=[m[@"loop"] boolValue];packet[2]=[m[@"seconds"] floatValue];packet[3]=points.count;
+            for(NSUInteger i=0;i<points.count;i++){packet[4+i*3]=[points[i][@"x"] floatValue];packet[5+i*3]=[points[i][@"y"] floatValue];packet[6+i*3]=[points[i][@"curve"] floatValue];}
+            for(int i=0;i<8;i++){packet[52+i*4]=[routes[i][@"enabled"] boolValue];packet[53+i*4]=[routes[i][@"minimum"] floatValue];packet[54+i*4]=[routes[i][@"maximum"] floatValue];packet[55+i*4]=[routes[i][@"inverted"] boolValue];}
+            if([m[@"beats"] isKindOfClass:[NSNumber class]])packet[84]=[m[@"beats"] floatValue];
+            if(!engine.setMotion(layer,packet.data(),packet.size()))[errors addObject:@"DSP rejected motion settings"];
+        }
+        if(sends.count==4)engine.setLayerSends(layer,[sends[layer][@"delay"] floatValue],[sends[layer][@"reverb"] floatValue]);
+    }
     id macros = patch[@"macros"];
     if (![macros isKindOfClass:[NSArray class]] || [macros count] != 8)
         [errors addObject:@"Exactly eight macro values are required"];
@@ -177,6 +193,31 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
             [errors addObject:[NSString stringWithFormat:@"Macro %d must be a finite number in 0...1", macro]];
     }
     return errors.count == 0;
+}
+
+void applyCustomMacro(NSDictionary *patch,aurora::SynthEngine& engine,int index,double position){
+    NSDictionary *macro=patch[@"customMacros"][[NSString stringWithFormat:@"%d",index]];
+    for(NSDictionary *r in macro[@"routes"]){
+        int layer=[r[@"target"][@"layer"] intValue],p=[r[@"target"][@"parameter"] intValue];
+        double n=[r[@"from"] doubleValue]+([r[@"to"] doubleValue]-[r[@"from"] doubleValue])*position;
+        double lo=0,hi=1;
+        bool logarithmic=false;
+        if(layer>=0){
+            switch(p){
+                case 7:lo=30;hi=18000;logarithmic=true;break;
+                case 9:lo=.001;hi=8;logarithmic=true;break;
+                case 10:lo=.01;hi=8;logarithmic=true;break;
+                case 12:lo=.01;hi=12;logarithmic=true;break;
+                case 16:case 29:lo=.03;hi=20;logarithmic=true;break;
+                case 14:case 20:lo=-1;hi=1;break;
+                case 34:lo=.05;hi=.95;break;
+            }
+        }else{
+            switch(p){case 2:case 5:hi=.6;break;case 3:case 4:hi=.75;break;case 7:case 10:lo=.03;hi=5;break;case 13:lo=.2;hi=8;break;}
+        }
+        double actual=logarithmic?lo*std::pow(hi/lo,n):lo+(hi-lo)*n;
+        if(layer<0)engine.setGlobal(p,actual);else engine.setParameter(layer,p,actual);
+    }
 }
 }
 
@@ -249,6 +290,16 @@ int main(int argc, const char *argv[]) {
                     if (!stress.finite) [errors addObject:@"Nonfinite stress output"];
                     if (stress.peak > 0.98) [errors addObject:@"Eight-note stress peak above 0.98"];
                     panicPassed = checkPanic(engine, errors) && panicPassed;
+                    if(patch[@"customMacros"]){
+                        double xyPeak=0;
+                        for(auto point:{std::pair{0.,0.},std::pair{0.,1.},std::pair{1.,0.},std::pair{1.,1.}}){
+                            applyCustomMacro(patch,engine,0,point.first);applyCustomMacro(patch,engine,1,point.second);
+                            notes(engine,keys,true);auto xy=render(engine,1.5);notes(engine,keys,false);
+                            if(!xy.finite || xy.peak>.98)[errors addObject:@"Unsafe output at an XY corner"];
+                            xyPeak=std::max(xyPeak,xy.peak);checkPanic(engine,errors);
+                        }
+                        result[@"xyCornerPeak"]=@(xyPeak);
+                    }
                     NSString *hash = [NSString stringWithFormat:@"%016llx", (unsigned long long)hold.hash];
                     NSMutableArray *same = hashes[hash];
                     if (!same) { same = [NSMutableArray array]; hashes[hash] = same; }

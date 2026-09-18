@@ -1,0 +1,11 @@
+VST3 SDK 3.8.1 (MIT)
+https://github.com/steinbergmedia/vst3sdk.git
+3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96
+Recursive submodules must match this commit.
+
+Apple AudioUnitSDK 1.4.0 (Apache-2.0)
+https://github.com/apple/AudioUnitSDK.git
+bd98b31feff57a15989fcfab4cd86dc63382b1ac
+
+CMake 4.4.3 (BSD-3-Clause, build tool only)
+Installed from the official cmake package on PyPI.
