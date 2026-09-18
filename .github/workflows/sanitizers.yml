@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: native-sanitizers-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sanitize:
     name: ${{ matrix.label }}
@@ -37,6 +41,7 @@ jobs:
         shell: bash
         env:
           AURORA_SANITIZER: ${{ matrix.sanitizer }}
+          AURORA_SKIP_BENCHMARKS: 1
           ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:detect_stack_use_after_return=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           TSAN_OPTIONS: halt_on_error=1:history_size=7
