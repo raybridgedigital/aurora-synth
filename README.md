@@ -1,5 +1,9 @@
 # Aurora
 
+## Set pads · 0.20.2
+
+Play tab now has a live **Set** rack under the four layers: page buttons **1–4** and sixteen patch pads for fast sound switching during performance. Pads store patch references (not snapshots); right-click to assign or clear. Sticky favorites-only filter and a Dock waveform app icon are included.
+
 ## Output boost · 0.20.1
 
 House calibration for dual-keyboard use (CK88 / stage piano as the other layer): Output boost defaults to **+9 dB** (was +24). Untouched +24 sessions migrate once; customized boost values are kept. In-app sidebar still shows **v0.20**; bundle metadata is 0.20.1. Master ~50–75% is the intended blend range. See [SONIC-UPGRADES.md](SONIC-UPGRADES.md).

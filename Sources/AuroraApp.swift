@@ -164,11 +164,18 @@ struct CCMapping: Codable {
     var controller: Int
     var macro: Int
 }
+struct SetSlot: Codable, Equatable {
+    var patchId: String? = nil
+    var name: String? = nil
+    var isEmpty: Bool { patchId == nil || patchId?.isEmpty == true }
+}
+
 struct SavedSession: Codable {
     var directMappings:[DirectCCMapping]?=nil
     var version: Int = 1
     var patch: SoundPreset
     var favorites: Set<String>
+    var favoritesOnly: Bool? = nil
     var routes: [Int32: SourceRoute]
     var mappings: [CCMapping]
     var outputUID: String?
@@ -178,6 +185,8 @@ struct SavedSession: Codable {
     var deletedPresets: [SoundPreset]? = nil
     var outputGain:Double?=nil
     var outputGainRevision:Int?=nil
+    var setPage: Int? = nil
+    var setSlots: [[SetSlot]]? = nil
 }
 
 enum FactoryBank {
@@ -425,6 +434,8 @@ struct VoiceStatus:View {
     }
     @Published var favoritesOnly = false
     @Published var favorites: Set<String> = []
+    @Published var setPage = 0
+    @Published var setSlots: [[SetSlot]] = Array(repeating: Array(repeating: SetSlot(), count: 16), count: 4)
     @Published var devices: [AudioDevice] = []
     @Published var sources: [MIDISource] = []
     @Published var output: UInt32 = 0
@@ -934,6 +945,60 @@ struct VoiceStatus:View {
     func noteOff(_ note:Int) { guard pressed.contains(note) else{return};pressed.remove(note);backend.aurora_note_off(Int32(note)) }
     func panic() {backend.aurora_panic();pressed=[];holding=false;notice="All notes and effect tails stopped."}
     func favorite(_ id:String) { if favorites.contains(id){favorites.remove(id)}else{favorites.insert(id)};persist() }
+    func setFavoritesOnly(_ on:Bool) {
+        guard favoritesOnly != on else { return }
+        favoritesOnly = on
+        persist()
+    }
+    static func normalizedSetSlots(_ raw: [[SetSlot]]?) -> [[SetSlot]] {
+        var pages = Array(repeating: Array(repeating: SetSlot(), count: 16), count: 4)
+        guard let raw else { return pages }
+        for p in 0..<min(4, raw.count) {
+            for s in 0..<min(16, raw[p].count) {
+                let slot = raw[p][s]
+                let id = slot.patchId?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let id, !id.isEmpty {
+                    pages[p][s] = SetSlot(patchId: String(id.prefix(80)), name: slot.name.map { String($0.prefix(120)) })
+                }
+            }
+        }
+        return pages
+    }
+    func setSetPage(_ page: Int) {
+        let next = max(0, min(3, page))
+        guard setPage != next else { return }
+        setPage = next
+        persist()
+    }
+    private var setLibrary: [SoundPreset] { userPresets + FactoryBank.all }
+    func presetForSetSlot(_ slot: SetSlot) -> SoundPreset? {
+        guard let id = slot.patchId, !id.isEmpty else { return nil }
+        return setLibrary.first { $0.id == id }
+    }
+    func recallSetSlot(_ index: Int) {
+        guard (0..<16).contains(index) else { return }
+        let slot = setSlots[setPage][index]
+        guard !slot.isEmpty else { notice = "Set pad \(index + 1) is empty. Right-click to assign the current patch."; return }
+        guard let preset = presetForSetSlot(slot) else {
+            notice = "Set pad \(index + 1) points to a missing patch (\(slot.name ?? "unknown")). Clear or reassign it."
+            return
+        }
+        if patch.id == preset.id { notice = "Already on \(preset.name)."; return }
+        loadPreset(preset)
+    }
+    func assignSetSlot(_ index: Int) {
+        guard (0..<16).contains(index) else { return }
+        setSlots[setPage][index] = SetSlot(patchId: patch.id, name: patch.name)
+        persist()
+        notice = "Assigned \(patch.name) to page \(setPage + 1) · pad \(index + 1)."
+    }
+    func clearSetSlot(_ index: Int) {
+        guard (0..<16).contains(index) else { return }
+        guard !setSlots[setPage][index].isEmpty else { return }
+        setSlots[setPage][index] = SetSlot()
+        persist()
+        notice = "Cleared page \(setPage + 1) · pad \(index + 1)."
+    }
     func saveUserPreset() {
         finishComparison()
         let name=String(saveName.trimmingCharacters(in:.whitespacesAndNewlines).prefix(120));guard !name.isEmpty else{return}
@@ -941,7 +1006,7 @@ struct VoiceStatus:View {
         let category=String(saveCategory.trimmingCharacters(in:.whitespacesAndNewlines).prefix(60))
         if !category.isEmpty{copy.category=category}
         userPresets.insert(copy,at:0);patch=copy;dirty=false;showingSave=false
-        collection="Your sounds";self.category="All categories";search="";favoritesOnly=false
+        collection="Your sounds";self.category="All categories";search=""
         persist();notice="Saved \(name)."
     }
     func exportPreset() {
@@ -971,7 +1036,7 @@ struct VoiceStatus:View {
         }
         guard !imported.isEmpty else{notice="No valid Aurora presets were found in the selected files.";return}
         userPresets.insert(contentsOf:imported,at:0);loadPreset(imported[0])
-        collection="Your sounds";category="All categories";search="";favoritesOnly=false;persist()
+        collection="Your sounds";category="All categories";search="";persist()
         notice="Imported \(imported.count) preset\(imported.count==1 ? "":"s")"+(failed>0 ? "; \(failed) item\(failed==1 ? "":"s") could not be imported.":".")
     }
     func importPreset() {
@@ -997,7 +1062,7 @@ struct VoiceStatus:View {
         if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,favoritesOnly:favoritesOnly,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4,setPage:setPage,setSlots:setSlots)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {
@@ -1016,10 +1081,12 @@ struct VoiceStatus:View {
             transpose=max(-24,min(24,s.transpose ?? 0))
             var directIDs=Set<String>(),directTargets=Set<ControlTarget>()
             directMappings=Array((s.directMappings ?? []).filter{$0.valid && directIDs.insert($0.id).inserted && directTargets.insert($0.target).inserted}.prefix(256))
-            patch=valid;favorites=s.favorites;routes=s.routes.filter{(0...15).contains($0.value.mask) && (0...16).contains($0.value.channel)}
+            patch=valid;favorites=s.favorites;favoritesOnly=s.favoritesOnly ?? false;routes=s.routes.filter{(0...15).contains($0.value.mask) && (0...16).contains($0.value.channel)}
             outputGain=Self.restoredOutputGain(s.outputGain,revision:s.outputGainRevision)
             mappings=s.mappings.filter{(0..<8).contains($0.macro) && (0...127).contains($0.controller) && (1...16).contains($0.channel)}
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
+            setPage=max(0,min(3,s.setPage ?? 0))
+            setSlots=Self.normalizedSetSlots(s.setSlots)
         }
         if let data=try? Data(contentsOf:folder.appendingPathComponent("presets.json")),let list=try? JSONDecoder().decode([SoundPreset].self,from:data){userPresets=list.compactMap{Self.sanitized($0)}}
         // Retired factory sounds should not remain the startup sound after the
@@ -1516,6 +1583,129 @@ struct CategoryWrap:Layout {
         for (i,point) in positions(subviews,bounds.width).points.enumerated(){subviews[i].place(at:CGPoint(x:bounds.minX+point.x,y:bounds.minY+point.y),proposal:.unspecified)}
     }
 }
+struct PerformanceSetRack: View {
+    @Environment(\.auroraPalette) private var palette
+    @ObservedObject var m: SynthModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Text("Set").font(.system(size: 14, weight: palette.weight(.medium))).foregroundStyle(palette.muted)
+                HStack(spacing: 5) {
+                    ForEach(0..<4, id: \.self) { page in
+                        SetChromeButton(
+                            title: "\(page + 1)",
+                            subtitle: nil,
+                            active: m.setPage == page,
+                            filled: true,
+                            missing: false,
+                            compact: true
+                        ) { m.setSetPage(page) }
+                        .accessibilityLabel("Set page \(page + 1)")
+                        .accessibilityAddTraits(m.setPage == page ? .isSelected : [])
+                        .help("Set page \(page + 1) · 16 pads")
+                    }
+                }
+                Text("Live patch pads · tap to load · right-click to assign or clear")
+                    .font(.system(size: 12, weight: palette.weight(.regular))).foregroundStyle(palette.muted)
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 5) {
+                ForEach(0..<16, id: \.self) { index in
+                    SetPadButton(m: m, index: index)
+                }
+            }
+        }
+        .padding(12)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// Shared chrome for Set page buttons and the 16 pads — same fill, stroke, and bold-on-active text.
+struct SetChromeButton: View {
+    @Environment(\.auroraPalette) private var palette
+    let title: String
+    let subtitle: String?
+    let active: Bool
+    let filled: Bool
+    let missing: Bool
+    /// Page chips stay compact (layer A–D width); pads use the original wide row size.
+    var compact: Bool = false
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let subtitle {
+                    VStack(spacing: 2) {
+                        Text(title)
+                            .font(.system(size: compact ? 17 : 18, weight: active ? .bold : .semibold))
+                            .monospacedDigit()
+                        Text(subtitle)
+                            .font(.system(size: 9, weight: .regular))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                } else {
+                    Text(title)
+                        .font(.system(size: compact ? 17 : 18, weight: active ? .bold : .semibold))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(active ? palette.selectedText : (filled ? Color.white : palette.muted))
+            .frame(maxWidth: compact ? nil : .infinity)
+            .frame(width: compact ? 32 : nil, height: compact ? 40 : 50)
+            .background(
+                active ? palette.buttonSelected : (filled ? palette.buttonSurface : palette.buttonSurface.opacity(0.45)),
+                in: RoundedRectangle(cornerRadius: compact ? 5 : 7)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: compact ? 5 : 7)
+                    .stroke(
+                        missing ? Color.orange.opacity(0.9) :
+                        (active ? palette.accent : palette.graphCyan.opacity(filled ? 0.35 : 0.18)),
+                        lineWidth: active || missing ? 1.4 : 1
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: compact ? 5 : 7))
+        }
+        .buttonStyle(AuroraFlatButtonStyle())
+        .frame(width: compact ? 32 : nil)
+    }
+}
+
+struct SetPadButton: View {
+    @Environment(\.auroraPalette) private var palette
+    @ObservedObject var m: SynthModel
+    let index: Int
+    private var slot: SetSlot { m.setSlots[m.setPage][index] }
+    private var filled: Bool { !slot.isEmpty }
+    private var active: Bool { filled && slot.patchId == m.patch.id }
+    private var missing: Bool { filled && m.presetForSetSlot(slot) == nil }
+    var body: some View {
+        SetChromeButton(
+            title: "\(index + 1)",
+            subtitle: filled ? String((slot.name ?? "—").prefix(7)) : "·",
+            active: active,
+            filled: filled,
+            missing: missing
+        ) { m.recallSetSlot(index) }
+        .help(helpText)
+        .accessibilityLabel(accessibility)
+        .contextMenu {
+            Button("Assign current patch") { m.assignSetSlot(index) }
+            Button("Clear", role: .destructive) { m.clearSetSlot(index) }.disabled(!filled)
+        }
+    }
+    private var helpText: String {
+        if !filled { return "Pad \(index + 1) empty · right-click to assign \(m.patch.name)" }
+        if missing { return "Pad \(index + 1): missing patch \(slot.name ?? "")" }
+        return "Pad \(index + 1): \(slot.name ?? "")"
+    }
+    private var accessibility: String {
+        if !filled { return "Empty set pad \(index + 1)" }
+        return "Set pad \(index + 1), \(slot.name ?? "patch")\(active ? ", selected" : "")"
+    }
+}
+
 @MainActor final class PatchBrowserState:ObservableObject {
     @Published var visible=false
     @Published var category:String?=nil
@@ -1591,7 +1781,9 @@ struct PatchBrowser:View {
     let close:()->Void
     @StateObject private var state=PatchBrowserState()
     var category:String?{get{state.category} nonmutating set{state.category=newValue}}
-    var sounds:[SoundPreset]{(state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{category==nil || $0.category==category}.sorted{
+    var sounds:[SoundPreset]{(state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
+        (category==nil || $0.category==category) && (!m.favoritesOnly || m.favorites.contains($0.id))
+    }.sorted{
         let order=$0.name.localizedStandardCompare($1.name)
         return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
     }}
@@ -1603,8 +1795,24 @@ struct PatchBrowser:View {
     var body:some View{
         let patches=sounds
         VStack(alignment:.leading,spacing:18){
-            HStack(spacing:16){
-                VStack(alignment:.leading,spacing:4){Text(state.userSavedOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)));Text(state.userSavedOnly ? "Your saved and imported sounds, ready to audition.":"Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
+            HStack(alignment:.center,spacing:16){
+                HStack(alignment:.center,spacing:12){
+                    VStack(alignment:.leading,spacing:4){
+                        Text(state.userSavedOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)))
+                        Text(state.userSavedOnly ? "Your saved and imported sounds, ready to audition.":"Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                    }
+                    Button{m.setFavoritesOnly(!m.favoritesOnly)}label:{
+                        Image(systemName:m.favoritesOnly ? "star.fill":"star")
+                            .font(.system(size:15,weight:.semibold))
+                            .foregroundStyle(m.favoritesOnly ? palette.accent:Color.white)
+                            .frame(width:30,height:30)
+                            .background(palette.surface,in:RoundedRectangle(cornerRadius:6))
+                            .overlay(RoundedRectangle(cornerRadius:6).stroke(m.favoritesOnly ? palette.accent.opacity(0.85):palette.graphCyan.opacity(0.35),lineWidth:1))
+                    }.buttonStyle(AuroraFlatButtonStyle())
+                    .help(m.favoritesOnly ? "Showing favorites only · tap to show all":"Show favorites only")
+                    .accessibilityLabel(m.favoritesOnly ? "Show all patches":"Show favorites only")
+                    .accessibilityAddTraits(m.favoritesOnly ? .isSelected:[])
+                }
                 Spacer()
                 if state.userSavedOnly{
                     Button("Import…"){m.importPresets()}.buttonStyle(AuroraButtonStyle())
@@ -1667,6 +1875,16 @@ struct AuroraContentView:View {
                     LazyVStack(alignment:.leading,spacing:23){
                         HStack(alignment:.center){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();HStack(alignment:.center,spacing:8){if m.userPresets.contains(where:{$0.id==m.patch.id}){UserPatchMenu(name:m.patch.name,rename:{m.renameName=m.patch.name;m.renameCategory=m.patch.category;m.renameID=m.patch.id},deletePatch:{m.deleteSound(m.patch.id)})};Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}}
                         HStack(spacing:10){
+                            Button{m.setFavoritesOnly(!m.favoritesOnly)}label:{
+                                Image(systemName:m.favoritesOnly ? "star.fill":"star")
+                                    .foregroundStyle(m.favoritesOnly ? palette.accent:Color.white)
+                                    .frame(width:28,height:28)
+                                    .background(palette.surface,in:RoundedRectangle(cornerRadius:6))
+                                    .overlay(RoundedRectangle(cornerRadius:6).stroke(m.favoritesOnly ? palette.accent.opacity(0.85):palette.graphCyan.opacity(0.35),lineWidth:1))
+                            }.buttonStyle(AuroraFlatButtonStyle())
+                            .help(m.favoritesOnly ? "Showing favorites only · tap to show all":"Show favorites only")
+                            .accessibilityLabel(m.favoritesOnly ? "Show all patches":"Show favorites only")
+                            .accessibilityAddTraits(m.favoritesOnly ? .isSelected:[])
                             Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the filtered library")
                             Button{m.browsePatch(1)}label:{Image(systemName:"chevron.right")}.help("Next patch in the filtered library")
                             Button(m.comparingSaved ? "A · Saved — return to B":"B · Edited — compare A"){m.toggleComparison()}.buttonStyle(AuroraButtonStyle(selected:m.comparingSaved)).disabled(m.savedComparison==nil)
@@ -1676,6 +1894,7 @@ struct AuroraContentView:View {
                             if m.soloLayer>=0{Button("Clear solo"){m.toggleSolo(m.soloLayer)}}
                         }
                         HStack(spacing:10){ForEach(0..<4){LayerStrip(model:m,index:$0)}}
+                        PerformanceSetRack(m:m)
                         HStack(spacing:22){
                             Text("Layer \(layerLetters[m.selectedLayer])\nFX sends").font(.system(size:14,weight:palette.weight(.medium))).foregroundStyle(palette.muted)
                             ParameterSlider(title:"Delay send",value:m.sendBinding(true),onBegin:{m.checkpoint()})
@@ -1752,7 +1971,7 @@ struct AuroraContentView:View {
                 }.labelsHidden().accessibilityLabel("Sound category")
             }.font(.system(size:15,weight:palette.weight(.regular)))
                 .onChange(of:m.collection){_,_ in m.category="All categories"}
-            Toggle("Favorites",isOn:$m.favoritesOnly).toggleStyle(.checkbox).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+            Toggle("Favorites",isOn:Binding(get:{m.favoritesOnly},set:{m.setFavoritesOnly($0)})).toggleStyle(.checkbox).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
             ScrollView{LazyVStack(alignment:.leading,spacing:4){
                 ForEach(m.libraryGroups,id:\.category){group in
                     HStack(spacing:6){

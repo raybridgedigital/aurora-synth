@@ -43,6 +43,7 @@ printf 'Compiling native interface and linking Aurora…\n'
 
 cp "$BUILD_DIR/Aurora" "$APP_DIR/Contents/MacOS/Aurora"
 cp "$ROOT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
+cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$ROOT_DIR/Resources/Aurora100.json" "$APP_DIR/Contents/Resources/Aurora100.json"
 cp "$ROOT_DIR/Resources/AuroraPrism100.json" "$APP_DIR/Contents/Resources/AuroraPrism100.json"
 cp "$ROOT_DIR/Resources/AuroraNova100.json" "$APP_DIR/Contents/Resources/AuroraNova100.json"
