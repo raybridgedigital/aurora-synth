@@ -1096,11 +1096,11 @@ struct LayerStrip:View {
     let index:Int
     var body:some View {
         VStack(alignment:.leading,spacing:9){
-            HStack{
+            HStack(spacing:8){
                 Button{model.selectedLayer=index;if model.screen != "Matrix"{model.screen="Edit"}}label:{Text(layerLetters[index]).font(.system(size:15,weight:model.selectedLayer==index ? .bold:.regular)).frame(width:32,height:29).background(model.selectedLayer==index ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(model.selectedLayer==index ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:model.selectedLayer==index))
-                Spacer()
+                Spacer(minLength:8)
                 Button{model.toggleSolo(index)}label:{Text("S").font(.system(size:13,weight:model.soloLayer==index ? .bold:.regular)).foregroundStyle(model.soloLayer==index ? palette.selectedText:Color.white).frame(width:23,height:23).background(model.soloLayer==index ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4))}.buttonStyle(AuroraFlatButtonStyle(selected:model.soloLayer==index)).help("Solo layer \(layerLetters[index]); shared FX tails may continue")
-                Menu{Button("Copy layer"){model.copyLayer(index)};Button("Paste layer"){model.pasteLayer(index)}.disabled(model.layerClipboard==nil)}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:22).help("Copy or paste this layer, including its modulation and wavetable data")
+                Menu{Button("Copy layer"){model.copyLayer(index)};Button("Paste layer"){model.pasteLayer(index)}.disabled(model.layerClipboard==nil)}label:{AuroraEllipsisLabel()}.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Copy or paste this layer, including its modulation and wavetable data").accessibilityLabel("Copy or paste layer \(layerLetters[index])")
                 Button{model.checkpoint();model.set(index,0,model.patch.layers[index][0]>0.5 ? 0:1)}label:{Image(systemName:"power").foregroundStyle(model.patch.layers[index][0]>0.5 ? palette.selectedText:Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:model.patch.layers[index][0]>0.5)).accessibilityLabel("Enable layer \(layerLetters[index])")
             }
             Picker("Layer \(layerLetters[index]) waveform",selection:Binding(get:{model.patch.layers[index][44] > 0.5 ? 5:Int(model.patch.layers[index][1])},set:{model.checkpoint();if $0==5{model.set(index,44,1)}else{model.set(index,1,Double($0))};model.selectedLayer=index})){
@@ -1518,11 +1518,26 @@ struct CategoryWrap:Layout {
 struct UserPatchBadge:View {
     @Environment(\.auroraPalette) private var palette
     var body:some View {
-        Label("User",systemImage:"flag.fill").font(.system(size:10,weight:.bold))
-            .foregroundStyle(Color.white).padding(.horizontal,6).padding(.vertical,3)
+        Image(systemName:"flag.fill").font(.system(size:11,weight:.semibold))
+            .foregroundStyle(Color.white).frame(width:24,height:24)
             .background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:4))
             .overlay(RoundedRectangle(cornerRadius:4).stroke(palette.accent.opacity(0.8),lineWidth:1))
-            .fixedSize().accessibilityLabel("User-created patch")
+            .fixedSize().accessibilityLabel("User-created patch").help("User-created patch")
+    }
+}
+struct AuroraEllipsisLabel:View {
+    var body:some View {
+        Image(systemName:"ellipsis").font(.system(size:15,weight:.bold)).foregroundStyle(Color.white).frame(width:24,height:24).contentShape(Rectangle())
+    }
+}
+struct UserPatchMenu:View {
+    let name:String
+    let rename:()->Void
+    let deletePatch:()->Void
+    var body:some View {
+        Menu{Button("Rename / category…",action:rename);Button("Delete",role:.destructive,action:deletePatch)}label:{
+            AuroraEllipsisLabel()
+        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Manage \(name)").help("Rename or delete \(name)")
     }
 }
 struct PatchBrowserCard:View {
@@ -1532,6 +1547,8 @@ struct PatchBrowserCard:View {
     let userSound:Bool
     let favorite:Bool
     let toggleFavorite:()->Void
+    let rename:()->Void
+    let deletePatch:()->Void
     let select:()->Void
     var body:some View{
         Button(action:select){
@@ -1543,9 +1560,8 @@ struct PatchBrowserCard:View {
                 Spacer(minLength:0)
                 HStack{
                     Text(patch.category).font(.system(size:13,weight:palette.weight(.medium))).foregroundStyle(selected ? palette.accent:palette.muted).lineLimit(1)
-                    if userSound{UserPatchBadge()}
                     Spacer()
-                    Color.clear.frame(width:25,height:1)
+                    Color.clear.frame(width:userSound ? 89:25,height:24)
                 }
             }.padding(15).frame(height:104).frame(maxWidth:.infinity,alignment:.leading)
                 .background(selected ? palette.buttonSurface:palette.buttonSurface.opacity(0.4),in:RoundedRectangle(cornerRadius:12))
@@ -1553,7 +1569,13 @@ struct PatchBrowserCard:View {
                 .contentShape(RoundedRectangle(cornerRadius:12))
         }.buttonStyle(AuroraFlatButtonStyle()).help(patch.name+" · "+patch.detail).accessibilityLabel("Load patch \(patch.name)").accessibilityAddTraits(selected ? .isSelected:[])
         .overlay(alignment:.bottomTrailing){
-            Button(action:toggleFavorite){Image(systemName:favorite ? "star.fill":"star").foregroundStyle(favorite ? palette.accent:Color.white).frame(width:32,height:32).background(palette.surface,in:RoundedRectangle(cornerRadius:6))}.buttonStyle(AuroraFlatButtonStyle()).padding(8).accessibilityLabel("\(favorite ? "Unfavorite":"Favorite") \(patch.name)")
+            HStack(spacing:8){
+                if userSound{
+                    UserPatchBadge().allowsHitTesting(false)
+                    UserPatchMenu(name:patch.name,rename:rename,deletePatch:deletePatch)
+                }
+                Button(action:toggleFavorite){Image(systemName:favorite ? "star.fill":"star").foregroundStyle(favorite ? palette.accent:Color.white).frame(width:32,height:32).background(palette.surface,in:RoundedRectangle(cornerRadius:6))}.buttonStyle(AuroraFlatButtonStyle()).accessibilityLabel("\(favorite ? "Unfavorite":"Favorite") \(patch.name)")
+            }.padding(8)
         }
     }
 }
@@ -1602,7 +1624,7 @@ struct PatchBrowser:View {
                                     let index=row*7+column
                                     if index<patches.count{
                                         let p=patches[index]
-                                        PatchBrowserCard(patch:p,selected:m.patch.id==p.id,userSound:m.userPresets.contains(where:{$0.id==p.id}),favorite:m.favorites.contains(p.id),toggleFavorite:{m.favorite(p.id)}){m.loadPreset(p)}.id(p.id)
+                                        PatchBrowserCard(patch:p,selected:m.patch.id==p.id,userSound:m.userPresets.contains(where:{$0.id==p.id}),favorite:m.favorites.contains(p.id),toggleFavorite:{m.favorite(p.id)},rename:{m.renameName=p.name;m.renameCategory=p.category;m.renameID=p.id},deletePatch:{m.deleteSound(p.id)}){m.loadPreset(p)}.id(p.id)
                                     }else{Color.clear.frame(height:104).accessibilityHidden(true)}
                                 }
                             }
@@ -1637,7 +1659,7 @@ struct AuroraContentView:View {
             HStack(spacing:0){sidebar.frame(width:270);Divider().opacity(0.15)
                 ScrollView{
                     LazyVStack(alignment:.leading,spacing:23){
-                        HStack(alignment:.top){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}
+                        HStack(alignment:.center){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();HStack(alignment:.center,spacing:8){if m.userPresets.contains(where:{$0.id==m.patch.id}){UserPatchMenu(name:m.patch.name,rename:{m.renameName=m.patch.name;m.renameCategory=m.patch.category;m.renameID=m.patch.id},deletePatch:{m.deleteSound(m.patch.id)})};Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}}
                         HStack(spacing:10){
                             Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the filtered library")
                             Button{m.browsePatch(1)}label:{Image(systemName:"chevron.right")}.help("Next patch in the filtered library")
@@ -1706,10 +1728,10 @@ struct AuroraContentView:View {
         }.font(.system(size:14,weight:palette.weight(.regular))).padding(.horizontal,20).padding(.vertical,14)
     }
     var themeMenu:some View {
-        Menu{ForEach(AuroraTheme.allCases){theme in Button{m.selectTheme(theme)}label:{Label(theme.rawValue,systemImage:m.theme==theme ? "checkmark.circle.fill":"circle")}}}label:{Image(systemName:"paintpalette.fill").foregroundStyle(Color.white).frame(width:26,height:26).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))}.menuStyle(.borderlessButton).fixedSize().help("Color theme · \(m.theme.rawValue)").accessibilityLabel("Color theme · \(m.theme.rawValue)")
+        Menu{ForEach(AuroraTheme.allCases){theme in Button{m.selectTheme(theme)}label:{Label(theme.rawValue,systemImage:m.theme==theme ? "checkmark.circle.fill":"circle")}}}label:{Image(systemName:"paintpalette.fill").foregroundStyle(Color.white).frame(width:26,height:26).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))}.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Color theme · \(m.theme.rawValue)").accessibilityLabel("Color theme · \(m.theme.rawValue)")
     }
     var sidebar:some View {
-        VStack(alignment:.leading,spacing:16){HStack{Text("Sound library").font(.system(size:18,weight:palette.weight(.semibold)));Spacer();themeMenu;Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Divider();Button("Import one preset…"){m.importPreset()};Button("Import multiple presets…"){m.importPresets()};Button("Export current preset…"){m.exportPreset()};Button("Export all user presets…"){m.exportUserPresets()}.disabled(m.userPresets.isEmpty)}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:20)}
+        VStack(alignment:.leading,spacing:16){HStack(spacing:8){Text("Sound library").font(.system(size:18,weight:palette.weight(.semibold)));Spacer(minLength:8);themeMenu;Menu{Button("Undo Delete"){m.undoDelete()}.disabled(m.deletedSound==nil);Divider();Button("Import one preset…"){m.importPreset()};Button("Import multiple presets…"){m.importPresets()};Button("Export current preset…"){m.exportPreset()};Button("Export all user presets…"){m.exportUserPresets()}.disabled(m.userPresets.isEmpty)}label:{AuroraEllipsisLabel()}.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Library actions").help("Import, export, or undo delete")}
             TextField("Search sounds",text:$m.search).textFieldStyle(.roundedBorder).font(.system(size:15,weight:palette.weight(.regular)))
             VStack(alignment:.leading,spacing:9){
                 Picker("Collection",selection:$m.collection){
@@ -1757,20 +1779,22 @@ struct AuroraContentView:View {
         }.padding(16)
     }
     func presetRow(_ p:SoundPreset)->some View {
-        HStack(spacing:0){
+        let userSound=m.userPresets.contains(where:{$0.id==p.id})
+        return HStack(spacing:8){
             Button{m.loadPreset(p)}label:{
-                HStack(spacing:5){
-                    Text(p.name).font(.system(size:15,weight:palette.weight(.medium))).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
-                    if m.userPresets.contains(where:{$0.id==p.id}){UserPatchBadge()}
-                }.frame(minHeight:36,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
+                Text(p.name).font(.system(size:15,weight:palette.weight(.medium))).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+                    .frame(minHeight:36,alignment:.leading).padding(.vertical,11).padding(.leading,10).contentShape(Rectangle())
             }.buttonStyle(AuroraFlatButtonStyle()).help(p.detail)
             if m.collection=="Deleted sounds" {
                 Button{m.restoreDeleted(p.id)}label:{Image(systemName:"arrow.uturn.backward")}.buttonStyle(AuroraIconButtonStyle()).help("Restore \(p.name)").accessibilityLabel("Restore \(p.name)").padding(.trailing,8)
-            }else if m.userPresets.contains(where:{$0.id==p.id}) {
-                Menu{Button("Rename / category…"){m.renameName=p.name;m.renameCategory=p.category;m.renameID=p.id};Button("Delete",role:.destructive){m.deleteSound(p.id)}}label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).frame(width:22).accessibilityLabel("Manage \(p.name)")
+            }else{
+                if userSound{
+                    UserPatchBadge().allowsHitTesting(false)
+                    UserPatchMenu(name:p.name,rename:{m.renameName=p.name;m.renameCategory=p.category;m.renameID=p.id},deletePatch:{m.deleteSound(p.id)})
+                }
+                Button{m.favorite(p.id)}label:{Image(systemName:m.favorites.contains(p.id) ? "star.fill":"star").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)}
+                    .buttonStyle(AuroraIconButtonStyle()).padding(.trailing,8).help("Favorite \(p.name)").accessibilityLabel("Favorite \(p.name)")
             }
-            Button{m.favorite(p.id)}label:{Image(systemName:m.favorites.contains(p.id) ? "star.fill":"star").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(Color.white)}
-                .buttonStyle(AuroraIconButtonStyle()).padding(.trailing,8).help("Favorite \(p.name)").accessibilityLabel("Favorite \(p.name)")
         }.background(m.patch.id==p.id ? palette.buttonSelected.opacity(0.25):palette.buttonSurface.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
     }
     var play:some View {

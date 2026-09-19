@@ -1,5 +1,9 @@
 # Aurora
 
+## Interface polish · 0.20
+
+User-created patches show a flag icon only (no “User” label), placed beside the favorite star. Rename/delete uses a three-dot menu without a chevron, including the editor header, patch cards, and library rows. Other ellipsis menus match that style.
+
 ## Patch workflow and scrolling · 0.18
 
 The large patch browser now has a dedicated **User Saved** tab with direct batch import and export controls. Import accepts multiple individual preset files as well as JSON preset banks; export writes all user sounds to one portable bank. Long sound-design, library and browser lists use lazy rendering so macOS can maintain native inertial scrolling while Aurora's live meters continue updating.
