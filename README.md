@@ -26,7 +26,7 @@ Edit now includes dual filters, an independent modulation envelope, oscillator p
 
 ## DAW integration · 0.16
 
-Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, the automated host tests, and standalone regression checks pass; Logic application testing and Ableton save/export testing were skipped because of activation/license limits.
+Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, automated host tests, and standalone checks pass. Cubase and Ableton load/editor checks passed earlier; MainStage 4.3.1 AU load/editor/audio was verified with 0.20.3 (19 Sep 2026). Logic Pro itself is not app-tested yet (same AU as MainStage). Ableton save/export was limited in demo mode. Details: [DAW integration](DAW-INTEGRATION.md).
 
 ## Spectrum — rebuilt 300-sound factory bank
 
