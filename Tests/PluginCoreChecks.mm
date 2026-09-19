@@ -7,7 +7,7 @@ using namespace auroraPlugin;
 static std::string json(id object){NSData* data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)data.bytes,data.length);}
 int main(){@autoreleasepool {
     Core a,b;int tested=0;
-    assert(a.values[outputGainID]==24);
+    assert(a.values[outputGainID]==9);
     static_assert(layerID(3,57)==231 && layerID(0,58)==6000 && layerID(3,78)==6404);
     for(NSString* file in @[@"Aurora100",@"AuroraPrism100",@"AuroraNova100",@"AuroraReference"]){
         NSData* data=[NSData dataWithContentsOfFile:[NSString stringWithFormat:@"Resources/%@.json",file]];
@@ -51,7 +51,7 @@ int main(){@autoreleasepool {
     NSMutableDictionary* legacy=[NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:extended.data() length:extended.size()] options:NSJSONReadingMutableContainers error:nil];
     [legacy removeObjectForKey:@"outputGain"];[legacy removeObjectForKey:@"outputGainRevision"];
     for(NSMutableDictionary* layer in legacy[@"patch"][@"layers"])for(int p=58;p<APParameterCount;p++)[layer[@"values"] removeObjectForKey:[NSString stringWithFormat:@"%d",p]];
-    assert(b.restoreState(json(legacy).c_str()));assert(b.values[outputGainID]==24);
+    assert(b.restoreState(json(legacy).c_str()));assert(b.values[outputGainID]==9);
     for(int l=0;l<4;l++){assert(b.values[layerID(l,58)]==0);assert(b.values[layerID(l,68)]==0);assert(b.values[layerID(l,70)]==0);assert(b.values[layerID(l,73)]==0);assert(b.values[layerID(l,60)]==3200);}
     std::cout<<"Extended layer automation/state, layer D MIDI Learn and legacy project defaults passed\n";
     std::cout<<tested<<" factory patches: host state round-trip, finite audio, XY/macros and instance isolation passed\n";

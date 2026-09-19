@@ -52,11 +52,13 @@ import SwiftUI
         }
         defer { aurora_shutdown() }
         precondition(model.collection == "Aurora")
-        precondition(SynthModel.restoredOutputGain(nil,revision:nil)==24)
-        precondition(SynthModel.restoredOutputGain(6,revision:nil)==24)
-        precondition(SynthModel.restoredOutputGain(12,revision:2)==24)
-        precondition(SynthModel.restoredOutputGain(6,revision:3)==6)
-        precondition(SynthModel.restoredOutputGain(30,revision:3)==24)
+        precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9)
+        precondition(SynthModel.restoredOutputGain(6,revision:nil)==9)
+        precondition(SynthModel.restoredOutputGain(12,revision:2)==9)
+        precondition(SynthModel.restoredOutputGain(6,revision:3)==6) // customized rev-3 kept
+        precondition(SynthModel.restoredOutputGain(24,revision:3)==9) // untouched +24 migrates to +9
+        precondition(SynthModel.restoredOutputGain(30,revision:3)==24) // clamped custom kept
+        precondition(SynthModel.restoredOutputGain(12,revision:4)==12)
         precondition(FactoryBank.all.count == 300)
         let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
         let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))

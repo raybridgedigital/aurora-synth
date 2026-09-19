@@ -408,11 +408,17 @@ struct VoiceStatus:View {
     @Published var search = ""
     @Published var collection = "Aurora"
     @Published var category = "All categories"
-    @Published var outputGain=24.0
+    @Published var outputGain=9.0
     static func restoredOutputGain(_ saved:Double?,revision:Int?)->Double {
-        // Pre-1.0 calibration: migrate every older session to the measured reference level.
-        guard revision == 3,let saved,saved.isFinite else{return 24}
-        return max(0,min(24,saved))
+        // Rev 4: CK88 / stage-piano dual-layer house level (~+9 dB), Master ~50–75%.
+        // Rev 3 was the synth-reference +24 dB migration. Move untouched +24 sessions
+        // to +9 once; keep any boost the user already customized.
+        if revision == 4, let saved, saved.isFinite { return max(0, min(24, saved)) }
+        if revision == 3, let saved, saved.isFinite {
+            let clamped = max(0, min(24, saved))
+            return abs(clamped - 24) < 0.01 ? 9 : clamped
+        }
+        return 9
     }
     func setOutputGain(_ gain:Double){
         guard gain.isFinite else{return};outputGain=max(0,min(24,gain));backend.aurora_set_global(15,Float(outputGain));persist()
@@ -991,7 +997,7 @@ struct VoiceStatus:View {
         if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:3)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {

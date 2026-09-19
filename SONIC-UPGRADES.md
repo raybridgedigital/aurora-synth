@@ -26,7 +26,7 @@ New controls are available to custom macros and MIDI Learn, are stored in patche
 
 Aurora intentionally attenuates individual voices to reserve headroom for polyphony and layered sounds. Older factory patches also commonly store a 25% master value. This can sound considerably quieter than instruments with hotter factory presets.
 
-Output boost adds 0–24 dB after the master stage, with stereo-linked peak protection at 0.98 full scale. The pre-1.0 reference calibration now defaults to +24 dB and migrates older sessions once, as requested. It stays constant across patches and saves with the standalone session or DAW project. Presets retain their dynamics; dense chords may engage peak protection.
+Output boost adds 0–24 dB after the master stage, with stereo-linked peak protection at 0.98 full scale. The house calibration for dual-keyboard use (CK88 / Yamaha stage piano as the other layer) defaults to **+9 dB**, aiming for Master around 50–75% when blending. Untouched sessions still on the older synth-reference **+24 dB** migration move to +9 once; customized boost values are kept. Output boost stays constant across patches and saves with the standalone session or DAW project. Presets retain their dynamics; dense chords may engage peak protection.
 
 The large scope offers Auto scale and Actual level, with a separate stereo peak reading in dBFS. Auto scale changes only the drawing. Scopes now show the left output instead of averaging left and right, avoiding cancellation from opposing stereo phases. A hard-right signal can therefore appear flat in the waveform while the stereo meter still shows its output.
 
@@ -57,10 +57,10 @@ Logic application testing and Ableton save/export testing remain skipped by requ
 - Unison now supports 1–8 oscillator lanes per layer voice, with a shared 256-lane budget (up to 32 note voices at eight-lane unison). Older/releasing voices fade out when the budget is reached, including when unison is increased while notes are held. Higher unison, four active layers, and Formant all increase DSP cost.
 - Eighteen appended layer parameters retain existing parameter IDs and participate in preset serialization, macro targets, MIDI Learn, undo/redo, and layer copy/paste. Missing fields select neutral shaping, 12 dB slopes and free-running LFOs.
 
-### Pre-1.0 output calibration
+### Output calibration (CK88 dual-layer)
 
-At the user's request, older standalone/plug-in gain settings migrate once to +24 dB. Subsequent adjustments persist normally. Master remains 0–100%, and Output boost remains 0–24 dB; the stereo-linked peak ceiling is 0.98 full scale. No automatic patch normalization or OS volume changes are applied.
+Standalone and plug-in sessions default to **+9 dB** Output boost (revision 4). Sessions still on revision 3 at exactly +24 dB migrate once to +9; any other saved boost is preserved. Subsequent adjustments persist normally. Master remains 0–100%, and Output boost remains 0–24 dB; the stereo-linked peak ceiling is 0.98 full scale. No automatic patch normalization or OS volume changes are applied.
 
-Two newly authored Reference sounds are included without deleting existing patches: Copper Focus and Prism Motion. At Master 100%, boost +24 dB, velocity 110, and 48 kHz, sustained single-note stereo RMS measures approximately −13.0/−14.7 dBFS; three-note chords measure −9.3/−10.3 dBFS. Peak ceiling checks pass. These are digital level measurements, not an acoustic match to macOS notifications.
+The earlier synth-reference point (Master 100%, boost +24 dB) measured about −13.0/−14.7 dBFS for a sustained single note and −9.3/−10.3 dBFS for a three-note chord at velocity 110 / 48 kHz. That level is intentionally hotter than blending beside a stage piano at full volume; +9 dB is the dual-keyboard house setting so Master can sit near 50–75%. Reference sounds Copper Focus and Prism Motion remain available.
 
 The eight-voice unison budget test rendered 30 seconds of audio (32 notes × 8 unison, four FX, 30 matrix routes, 44.1 kHz/128 frames) in 12.01 seconds. The 99th-percentile callback was 1.246 ms against a 2.902 ms deadline. This is an offline benchmark, not a guarantee against device underruns at every setting.

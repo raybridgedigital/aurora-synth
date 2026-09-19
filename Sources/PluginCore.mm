@@ -57,7 +57,7 @@ Core::Core():storage(std::make_unique<Storage>()){
         storage->mappings=@{@"mappings":@[],@"directMappings":@[]};for(auto& target:learnedTargets)target=-1;
         engine.route(0,15,0);engine.route(1,15,0);
         values[routeMaskID]=15;
-        setActual(outputGainID,24);
+        setActual(outputGainID,9);
         for(int ch=0;ch<16;ch++){values[midiBase+ch*130+7]=1;values[midiBase+ch*130+11]=1;values[midiBase+ch*130+129]=.5;}
         xyMacros[0]=0;xyMacros[1]=2;xyEnds[0]=xyEnds[1]=1;
         NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"Aurora100.json"]];
@@ -235,7 +235,7 @@ std::string Core::saveState(){@autoreleasepool{
     auto patch=patchJSON();NSData* data=[NSData dataWithBytes:patch.data() length:patch.size()];
     id p=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     std::lock_guard lock(storage->mutex);
-    NSDictionary* object=@{@"version":@1,@"patch":p?:@{},@"outputGain":@(values[outputGainID].load()),@"outputGainRevision":@3,@"transpose":@(values[transposeID].load()),@"routeMask":@(values[routeMaskID].load()),@"routeChannel":@(values[routeChannelID].load()),@"velocityCurve":@(values[velocityID].load()),@"midiMappings":storage->mappings};
+    NSDictionary* object=@{@"version":@1,@"patch":p?:@{},@"outputGain":@(values[outputGainID].load()),@"outputGainRevision":@4,@"transpose":@(values[transposeID].load()),@"routeMask":@(values[routeMaskID].load()),@"routeChannel":@(values[routeChannelID].load()),@"velocityCurve":@(values[velocityID].load()),@"midiMappings":storage->mappings};
     NSData* state=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)state.bytes,state.length);
 }}
 bool Core::restoreState(const char* json){@autoreleasepool{
@@ -249,7 +249,16 @@ bool Core::restoreState(const char* json){@autoreleasepool{
     NSData* mappingData=[NSJSONSerialization dataWithJSONObject:mappings options:0 error:nil];NSString* mappingString=[[NSString alloc] initWithData:mappingData encoding:NSUTF8StringEncoding];
     if(!setMappingsJSON(mappingString.UTF8String,false)||!setPatchJSON(s.UTF8String,true))return false;
     setMappingsJSON(mappingString.UTF8String);
-    setActual(outputGainID,[state[@"outputGainRevision"] intValue]==3?[state[@"outputGain"] doubleValue]:24); // User-authorized pre-1.0 level recalibration.
+    {
+        const int revision=[state[@"outputGainRevision"] intValue];
+        double gain=9;
+        if(revision==4 && state[@"outputGain"]) gain=[state[@"outputGain"] doubleValue];
+        else if(revision==3 && state[@"outputGain"]) {
+            gain=[state[@"outputGain"] doubleValue];
+            if(std::fabs(gain-24)<0.01) gain=9; // CK88 dual-layer migration from +24 reference
+        }
+        setActual(outputGainID,gain);
+    } // Rev 4: CK88 dual-layer house calibration (~+9 dB).
     setActual(transposeID,[state[@"transpose"] doubleValue]);setActual(routeMaskID,state[@"routeMask"]?[state[@"routeMask"] doubleValue]:15);
     setActual(routeChannelID,[state[@"routeChannel"] doubleValue]);setActual(velocityID,[state[@"velocityCurve"] doubleValue]);setActual(holdID,0);return true;
 }}
