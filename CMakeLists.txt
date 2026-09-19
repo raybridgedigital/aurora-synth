@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Minimum macOS")
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Architecture")
-project(Aurora VERSION 0.20.2 LANGUAGES C CXX OBJCXX)
+project(Aurora VERSION 0.20.3 LANGUAGES C CXX OBJCXX)
 set(CMAKE_CXX_STANDARD 20)
 set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES ON CACHE BOOL "" FORCE)
@@ -30,7 +30,7 @@ target_link_libraries(Aurora PRIVATE sdk "${CMAKE_SOURCE_DIR}/build/plugin/libAu
 target_link_directories(Aurora PRIVATE /Library/Developer/CommandLineTools/usr/lib/swift/macosx)
 target_link_options(Aurora PRIVATE "-Wl,-rpath,/usr/lib/swift")
 smtg_target_set_bundle(Aurora BUNDLE_IDENTIFIER com.raybridgedigital.aurora.vst3 COMPANY_NAME "Ray Bridge Digital")
-set_target_properties(Aurora PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER com.raybridgedigital.aurora.vst3 MACOSX_BUNDLE_BUNDLE_NAME Aurora MACOSX_BUNDLE_BUNDLE_VERSION 0.20.2 MACOSX_BUNDLE_SHORT_VERSION_STRING 0.20.2)
+set_target_properties(Aurora PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER com.raybridgedigital.aurora.vst3 MACOSX_BUNDLE_BUNDLE_NAME Aurora MACOSX_BUNDLE_BUNDLE_VERSION 0.20.3 MACOSX_BUNDLE_SHORT_VERSION_STRING 0.20.3)
 smtg_target_add_plugin_resources(Aurora RESOURCES Resources/Aurora100.json Resources/AuroraPrism100.json Resources/AuroraNova100.json Resources/AuroraReference.json)
 smtg_target_add_plugin_resources(Aurora RESOURCES Resources/PluginLicenses/VST3.txt Resources/PluginLicenses/AudioUnitSDK.txt)
 add_custom_command(TARGET Aurora POST_BUILD

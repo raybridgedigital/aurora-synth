@@ -1,5 +1,9 @@
 # Aurora
 
+## Soft pad switch · 0.20.3
+
+Set pads soft-load by default so held notes and FX can finish; turn on **Cut on switch** for a hard Panic cut. Pad names under the numbers are slightly larger.
+
 ## Set pads · 0.20.2
 
 Play tab now has a live **Set** rack under the four layers: page buttons **1–4** and sixteen patch pads for fast sound switching during performance. Pads store patch references (not snapshots); right-click to assign or clear. Sticky favorites-only filter and a Dock waveform app icon are included.

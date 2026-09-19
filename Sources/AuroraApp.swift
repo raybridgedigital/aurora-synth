@@ -187,6 +187,7 @@ struct SavedSession: Codable {
     var outputGainRevision:Int?=nil
     var setPage: Int? = nil
     var setSlots: [[SetSlot]]? = nil
+    var setCutOnSwitch: Bool? = nil
 }
 
 enum FactoryBank {
@@ -436,6 +437,7 @@ struct VoiceStatus:View {
     @Published var favorites: Set<String> = []
     @Published var setPage = 0
     @Published var setSlots: [[SetSlot]] = Array(repeating: Array(repeating: SetSlot(), count: 16), count: 4)
+    @Published var setCutOnSwitch = false
     @Published var devices: [AudioDevice] = []
     @Published var sources: [MIDISource] = []
     @Published var output: UInt32 = 0
@@ -796,12 +798,14 @@ struct VoiceStatus:View {
     }
     func undo() { finishComparison();guard let old = undoPatches.popLast() else { return }; redoPatches.append(patch); patch=old;applyPatch();dirty=true;pickup=[];previousCC=[:] }
     func redo() { finishComparison();guard let old = redoPatches.popLast() else { return }; undoPatches.append(patch);patch=old;applyPatch();dirty=true;pickup=[];previousCC=[:] }
-    func loadPreset(_ preset: SoundPreset) {
+    func loadPreset(_ preset: SoundPreset, panic: Bool = true) {
         checkpoint()
         directPickup.removeAll();directPrevious.removeAll()
         soloLayer = -1;backend.aurora_solo_layer(-1)
         let master=patch.globals[0]
-        backend.aurora_panic();pressed=[];holding=false
+        if panic {
+            backend.aurora_panic();pressed=[];holding=false
+        }
         patch=preset; patch.globals[0]=master
         applyPatch();dirty=false;pickup=[];previousCC=[:]
         notice="Loaded \(preset.name). Previous edits are available with Undo."
@@ -970,6 +974,11 @@ struct VoiceStatus:View {
         setPage = next
         persist()
     }
+    func setSetCutOnSwitch(_ on: Bool) {
+        guard setCutOnSwitch != on else { return }
+        setCutOnSwitch = on
+        persist()
+    }
     private var setLibrary: [SoundPreset] { userPresets + FactoryBank.all }
     func presetForSetSlot(_ slot: SetSlot) -> SoundPreset? {
         guard let id = slot.patchId, !id.isEmpty else { return nil }
@@ -984,7 +993,7 @@ struct VoiceStatus:View {
             return
         }
         if patch.id == preset.id { notice = "Already on \(preset.name)."; return }
-        loadPreset(preset)
+        loadPreset(preset, panic: setCutOnSwitch)
     }
     func assignSetSlot(_ index: Int) {
         guard (0..<16).contains(index) else { return }
@@ -1062,7 +1071,7 @@ struct VoiceStatus:View {
         if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,favoritesOnly:favoritesOnly,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4,setPage:setPage,setSlots:setSlots)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,favoritesOnly:favoritesOnly,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4,setPage:setPage,setSlots:setSlots,setCutOnSwitch:setCutOnSwitch)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {
@@ -1087,6 +1096,7 @@ struct VoiceStatus:View {
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
             setPage=max(0,min(3,s.setPage ?? 0))
             setSlots=Self.normalizedSetSlots(s.setSlots)
+            setCutOnSwitch=s.setCutOnSwitch ?? false
         }
         if let data=try? Data(contentsOf:folder.appendingPathComponent("presets.json")),let list=try? JSONDecoder().decode([SoundPreset].self,from:data){userPresets=list.compactMap{Self.sanitized($0)}}
         // Retired factory sounds should not remain the startup sound after the
@@ -1605,7 +1615,14 @@ struct PerformanceSetRack: View {
                         .help("Set page \(page + 1) · 16 pads")
                     }
                 }
-                Text("Live patch pads · tap to load · right-click to assign or clear")
+                Toggle(isOn: Binding(get: { m.setCutOnSwitch }, set: { m.setSetCutOnSwitch($0) })) {
+                    Text("Cut on switch")
+                        .font(.system(size: 12, weight: palette.weight(.regular)))
+                }
+                .toggleStyle(.checkbox)
+                .foregroundStyle(palette.muted)
+                .help("When on, pad changes Panic-cut like a hard preset load. When off, held notes and FX can finish.")
+                Text("Tap to load · right-click to assign or clear")
                     .font(.system(size: 12, weight: palette.weight(.regular))).foregroundStyle(palette.muted)
                 Spacer(minLength: 0)
             }
@@ -1640,7 +1657,7 @@ struct SetChromeButton: View {
                             .font(.system(size: compact ? 17 : 18, weight: active ? .bold : .semibold))
                             .monospacedDigit()
                         Text(subtitle)
-                            .font(.system(size: 9, weight: .regular))
+                            .font(.system(size: 11, weight: .regular))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
@@ -1652,7 +1669,7 @@ struct SetChromeButton: View {
             }
             .foregroundStyle(active ? palette.selectedText : (filled ? Color.white : palette.muted))
             .frame(maxWidth: compact ? nil : .infinity)
-            .frame(width: compact ? 32 : nil, height: compact ? 40 : 50)
+            .frame(width: compact ? 32 : nil, height: compact ? 40 : 52)
             .background(
                 active ? palette.buttonSelected : (filled ? palette.buttonSurface : palette.buttonSurface.opacity(0.45)),
                 in: RoundedRectangle(cornerRadius: compact ? 5 : 7)
