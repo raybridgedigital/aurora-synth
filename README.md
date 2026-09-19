@@ -1,5 +1,9 @@
 # Aurora
 
+## MainStage AU · 0.20.4
+
+Documents MainStage 4.3.1 verification of the 0.20.3/0.20.4 Audio Unit (load, editor, audio). Logic Pro remains untested in-app; see [DAW integration](DAW-INTEGRATION.md).
+
 ## Soft pad switch · 0.20.3
 
 Set pads soft-load by default so held notes and FX can finish; turn on **Cut on switch** for a hard Panic cut. Pad names under the numbers are slightly larger.
@@ -26,7 +30,7 @@ Edit now includes dual filters, an independent modulation envelope, oscillator p
 
 ## DAW integration · 0.16
 
-Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, automated host tests, and standalone checks pass. Cubase and Ableton load/editor checks passed earlier; MainStage 4.3.1 AU load/editor/audio was verified with 0.20.3 (19 Sep 2026). Logic Pro itself is not app-tested yet (same AU as MainStage). Ableton save/export was limited in demo mode. Details: [DAW integration](DAW-INTEGRATION.md).
+Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cubase and an AU instrument for Logic Pro, alongside the standalone app. Each instance has its own sound engine and project state, with host tempo, automation, MIDI Learn, and the full Aurora editor. Build/install instructions and the exact validation limits are in [DAW integration](DAW-INTEGRATION.md). AU and VST3 validators, automated host tests, and standalone checks pass. Cubase and Ableton load/editor checks passed earlier; MainStage 4.3.1 AU load/editor/audio was verified with 0.20.3/0.20.4 (19 Sep 2026). Logic Pro itself is not app-tested yet (same AU as MainStage). Ableton save/export was limited in demo mode. Details: [DAW integration](DAW-INTEGRATION.md).
 
 ## Spectrum — rebuilt 300-sound factory bank
 

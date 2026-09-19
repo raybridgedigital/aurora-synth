@@ -26,7 +26,7 @@ Restart the DAW after replacing an already loaded plug-in. In Live, enable VST3 
 
 ## Verification status
 
-DAW integration coding and host checks are current as of **19 September 2026** (plug-ins rebuilt/installed as **0.20.3**). This is not a claim of full certification in every commercial host workflow.
+DAW integration coding and host checks are current as of **19 September 2026** (plug-ins rebuilt/installed as **0.20.4**). This is not a claim of full certification in every commercial host workflow.
 
 - Steinberg validator: 47 passed, 0 failed on the development build.
 - Apple `auval`: passed on the installed AU (`aumu / Auro / RyBr`), including MIDI and render tests.
@@ -34,11 +34,11 @@ DAW integration coding and host checks are current as of **19 September 2026** (
 - Test host: sample-offset MIDI, host tempo, XY automation without an editor, component/editor-state recall, 64-bit offline rendering, and editor attach/remove passed.
 - **Ableton Live 12.4.6 (VST3):** discovery/loading confirmed; native Aurora editor visible. Saving/exporting were disabled in demo mode at that check.
 - **Cubase AI 15 (VST3):** discovery, instrument loading, full editor, patch selection and transpose changes checked. Project save/reopen exercised; visual confirmation of recalled patch/transpose was limited by UI automation.
-- **MainStage 4.3.1 (AU):** verified 19 September 2026 with the 0.20.3 component — Software Instrument channel loaded **AU Instruments → Ray Bridge Digital → Aurora**, editor window opened (`Instrument [Inst 2]`), Musical Typing produced channel meter activity, no crash.
+- **MainStage 4.3.1 (AU):** verified 19 September 2026 with the 0.20.3/0.20.4 component — Software Instrument channel loaded **AU Instruments → Ray Bridge Digital → Aurora**, editor window opened (`Instrument [Inst 2]`), Musical Typing produced channel meter activity, no crash.
 - **Logic Pro (AU):** not opened in-app yet (no license on the test machine). Same Audio Unit as MainStage; MainStage pass is a strong proxy for basic load/play/editor. Bounce/arrange workflows remain unverified in Logic itself.
 - Standalone build and interface regression suite passed, including factory sounds, saving/undo, MIDI Learn, themes, motion/wavetables, XY, and concurrent library merge checks.
 
-Actual DAW playback/bounce and automation workflows are not exhaustively verified in every host. Restart hosts after replacing installed binaries so they load 0.20.3.
+Actual DAW playback/bounce and automation workflows are not exhaustively verified in every host. Restart hosts after replacing installed binaries so they load 0.20.4.
 
 `bash scripts/check_plugins.sh` runs the automated checks. It requires a built plug-in and tests the installed AU copy, so install the current build first.
 
