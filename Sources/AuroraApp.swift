@@ -478,8 +478,8 @@ struct VoiceStatus:View {
         // to +9 once; keep any boost the user already customized.
         if revision == 4, let saved, saved.isFinite { return max(0, min(24, saved)) }
         if revision == 3, let saved, saved.isFinite {
-            let clamped = max(0, min(24, saved))
-            return abs(clamped - 24) < 0.01 ? 9 : clamped
+            if abs(saved - 24) < 0.01 { return 9 }
+            return max(0, min(24, saved))
         }
         return 9
     }
