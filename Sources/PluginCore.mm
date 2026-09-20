@@ -83,6 +83,14 @@ Spec Core::spec(int id){
 double Core::actual(int id,double n){auto s=spec(id);n=std::isfinite(n)?std::clamp(n,0.,1.):0;double v=s.logarithmic?s.low*std::pow(s.high/s.low,n):s.low+(s.high-s.low)*n;return s.integer?std::round(v):v;}
 double Core::normalize(int id,double value){auto s=spec(id);value=std::clamp(value,s.low,s.high);return s.logarithmic?std::log(value/s.low)/std::log(s.high/s.low):(value-s.low)/(s.high-s.low);}
 double Core::normalized(int id)const{return id>=0&&id<8192?normalize(id,values[id].load()):0;}
+void Core::prepare(double rate){
+    sampleRate=rate;
+    engine.prepare(rate);
+    // Engine prepare is a hard audio reset. Re-publish the plug-in's persisted
+    // DAW MIDI configuration so split patches still receive layers B/C/D.
+    engine.route(1,int(values[routeMaskID].load()),int(values[routeChannelID].load()));
+    engine.velocityCurve(1,int(values[velocityID].load()));
+}
 void Core::midi(int status,int a,int b){
     if((status&0xf0)==0xb0&&a>=0&&a<128&&b>=0&&b<128){
         lastCC=(uint64_t(1)<<32)|(uint64_t((status&15)+1)<<16)|(uint64_t(a)<<8)|uint64_t(b);++ccEvents;
