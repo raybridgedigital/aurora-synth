@@ -3,8 +3,15 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <algorithm>
 using namespace auroraPlugin;
 static std::string json(id object){NSData* data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)data.bytes,data.length);}
+static void finishPanic(Core& c){
+    constexpr int total=int(48000*.45);
+    float l[256],r[256];
+    for(int remaining=total;remaining>0;remaining-=256)c.engine.render(l,r,std::min(remaining,256));
+}
+static void panicAndDrain(Core& c){c.engine.panic();finishPanic(c);}
 int main(){@autoreleasepool {
     Core a,b;int tested=0;
     assert(a.values[outputGainID]==9);
@@ -18,13 +25,14 @@ int main(){@autoreleasepool {
             auto state=a.saveState();assert(b.restoreState(state.c_str()));
             assert(a.patchJSON()==b.patchJSON());assert(b.values[transposeID]==3);
             a.engine.prepare(48000);b.engine.prepare(48000);
+            finishPanic(a);finishPanic(b);
             a.midi(0x90,60,100);b.midi(0x90,60,100);
             float l[256],r[256],bl[256],br[256];double energy=0;
             for(int block=0;block<100;block++){
                 a.engine.render(l,r,256);b.engine.render(bl,br,256);
                 for(int i=0;i<256;i++){assert(std::isfinite(l[i])&&std::isfinite(r[i]));energy+=l[i]*l[i]+r[i]*r[i];}
             }
-            assert(energy>0);a.engine.panic();b.engine.panic();
+            assert(energy>0);panicAndDrain(a);panicAndDrain(b);
             float previous=b.values[7];a.setActual(7,4321);assert(b.values[7]==previous);
             auto unchanged=b.saveState();assert(!b.restoreState("{}"));assert(b.saveState()==unchanged);
             NSMutableDictionary* malformed=[patch mutableCopy];malformed[@"layers"]=@[@{},@{},@{},@{}];
