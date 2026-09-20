@@ -49,6 +49,7 @@ cp "$ROOT_DIR/Resources/AuroraPrism100.json" "$APP_DIR/Contents/Resources/Aurora
 cp "$ROOT_DIR/Resources/AuroraNova100.json" "$APP_DIR/Contents/Resources/AuroraNova100.json"
 cp "$ROOT_DIR/Resources/AuroraReference.json" "$APP_DIR/Contents/Resources/AuroraReference.json"
 cp "$ROOT_DIR/Resources/AuroraGB109.json" "$APP_DIR/Contents/Resources/AuroraGB109.json"
+cp "$ROOT_DIR/Resources/AuroraShimmer29.json" "$APP_DIR/Contents/Resources/AuroraShimmer29.json"
 plutil -lint "$APP_DIR/Contents/Info.plist"
 xattr -cr "$APP_DIR"
 codesign --force --sign - "$APP_DIR"
