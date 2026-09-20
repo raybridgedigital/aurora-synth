@@ -1,5 +1,9 @@
 # Aurora
 
+## Dual-patch live (spec only)
+
+Design for stacking two full patches with dual FX buses is locked but **not implemented**. Spec: [Dual-Patch-Specification.md](Dual-Patch-Specification.md).
+
 ## Arps factory revamp · 0.21.5
 
 All **30** factory Arps were rewritten (same count, all new names) across Aurora / Prism / Nova and the Spectrum mirror. Patches use the richer arpeggiator (musical pattern library, note division, swing, velocity shape) plus varied delay, shimmer, character, unison, and multi-layer writing. Prior Arps remain recoverable from git tag `v0.21.4` if needed.
