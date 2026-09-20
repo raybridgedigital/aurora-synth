@@ -43,6 +43,7 @@ public:
     static Spec spec(int id);
     static double actual(int id,double normalized);
     static double normalize(int id,double actual);
+    void prepare(double rate);
     void midi(int status,int a,int b);
     std::string patchJSON();
     bool setPatchJSON(const char* json,bool apply);
