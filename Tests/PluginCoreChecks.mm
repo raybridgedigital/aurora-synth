@@ -32,7 +32,8 @@ int main(){@autoreleasepool {
                 a.engine.render(l,r,256);b.engine.render(bl,br,256);
                 for(int i=0;i<256;i++){assert(std::isfinite(l[i])&&std::isfinite(r[i]));energy+=l[i]*l[i]+r[i]*r[i];}
             }
-            assert(energy>0);panicAndDrain(a);panicAndDrain(b);
+            if(!(energy>0)){std::cerr<<"No rendered audio for patch: "<<[patch[@"name"] UTF8String]<<" · id "<<[patch[@"id"] UTF8String]<<std::endl;return 2;}
+            panicAndDrain(a);panicAndDrain(b);
             float previous=b.values[7];a.setActual(7,4321);assert(b.values[7]==previous);
             auto unchanged=b.saveState();assert(!b.restoreState("{}"));assert(b.saveState()==unchanged);
             NSMutableDictionary* malformed=[patch mutableCopy];malformed[@"layers"]=@[@{},@{},@{},@{}];
