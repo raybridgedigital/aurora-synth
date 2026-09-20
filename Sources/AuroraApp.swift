@@ -201,7 +201,7 @@ enum FactoryBank {
         return SoundPreset(id:id,name:name,category:category,detail:detail,layers:layers,
                            globals:effects,macros:Array(repeating:0.5,count:8))
     }
-    static let categoryOrder = ["Pads", "Bass", "Leads", "Keys", "Plucks", "Arps", "Textures", "Organs", "Brass & Strings", "Splits", "Templates"]
+    static let categoryOrder = ["Pads", "Bass", "Leads", "Keys", "Plucks", "Arps", "Textures", "Organs", "Brass & Strings", "Splits", "Templates", "FX", "2020s"]
     static let expansion: [SoundPreset] = {
         guard let url = AuroraResources.bundle.url(forResource: "Aurora100", withExtension: "json"),
               let data = try? Data(contentsOf: url),
@@ -221,11 +221,17 @@ enum FactoryBank {
               let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
         return sounds
     }()
+    static let gb: [SoundPreset] = {
+        guard let url=AuroraResources.bundle.url(forResource:"AuroraGB109",withExtension:"json"),
+              let data=try? Data(contentsOf:url),
+              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==109 else{return []}
+        return sounds
+    }()
     static let references:[SoundPreset] = {
         guard let url=AuroraResources.bundle.url(forResource:"AuroraReference",withExtension:"json"),let data=try? Data(contentsOf:url),let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = (expansion + prism + nova).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+    static let all: [SoundPreset] = (expansion + prism + nova + gb).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
@@ -395,7 +401,19 @@ struct ClockReadout:View {
 struct EngineReadout:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var telemetry:AudioTelemetry
-    var body:some View { Text("MIDI \(telemetry.snapshot.midiEvents) · DSP \(telemetry.snapshot.cpuPercent)%").monospacedDigit() }
+    var body:some View {
+        // Fixed-width digit fields (DSP XXX% · Voices XX) so the header does not jump.
+        HStack(spacing:14){
+            Text(String(format:"DSP %3d%%", min(999, telemetry.snapshot.cpuPercent)))
+                .monospacedDigit()
+                .accessibilityLabel("DSP \(telemetry.snapshot.cpuPercent) percent")
+            Text(String(format:"Voices %2d", min(99, telemetry.snapshot.voices)))
+                .monospacedDigit()
+                .accessibilityLabel("\(telemetry.snapshot.voices) active voices")
+                .help("Active voices")
+        }
+        .accessibilityElement(children:.combine)
+    }
 }
 struct VoiceStatus:View {
     @Environment(\.auroraPalette) private var palette
@@ -1966,7 +1984,7 @@ struct AuroraContentView:View {
             Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:17,weight:m.running ? .bold:.regular)).foregroundStyle(m.running ? palette.selectedText:Color.white).frame(width:34,height:30).background(m.running ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))}.buttonStyle(AuroraFlatButtonStyle(selected:m.running)).accessibilityLabel(m.running ? "Turn audio off":"Turn audio on").help(m.status+String(format:" · %.1f kHz · %d frames",m.sampleRate/1000,m.actualFrames))
             .disabled(m.backend.isPlugin)
             Button("Panic",systemImage:"stop.circle"){m.panic()}.help("Stop all notes and effect tails").fixedSize().keyboardShortcut(".",modifiers:.command)
-            EngineReadout(telemetry:m.telemetry).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted).frame(width:130,alignment:.trailing)
+            EngineReadout(telemetry:m.telemetry).font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted).frame(maxWidth:.infinity,alignment:.center)
         }.font(.system(size:14,weight:palette.weight(.regular))).padding(.horizontal,20).padding(.vertical,14)
     }
     var themeMenu:some View {

@@ -59,7 +59,7 @@ import SwiftUI
         precondition(SynthModel.restoredOutputGain(24,revision:3)==9) // untouched +24 migrates to +9
         precondition(SynthModel.restoredOutputGain(30,revision:3)==24) // clamped custom kept
         precondition(SynthModel.restoredOutputGain(12,revision:4)==12)
-        precondition(FactoryBank.all.count == 300)
+        precondition(FactoryBank.all.count == 409)
         let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
         let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
         precondition(try! SynthModel.presets(in:singlePresetData).count==1)
@@ -98,8 +98,8 @@ import SwiftUI
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
         precondition(model.collectionSounds.count == 300)
         precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==300)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==300)
+        precondition(Set(FactoryBank.all.map(\.id)).count==409)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==409)
         precondition(FactoryBank.nova.count==100)
         model.search=""
         precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)

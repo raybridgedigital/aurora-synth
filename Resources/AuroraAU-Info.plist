@@ -5,8 +5,8 @@
 <key>CFBundleIdentifier</key><string>com.raybridgedigital.aurora.au</string>
 <key>CFBundleName</key><string>Aurora</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleVersion</key><string>0.20.4</string>
-<key>CFBundleShortVersionString</key><string>0.20.4</string>
+<key>CFBundleVersion</key><string>0.20.5</string>
+<key>CFBundleShortVersionString</key><string>0.20.5</string>
 <key>AudioComponents</key><array><dict>
 <key>factoryFunction</key><string>AUWrapperFactory</string>
 <key>description</key><string>Aurora Synthesizer</string>
