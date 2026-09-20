@@ -80,7 +80,7 @@ import SwiftUI
         print("PASS: batch preset format accepts one preset or a multi-preset bank and rejects malformed data.")
         precondition(SynthModel.ranges.count==99 && ControlTarget.layerNames.count==99)
         for ref in FactoryBank.references {
-            model.loadPreset(ref)
+            model.loadPreset(ref, panic: false)
             precondition(SynthModel.sanitized(ref) != nil)
             for l in 0..<4 {for p in 79..<99 {precondition(abs(Double(aurora_get_parameter(Int32(l),Int32(p)))-ref.layers[l][p])<0.0001)}}
             let recalled=try! JSONDecoder().decode(SoundPreset.self,from:JSONEncoder().encode(ref))
