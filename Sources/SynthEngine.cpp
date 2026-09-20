@@ -13,7 +13,7 @@ namespace aurora {
 namespace {
 constexpr int kLayers=4, kVoices=64, kSources=32;
 constexpr float pi=3.14159265358979323846f, tau=2*pi;
-constexpr size_t queueSize=2048, delaySize=768004, chorusSize=8192;
+constexpr size_t queueSize=2048, delaySize=768004, chorusSize=8192, shimmerSize=192000, shimmerPredelaySize=48000;
 float bounded(float x,float lo,float hi,float fallback=0) {
     return std::isfinite(x) ? std::clamp(x,lo,hi) : fallback;
 }
@@ -52,8 +52,12 @@ float parameterValue(int p,float v) {
         case APPan: case APFilterEnvelope: return bounded(v,-1,1);
         case APTranspose: return std::round(bounded(v,-48,48));
         case APLFORate: case APLFO2Rate: return bounded(v,.01f,30,1);
-        case APLFODestination: case APLFO2Destination: case APArpRate: case APArpMode:
+        case APLFODestination: case APLFO2Destination:
             return std::round(bounded(v,0,3));
+        case APArpRate: return std::round(bounded(v,0,5));
+        case APArpMode: return std::round(bounded(v,0,29));
+        case APArpVelocityShape: return std::round(bounded(v,0,4));
+        case APArpSwing: return bounded(v,0,1);
         case APFilterType:case APFilter2Type: return std::round(bounded(v,0,3));
         case APArpOctaves: return std::round(bounded(v,1,4,1));
         case APArpGate: return bounded(v,.05f,.95f,.65f);
@@ -66,9 +70,18 @@ float globalValue(int p,float v) {
     if(p==AGPhaserRate||p==AGChorusRate)return bounded(v,.03f,5,.23f);
     if(p==AGPhaserFeedback)return bounded(v,-.85f,.85f);
     if(p==AGReverbDecay)return bounded(v,.2f,8,1);
+    if(p==AGShimmerDecay||p==AGShimmerLateDecay)return bounded(v,.2f,12,3);
     if(p==AGDelayTiming)return std::round(bounded(v,0,7));
     if(p==AGTempo) return bounded(v,30,240,120);
     if(p==AGDelayFeedback) return bounded(v,0,.85f,.3f);
+    if(p==AGDelaySync||p==AGShimmerReverse)return bounded(v,0,1)>=.5f?1.f:0.f;
+    if(p==AGDelayTimeMs)return bounded(v,1,2000,375);
+    if(p==AGEqLow||p==AGEqMid||p==AGEqHigh)return bounded(v,-12,12);
+    if(p==AGShimmerPitch)return bounded(v,-12,24,12);
+    if(p==AGShimmerPredelay)return bounded(v,0,200,20);
+    if(p==AGShimmerAmount)return bounded(v,0,.95f,.45f);
+    if(p==AGDelayMix||p==AGChorusMix)return bounded(v,0,.6f);
+    if(p==AGReverbMix)return bounded(v,0,.75f);
     return bounded(v,0,1);
 }
 float polyBLEP(float phase,float step) {
@@ -186,7 +199,7 @@ struct Layer {
     double arpCountdown=0,gateCountdown=0;
     uint64_t arpStep=0; bool previousEnabled=false,previousArp=false,arpWaiting=true;
 };
-struct Candidate { int source=0,channel=0,key=0,note=0; float velocity=0; };
+struct Candidate { int source=0,channel=0,key=0,note=0; float velocity=0; uint64_t order=0; };
 struct Comb {
     float feedback=.77f;
     std::array<float,16384> data{}; int position=0,length=1500; float damp=0;
@@ -253,6 +266,21 @@ struct SynthEngine::Impl {
     float phaserPhase=0,phaserMix=0;
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
     size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1,outputLimiter=1;
+    // Delay tone LPFs in feedback path (0=dark … 1=bright)
+    float delayToneL=0,delayToneR=0;
+    // 3-band EQ state (shelves + presence) on final stereo bus
+    float eqLowL=0,eqLowR=0,eqMidL=0,eqMidR=0,eqHighL=0,eqHighR=0;
+    // Full shimmer: pitch-shifted multi-voice diffusion return
+    std::array<float,shimmerSize> shimmerBufL{},shimmerBufR{};
+    std::array<float,shimmerPredelaySize> shimmerPreL{},shimmerPreR{};
+    size_t shimmerWrite=0,shimmerPreWrite=0;
+    float shimmerGrainL[3]{},shimmerGrainR[3]{};
+    float shimmerReadL[3]{},shimmerReadR[3]{};
+    float shimmerToneStateL=0,shimmerToneStateR=0;
+    float shimmerFbL=0,shimmerFbR=0;
+    std::array<Comb,4> shimmerCombs{};
+    std::array<Allpass,2> shimmerAllpasses{};
+    float shimmerEarlyStateL=0,shimmerEarlyStateR=0;
     double sampleRate=48000; uint64_t serial=0,sampleCounter=0; uint32_t random=0x8e7f4a35;
     bool holding=false,externalClock=false,clockPlaying=true;
     int32_t clockID=0;uint64_t clockTicks=0,clockAge=0;
@@ -283,6 +311,14 @@ struct SynthEngine::Impl {
         globals[AGMaster].store(.25f);globals[AGTempo].store(120);globals[AGDelayMix].store(.12f);
         globals[AGDelayFeedback].store(.3f);globals[AGReverbMix].store(.16f);globals[AGChorusMix].store(.1f);
         globals[AGPhaserRate]=.22f;globals[AGPhaserDepth]=1;globals[AGChorusRate]=.23f;globals[AGChorusDepth]=1;globals[AGReverbSize]=.5f;globals[AGReverbDecay]=1;
+        globals[AGDelaySync].store(1);globals[AGDelayTimeMs].store(375);globals[AGDelayPingPong].store(1);globals[AGDelayTone].store(.65f);
+        globals[AGEqLow].store(0);globals[AGEqMid].store(0);globals[AGEqHigh].store(0);
+        globals[AGShimmerMix].store(0);globals[AGShimmerPitch].store(12);globals[AGShimmerDecay].store(3);
+        globals[AGShimmerTone].store(.55f);globals[AGShimmerPredelay].store(20);globals[AGShimmerAmount].store(.45f);
+        globals[AGShimmerVoice1].store(.7f);globals[AGShimmerVoice2].store(.55f);globals[AGShimmerVoice3].store(.4f);
+        globals[AGShimmerReverse].store(0);
+        globals[AGShimmerEarlyLevel].store(.45f);globals[AGShimmerEarlySize].store(.35f);
+        globals[AGShimmerLateLevel].store(.7f);globals[AGShimmerLateDecay].store(4);
         prepare(48000);
     }
     void clearSound() {
@@ -302,7 +338,16 @@ struct SynthEngine::Impl {
         phaserPhase=0;phaserMix=0;
         phaserFeedback.fill(0);
         delayL.fill(0);delayR.fill(0);chorusL.fill(0);chorusR.fill(0);
+        delayToneL=delayToneR=0;
+        eqLowL=eqLowR=eqMidL=eqMidR=eqHighL=eqHighR=0;
+        shimmerBufL.fill(0);shimmerBufR.fill(0);shimmerPreL.fill(0);shimmerPreR.fill(0);
+        shimmerWrite=shimmerPreWrite=0;shimmerToneStateL=shimmerToneStateR=0;shimmerFbL=shimmerFbR=0;
+        shimmerEarlyStateL=shimmerEarlyStateR=0;
+        for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;shimmerReadL[i]=shimmerReadR[i]=0;}
         for(auto& c:combs)c.clear();for(auto& a:allpasses)a.clear();
+        for(auto& c:shimmerCombs)c.clear();for(auto& a:shimmerAllpasses)a.clear();
+        delaySamples=float(sampleRate*.5);delayPosition=0;delayToneL=delayToneR=0;
+        outputLimiter=1.f; // Panic must restore audible level after feedback lockup
         outputPeak.store(0,std::memory_order_relaxed);voiceCount.store(0,std::memory_order_relaxed);
         previewActiveLayers.store(0);
     }
@@ -319,7 +364,11 @@ struct SynthEngine::Impl {
         constexpr float times[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
         for(int i=0;i<8;i++)combs[i].length=std::clamp(int(sampleRate*times[i]),1,16384);
         for(int i=0;i<4;i++)allpasses[i].length=std::clamp(int(sampleRate*(.0047f+.0013f*i)),1,4096);
+        constexpr float shimmerTimes[4]={.0311f,.0413f,.0531f,.0677f};
+        for(int i=0;i<4;i++)shimmerCombs[i].length=std::clamp(int(sampleRate*shimmerTimes[i]),1,16384);
+        for(int i=0;i<2;i++)shimmerAllpasses[i].length=std::clamp(int(sampleRate*(.0051f+.0021f*i)),1,4096);
         delaySamples=float(sampleRate*.5);delayPosition=chorusPosition=0;sampleCounter=0;
+        shimmerWrite=shimmerPreWrite=0;
     }
     void requestPanic() {
         // Generation tagging also rejects a producer that reserved a queue slot
@@ -500,7 +549,11 @@ struct SynthEngine::Impl {
             double interval=e.seconds-lastClock;lastClock=e.seconds;clockAge=0;
             if(interval>=60.0/(240*24)*.9&&interval<=60.0/(30*24)*1.1){clockInterval=clockInterval==0?interval:clockInterval*.85+interval*.15;if(clockPlaying)clockBPM=std::clamp(float(60/(24*clockInterval)),30.f,240.f);}
             if(clockBPM>0)global[AGTempo]=clockBPM.load();
-            if(clockPlaying)for(int l=0;l<kLayers;l++)if(layers[l].p[APEnabled]>.5f&&layers[l].p[APArpEnabled]>.5f&&clockTicks%uint64_t(24>>int(layers[l].p[APArpRate]))==0)arpStep(l);
+            if(clockPlaying)for(int l=0;l<kLayers;l++)if(layers[l].p[APEnabled]>.5f&&layers[l].p[APArpEnabled]>.5f){
+                static constexpr int kArpTicks[]={24,12,8,6,4,3};
+                int rate=std::clamp(int(layers[l].p[APArpRate]),0,5);
+                if(clockTicks%uint64_t(kArpTicks[rate])==0)arpStep(l);
+            }
             ++clockTicks;return;
         }
         int si=sourceIndex(e.source,e.kind!=Event::Disconnect,e.kind==Event::Route);if(si<0)return;
@@ -554,24 +607,162 @@ struct SynthEngine::Impl {
         for(int si=0;si<kSources;si++)if(sources[si].used)for(int ch=0;ch<16;ch++)for(int key=0;key<128;key++) {
             int velocity=sources[si].velocity[ch][key];if(!velocity||!routes(si,ch,key,layerIndex))continue;
             for(int oct=0;oct<int(p[APArpOctaves]);oct++)if(key+12*oct<=127&&count<int(candidates.size()))
-                candidates[count++]={si,ch,key,key+12*oct,velocity/127.f};
+                candidates[count++]={si,ch,key,key+12*oct,velocity/127.f,sources[si].order[ch][key]};
         }
         if(count==0){layer.arpStep=0;layer.arpCountdown=0;layer.arpWaiting=true;return;}
-        std::sort(candidates.begin(),candidates.begin()+count,[](const Candidate& a,const Candidate& b){
-            if(a.note!=b.note)return a.note<b.note;if(a.source!=b.source)return a.source<b.source;
-            if(a.channel!=b.channel)return a.channel<b.channel;return a.key<b.key;
-        });
-        int index=0,mode=int(p[APArpMode]);
-        if(mode==0)index=int(layer.arpStep%count);
-        else if(mode==1)index=count-1-int(layer.arpStep%count);
-        else if(mode==2){int period=std::max(1,2*count-2),step=int(layer.arpStep%period);index=step<count?step:period-step;}
-        else index=int(nextRandom(random)%uint32_t(count));
-        const auto& c=candidates[index];startVoice(c.source,c.channel,c.key,c.note,c.velocity,layerIndex,true);
+        int mode=std::clamp(int(p[APArpMode]),0,29);
+        bool asPlayed=(mode==5||mode==6);
+        if(asPlayed){
+            std::sort(candidates.begin(),candidates.begin()+count,[](const Candidate& a,const Candidate& b){
+                if(a.order!=b.order)return a.order<b.order;
+                if(a.note!=b.note)return a.note<b.note;if(a.source!=b.source)return a.source<b.source;
+                if(a.channel!=b.channel)return a.channel<b.channel;return a.key<b.key;
+            });
+            if(mode==6)std::reverse(candidates.begin(),candidates.begin()+count);
+        }else{
+            std::sort(candidates.begin(),candidates.begin()+count,[](const Candidate& a,const Candidate& b){
+                if(a.note!=b.note)return a.note<b.note;if(a.source!=b.source)return a.source<b.source;
+                if(a.channel!=b.channel)return a.channel<b.channel;return a.key<b.key;
+            });
+        }
+        auto velShape=[&](float base,uint64_t step,int n)->float{
+            int shape=std::clamp(int(p[APArpVelocityShape]),0,4);
+            if(shape==0||n<=0)return base;
+            if(shape==1)return base*((step%uint64_t(n))==0?1.f:.72f);
+            if(shape==2)return base*((step%2)==0?1.f:.72f);
+            float t=n<=1?1.f:float(step%uint64_t(n))/float(n-1);
+            if(shape==3)return base*(.55f+.45f*t);
+            return base*(1.f-.45f*t);
+        };
+        auto fire=[&](const Candidate& c,uint64_t step,int n){
+            startVoice(c.source,c.channel,c.key,c.note,velShape(c.velocity,step,n),layerIndex,true);
+        };
+        uint64_t step=layer.arpStep;
+        auto pickIndex=[&](int n)->int{
+            if(n<=0)return 0;
+            switch(mode){
+                case 0: case 5: case 16: return int(step%uint64_t(n)); // Up / As played / Notes then octaves (sorted already)
+                case 1: case 6: case 17: return n-1-int(step%uint64_t(n)); // Down / Reverse played
+                case 2: case 10: { // Up/Down + Pendulum (no double ends) — keep legacy period
+                    int period=std::max(1,2*n-2),s=int(step%uint64_t(period));
+                    return s<n?s:period-s;
+                }
+                case 3: return int(nextRandom(random)%uint32_t(n));
+                case 4: { // Down / Up (start at top, pendulum)
+                    int period=std::max(1,2*n-2),s=int(step%uint64_t(period));
+                    int idx=s<n?s:period-s; return n-1-idx;
+                }
+                case 8: { // Converge: ends inward
+                    int half=(n+1)/2,s=int(step%uint64_t(std::max(1,n)));
+                    if(s<half)return s;
+                    return n-1-(s-half);
+                }
+                case 9: { // Diverge: center outward
+                    int mid=n/2,s=int(step%uint64_t(std::max(1,n)));
+                    if(s%2==0)return std::clamp(mid-(s/2),0,n-1);
+                    return std::clamp(mid+(s/2)+ (n%2==0?0:0),0,n-1);
+                }
+                case 11: { // Zigzag: 0,2,4... then 1,3,5...
+                    int evens=(n+1)/2,s=int(step%uint64_t(n));
+                    if(s<evens)return s*2;
+                    return 1+(s-evens)*2;
+                }
+                case 12: return int((step*2)%uint64_t(n)); // Skip 1
+                case 13: return int((step*3)%uint64_t(n)); // Skip 2
+                case 14: { // Two up, one down
+                    int cycle=std::max(1,3),phase=int(step%uint64_t(cycle));
+                    int base=int((step/uint64_t(cycle))%uint64_t(n));
+                    if(phase==0)return base;
+                    if(phase==1)return (base+1)%n;
+                    return (base+n-1)%n;
+                }
+                case 15: { // Two down, one up
+                    int cycle=3,phase=int(step%uint64_t(cycle));
+                    int base=int((step/uint64_t(cycle))%uint64_t(n));
+                    int top=n-1-base;
+                    if(phase==0)return top;
+                    if(phase==1)return (top+n-1)%n;
+                    return (top+1)%n;
+                }
+                case 18: { // Octave leap: walk then +12 if available else wrap
+                    int s=int(step%uint64_t(n));
+                    if((step/uint64_t(n))%2==1) return (s+n/2)%n;
+                    return s;
+                }
+                case 19: return (step%2==0)?0:n-1; // Pinky / thumb
+                case 20: { // Gallop 0,0,1
+                    static constexpr int pat[]={0,0,1};
+                    int pi=pat[step%3];
+                    return std::min(pi,n-1);
+                }
+                case 21: { // Hemiola 3 over 2
+                    int s=int(step%6);
+                    int map[]={0,1,2,0,1,2};
+                    return map[s]%n;
+                }
+                case 22: return int((step/2)%uint64_t(n)); // Repeat x2
+                case 23: return int((step/3)%uint64_t(n)); // Repeat x3
+                case 24: { // First + climb
+                    if(step%uint64_t(n+1)==0)return 0;
+                    return 1+int((step-1)%uint64_t(std::max(1,n-1)));
+                }
+                case 25: { // Last + fall
+                    if(step%uint64_t(n+1)==0)return n-1;
+                    int k=int((step-1)%uint64_t(std::max(1,n-1)));
+                    return n-2-k;
+                }
+                case 29: { // Spread walk: low, high, next-low, next-high...
+                    int s=int(step%uint64_t(n));
+                    if(s%2==0)return s/2;
+                    return n-1-(s/2);
+                }
+                default: return int(step%uint64_t(n));
+            }
+        };
+
+        // Chord: all notes each step
+        if(mode==7){
+            for(int i=0;i<count;i++)fire(candidates[i],step,count);
+        } else if(mode==26||mode==27){ // Bass drone + up/down
+            fire(candidates[0],step,count);
+            if(count>1){
+                int rest=count-1;
+                int idx=mode==26?int(step%uint64_t(rest)):rest-1-int(step%uint64_t(rest));
+                fire(candidates[1+idx],step,rest);
+            }
+        } else if(mode==28){ // Melody hold + arp below
+            fire(candidates[count-1],step,count);
+            if(count>1){
+                int rest=count-1;
+                int idx=int(step%uint64_t(rest));
+                fire(candidates[idx],step,rest);
+            }
+        } else {
+            if(mode==16){ // Notes then octaves: all base notes, then +1 oct, ...
+                std::sort(candidates.begin(),candidates.begin()+count,[](const Candidate& a,const Candidate& b){
+                    int ao=(a.note-a.key)/12,bo=(b.note-b.key)/12; if(ao!=bo)return ao<bo;
+                    if(a.key!=b.key)return a.key<b.key; return a.note<b.note;
+                });
+            } else if(mode==17){ // Octaves then notes: climb each note through octaves
+                std::sort(candidates.begin(),candidates.begin()+count,[](const Candidate& a,const Candidate& b){
+                    if(a.key!=b.key)return a.key<b.key;
+                    return a.note<b.note;
+                });
+            }
+            fire(candidates[pickIndex(count)],step,count);
+        }
+
         ++layer.arpStep;
-        double duration=sampleRate*60.0/global[AGTempo]/double(1<<int(p[APArpRate]));
+        static constexpr double kBeats[]={1.0,0.5,1.0/3.0,0.25,1.0/6.0,0.125};
+        int rate=std::clamp(int(p[APArpRate]),0,5);
+        double duration=sampleRate*60.0/global[AGTempo]*kBeats[rate];
+        float swing=std::clamp(p[APArpSwing],0.f,1.f);
+        // Delay odd steps (1-based offbeats): after increment, odd step index was the one just played when step was odd before ++ 
+        // Spec: if (arpStep%2)==1 add duration*swing*0.5 — use pre-increment step (0-based): odd steps get swing delay.
+        if((step%2)==1) duration+=duration*swing*0.5;
         layer.arpCountdown+=duration;layer.gateCountdown=duration*p[APArpGate];
     }
-    void releaseLayerArp(int l) { for(auto& v:voices)if(v.active&&v.arp&&v.layer==l)v.stage=3; }
+        void releaseLayerArp(int l) { for(auto& v:voices)if(v.active&&v.arp&&v.layer==l)v.stage=3; }
     template<size_t N> static float delayed(const std::array<float,N>& buffer,size_t position,float amount) {
         float read=float(position)-amount;
         if(read<0)read+=float(N);int a=int(read);float f=read-float(a);int b=(a+1)%int(N);
@@ -809,22 +1000,165 @@ struct SynthEngine::Impl {
             outR+=phaserMix*.5f*(phased[1]-outR);
             phaserPhase+=global[AGPhaserRate]/float(sampleRate);if(phaserPhase>=1)phaserPhase-=1;
             constexpr float divisions[8]={1,.5f,.25f,2,.75f,1.5f,1.f/3,2.f/3};
-            delaySamples+=smooth*.05f*(std::min(float(delaySize-2),float(sampleRate*60/global[AGTempo])*divisions[int(global[AGDelayTiming])])-delaySamples);
+            float delayTargetSamples;
+            if(global[AGDelaySync]>=.5f){
+                int div=std::clamp(int(std::lround(global[AGDelayTiming])),0,7);
+                float tempo=std::max(30.f,global[AGTempo]);
+                delayTargetSamples=float(sampleRate*60.0/tempo)*divisions[div];
+            }else
+                delayTargetSamples=float(sampleRate)*std::clamp(global[AGDelayTimeMs],1.f,2000.f)*.001f;
+            if(!std::isfinite(delayTargetSamples))delayTargetSamples=float(sampleRate)*.375f;
+            delaySamples+=smooth*.05f*(std::min(float(delaySize-2),std::max(1.f,delayTargetSamples))-delaySamples);
+            if(!std::isfinite(delaySamples)||delaySamples<1.f)delaySamples=std::max(1.f,delayTargetSamples);
             float dl=delayed(delayL,delayPosition,delaySamples),dr=delayed(delayR,delayPosition,delaySamples);
-            delayL[delayPosition]=sendDL+dr*global[AGDelayFeedback];delayR[delayPosition]=sendDR+dl*global[AGDelayFeedback];
+            if(!std::isfinite(dl))dl=0; if(!std::isfinite(dr))dr=0;
+            float ping=std::clamp(global[AGDelayPingPong],0.f,1.f);
+            float fbInL=dr*ping+dl*(1.f-ping);
+            float fbInR=dl*ping+dr*(1.f-ping);
+            // Tone: 0 dark (heavy LPF) … 1 bright (almost bypass)
+            float toneAmt=std::clamp(global[AGDelayTone],0.f,1.f);
+            float toneCoeff=.05f+.45f*toneAmt;
+            delayToneL+=toneCoeff*(fbInL-delayToneL);
+            delayToneR+=toneCoeff*(fbInR-delayToneR);
+            if(!std::isfinite(delayToneL)||!std::isfinite(delayToneR)){delayToneL=0;delayToneR=0;}
+            // Soft-clip feedback so scrubbing Mix/Feedback/Tone cannot lock the bus/limiter
+            float fbAmt=std::clamp(global[AGDelayFeedback],0.f,.85f);
+            float fbL=std::tanh(delayToneL*fbAmt);
+            float fbR=std::tanh(delayToneR*fbAmt);
+            float writeL=sendDL+fbL, writeR=sendDR+fbR;
+            if(!std::isfinite(writeL))writeL=0; if(!std::isfinite(writeR))writeR=0;
+            delayL[delayPosition]=writeL;delayR[delayPosition]=writeR;
             delayPosition=(delayPosition+1)%delaySize;
             float reverbInput=(sendRL+sendRR)*.16f,rl=0,rr=0;
             for(int i=0;i<4;i++){rl+=combs[i].process(reverbInput);rr+=combs[i+4].process(reverbInput);}
             rl=allpasses[1].process(allpasses[0].process(rl));rr=allpasses[3].process(allpasses[2].process(rr));
             outL+=dl*global[AGDelayMix]+rl*global[AGReverbMix]*.25f;
             outR+=dr*global[AGDelayMix]+rr*global[AGReverbMix]*.25f;
+
+            // ---- Full Shimmer (pitch-shifted multi-voice diffusion) ----
+            {
+                float shimmerSend=(sendRL+sendRR)*.12f+(outL+outR)*.04f;
+                // Pre-delay write/read
+                shimmerPreL[shimmerPreWrite]=shimmerSend+shimmerFbL;
+                shimmerPreR[shimmerPreWrite]=shimmerSend+shimmerFbR;
+                float preSamples=std::clamp(global[AGShimmerPredelay]*.001f*float(sampleRate),0.f,float(shimmerPredelaySize-2));
+                size_t preRead=(shimmerPreWrite+shimmerPredelaySize-size_t(preSamples))%shimmerPredelaySize;
+                float preL=shimmerPreL[preRead],preR=shimmerPreR[preRead];
+                shimmerPreWrite=(shimmerPreWrite+1)%shimmerPredelaySize;
+
+                // Early reflections: short comb-ish one-pole + allpass size
+                float earlySize=.002f+.028f*std::clamp(global[AGShimmerEarlySize],0.f,1.f);
+                float earlyCoeff=std::exp(-1.f/(earlySize*float(sampleRate)+1.f));
+                shimmerEarlyStateL=earlyCoeff*shimmerEarlyStateL+(1.f-earlyCoeff)*preL;
+                shimmerEarlyStateR=earlyCoeff*shimmerEarlyStateR+(1.f-earlyCoeff)*preR;
+                float earlyL=shimmerEarlyStateL*global[AGShimmerEarlyLevel];
+                float earlyR=shimmerEarlyStateR*global[AGShimmerEarlyLevel];
+
+                // Write into pitch buffer (forward)
+                shimmerBufL[shimmerWrite]=preL;
+                shimmerBufR[shimmerWrite]=preR;
+
+                // Harmony voices: +5, +7, +12 relative to AGShimmerPitch base
+                constexpr float voiceSemi[3]={5.f,7.f,12.f};
+                float voiceLvl[3]={global[AGShimmerVoice1],global[AGShimmerVoice2],global[AGShimmerVoice3]};
+                float baseSemi=global[AGShimmerPitch];
+                bool reverse=global[AGShimmerReverse]>=.5f;
+                float pitchedL=0,pitchedR=0;
+                for(int v=0;v<3;v++){
+                    float ratio=std::exp2((baseSemi+voiceSemi[v])/12.f);
+                    // Grain window ~40ms; advance read by ratio (or -ratio for reverse)
+                    float grainSamples=float(sampleRate)*.04f;
+                    float step=reverse?-ratio:ratio;
+                    shimmerReadL[v]+=step;
+                    shimmerReadR[v]+=step;
+                    if(shimmerReadL[v]<0)shimmerReadL[v]+=grainSamples;
+                    if(shimmerReadL[v]>=grainSamples)shimmerReadL[v]-=grainSamples;
+                    if(shimmerReadR[v]<0)shimmerReadR[v]+=grainSamples;
+                    if(shimmerReadR[v]>=grainSamples)shimmerReadR[v]-=grainSamples;
+                    auto tap=[&](const std::array<float,shimmerSize>& buf,float offset)->float{
+                        float pos=float(shimmerWrite)+shimmerSize-offset;
+                        while(pos<0)pos+=float(shimmerSize);
+                        size_t i0=size_t(pos)%shimmerSize;
+                        size_t i1=(i0+1)%shimmerSize;
+                        float frac=pos-std::floor(pos);
+                        return buf[i0]*(1.f-frac)+buf[i1]*frac;
+                    };
+                    // Two taps with Hann crossfade for smoother pitch shift
+                    float o1=shimmerReadL[v]+float(sampleRate)*.012f;
+                    float o2=o1+grainSamples*.5f;
+                    float w=shimmerReadL[v]/grainSamples;
+                    float hann1=.5f-.5f*std::cos(tau*w);
+                    float hann2=.5f-.5f*std::cos(tau*std::fmod(w+.5f,1.f));
+                    float gL=tap(shimmerBufL,o1)*hann1+tap(shimmerBufL,o2)*hann2;
+                    float gR=tap(shimmerBufR,o1)*hann1+tap(shimmerBufR,o2)*hann2;
+                    float lvl=std::clamp(voiceLvl[v],0.f,1.f);
+                    pitchedL+=gL*lvl;pitchedR+=gR*lvl;
+                }
+                shimmerWrite=(shimmerWrite+1)%shimmerSize;
+
+                // Late diffusion: Schroeder-ish on pitched signal, decay from LateDecay/ShimmerDecay
+                float lateDecay=std::max(global[AGShimmerLateDecay],global[AGShimmerDecay]);
+                for(int i=0;i<4;i++){
+                    shimmerCombs[i].feedback=std::min(.97f,std::pow(.001f,float(shimmerCombs[i].length/sampleRate)/std::max(.2f,lateDecay)));
+                }
+                float lateIn=(pitchedL+pitchedR)*.35f;
+                float late=0;
+                for(int i=0;i<4;i++)late+=shimmerCombs[i].process(lateIn);
+                late=shimmerAllpasses[1].process(shimmerAllpasses[0].process(late));
+                late*=global[AGShimmerLateLevel];
+
+                // Tone LPF on feedback path
+                float st=std::clamp(global[AGShimmerTone],0.f,1.f);
+                float stCoeff=.04f+.5f*st;
+                float wetL=earlyL+pitchedL*.45f+late*.55f;
+                float wetR=earlyR+pitchedR*.45f+late*.55f;
+                shimmerToneStateL+=stCoeff*(wetL-shimmerToneStateL);
+                shimmerToneStateR+=stCoeff*(wetR-shimmerToneStateR);
+                float amount=std::clamp(global[AGShimmerAmount],0.f,.95f);
+                shimmerFbL=std::tanh(shimmerToneStateL*amount*.55f);
+                shimmerFbR=std::tanh(shimmerToneStateR*amount*.55f);
+                if(!std::isfinite(shimmerFbL)||!std::isfinite(shimmerFbR)){shimmerFbL=shimmerFbR=0;shimmerToneStateL=shimmerToneStateR=0;}
+
+                float mix=std::clamp(global[AGShimmerMix],0.f,1.f);
+                if(std::isfinite(shimmerToneStateL)&&std::isfinite(shimmerToneStateR)){
+                    outL+=shimmerToneStateL*mix;
+                    outR+=shimmerToneStateR*mix;
+                }
+            }
+
+            // ---- Insert EQ on final stereo bus (before master/limiter) ----
+            {
+                // One-pole shelves @ ~180 Hz / presence @ ~1.2 kHz / high @ ~5 kHz
+                float lowG=std::pow(10.f,global[AGEqLow]/20.f);
+                float midG=std::pow(10.f,global[AGEqMid]/20.f);
+                float highG=std::pow(10.f,global[AGEqHigh]/20.f);
+                float lowC=std::exp(-2.f*pi*180.f/float(sampleRate));
+                float midC=std::exp(-2.f*pi*1200.f/float(sampleRate));
+                float highC=std::exp(-2.f*pi*5000.f/float(sampleRate));
+                auto eqChan=[&](float x,float& lo,float& mid,float& hi)->float{
+                    lo=lowC*lo+(1.f-lowC)*x;
+                    float highPass=x-lo;
+                    mid=midC*mid+(1.f-midC)*highPass;
+                    float presence=highPass-mid;
+                    hi=highC*hi+(1.f-highC)*presence;
+                    float air=presence-hi;
+                    return lo*lowG+mid*midG+hi*highG+air;
+                };
+                outL=eqChan(outL,eqLowL,eqMidL,eqHighL);
+                outR=eqChan(outR,eqLowR,eqMidR,eqHighR);
+            }
+
             master+=smooth*(masterTarget-master);
             float finalL=std::tanh(outL*master),finalR=std::tanh(outR*master);
             outputGain+=smooth*(gainTarget-outputGain);
             if(outputGain>1.00001f){
                 finalL*=outputGain;finalR*=outputGain;
-                float target=std::min(1.f,.98f/std::max(.00001f,std::max(std::abs(finalL),std::abs(finalR))));
-                outputLimiter=target<outputLimiter?target:outputLimiter+limiterRelease*(target-outputLimiter);
+                float peak=std::max(std::abs(finalL),std::abs(finalR));
+                float target=std::min(1.f,.98f/std::max(.00001f,peak));
+                // Attack fast on peaks; release quicker when quiet so Delay scrubbing cannot leave the bus muted
+                float release=peak<.05f ? (1-std::exp(-1.f/float(sampleRate*.02))) : limiterRelease;
+                outputLimiter=target<outputLimiter?target:outputLimiter+release*(target-outputLimiter);
+                if(!std::isfinite(outputLimiter)||outputLimiter<.0001f)outputLimiter=peak>1.f?.0001f:1.f;
                 finalL*=outputLimiter;finalR*=outputLimiter;
             }else outputLimiter=1;
             left[frame]=std::isfinite(finalL)?finalL:0;right[frame]=std::isfinite(finalR)?finalR:0;

@@ -22,18 +22,31 @@ enum AuroraParameter {
     APOscModMode, APOscModAmount, APOscModRatio,
     APCharacterMode, APCharacterDrive, APCharacterMix, APCharacterTone, APCharacterBits, APCharacterRate,
     APFilter1Slope, APFilter2Slope, APLFO1Sync, APLFO1Division, APLFO1Retrigger, APLFO1Phase, APLFO1Delay, APLFO1Fade, APLFO2Sync, APLFO2Division, APLFO2Retrigger, APLFO2Phase, APLFO2Delay, APLFO2Fade, APWT1Formant, APWT1Tone, APWT2Formant, APWT2Tone,
+    APArpSwing, APArpVelocityShape,
     APParameterCount
 };
 // Parameter units: cutoff Hz; envelopes seconds; rate Hz; detune cents;
 // level/sub/noise/blend/resonance/depth/drive/sustain 0...1; pan -1...1;
 // wave 0 sine / 1 triangle / 2 saw / 3 pulse / 4 harmonic blend;
 // LFO destination 0 cutoff / 1 pitch / 2 pan / 3 amplitude;
-// filter 0 lowpass / 1 highpass / 2 bandpass. Arp rate 0 quarter,
-// 1 eighth, 2 sixteenth, 3 thirty-second; mode 0 up/1 down/2 up-down/3 random.
+// filter 0 lowpass / 1 highpass / 2 bandpass. Arp rate 0=1/4, 1=1/8,
+// 2=1/8T, 3=1/16, 4=1/16T, 5=1/32; mode 0..29 (0..3 keep old Up/Down/UpDown/Random).
 enum AuroraGlobal { AGMaster=0, AGTempo, AGDelayMix, AGDelayFeedback,
     AGReverbMix, AGChorusMix, AGPhaserMix, AGPhaserRate, AGPhaserDepth,
     AGPhaserFeedback, AGChorusRate, AGChorusDepth, AGReverbSize, AGReverbDecay,
-    AGDelayTiming, AGOutputGain, AGGlobalCount };
+    AGDelayTiming, AGOutputGain,
+    /* 0.20.8 delay refinements */
+    AGDelaySync, AGDelayTimeMs, AGDelayPingPong, AGDelayTone,
+    /* shared insert EQ (dB bipolar, always on) */
+    AGEqLow, AGEqMid, AGEqHigh,
+    /* full shimmer shared return */
+    AGShimmerMix, AGShimmerPitch, AGShimmerDecay, AGShimmerTone,
+    AGShimmerPredelay, AGShimmerAmount,
+    AGShimmerVoice1, AGShimmerVoice2, AGShimmerVoice3,
+    AGShimmerReverse,
+    AGShimmerEarlyLevel, AGShimmerEarlySize,
+    AGShimmerLateLevel, AGShimmerLateDecay,
+    AGGlobalCount };
 // Main-thread API; MIDI receive and audio rendering run on platform threads.
 void aurora_initialize(void);
 void aurora_shutdown(void);

@@ -66,11 +66,11 @@ import SwiftUI
         precondition(try! SynthModel.presets(in:presetBankData).count==12)
         precondition((try? SynthModel.presets(in:Data("not a preset".utf8)))==nil)
         print("PASS: batch preset format accepts one preset or a multi-preset bank and rejects malformed data.")
-        precondition(SynthModel.ranges.count==97 && ControlTarget.layerNames.count==97)
+        precondition(SynthModel.ranges.count==99 && ControlTarget.layerNames.count==99)
         for ref in FactoryBank.references {
             model.loadPreset(ref)
             precondition(SynthModel.sanitized(ref) != nil)
-            for l in 0..<4 {for p in 79..<97 {precondition(abs(Double(aurora_get_parameter(Int32(l),Int32(p)))-ref.layers[l][p])<0.0001)}}
+            for l in 0..<4 {for p in 79..<99 {precondition(abs(Double(aurora_get_parameter(Int32(l),Int32(p)))-ref.layers[l][p])<0.0001)}}
             let recalled=try! JSONDecoder().decode(SoundPreset.self,from:JSONEncoder().encode(ref))
             precondition(recalled.layers==ref.layers)
         }
@@ -111,7 +111,7 @@ import SwiftUI
             precondition(sound.soundMatrix!.flatMap{$0}.allSatisfy{$0.valid(performance:false)})
             precondition(sound.performanceMatrix!.allSatisfy{$0.valid(performance:true)})
             for index in 0..<8{model.macro(index,sound.macros[index])}
-            for l in 0..<4 {for p in 0..<97{
+            for l in 0..<4 {for p in 0..<99{
                 precondition(abs(model.patch.layers[l][p]-sound.layers[l][p])<0.00001,"Nova macro center changes the authored sound: \(sound.name) / \(l) / \(p)")
             }}
             for p in 1..<15{precondition(abs(model.patch.globalValue(p)-sound.globalValue(p))<0.00001)}
@@ -214,11 +214,22 @@ import SwiftUI
         model.redo();precondition(model.patch.globalValue(13)==4.2 && model.patch.layers[0][41]==2)
         model.loadPreset(legacy);precondition(model.patch.globalValue(14)==0 && model.patch.layers[0][43]==2)
         precondition(aurora_get_global(7)==Float(0.22) && aurora_get_parameter(0,43)==2)
+        // 0.20.8: delay sync/free, EQ, shimmer globals persist in fx map and round-trip
+        model.checkpoint();model.global(16,0);model.global(17,500);model.global(18,0.25);model.global(19,0.4)
+        model.global(20,-3);model.global(21,1.5);model.global(22,2)
+        model.global(23,0.35);model.global(24,7);model.global(28,0.6);model.global(32,1);model.global(36,5)
+        model.saveCurrent();model.persist()
+        let fx208=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:folder.appendingPathComponent("session.json")))
+        precondition(fx208.patch.globalValue(16)==0 && fx208.patch.globalValue(17)==500 && abs(fx208.patch.globalValue(20)-(-3))<0.001)
+        precondition(fx208.patch.globalValue(23)==0.35 && fx208.patch.globalValue(24)==7 && fx208.patch.globalValue(32)==1)
+        precondition(SynthModel.globalRanges.count==37 && ControlTarget.globalNames.count==37)
+        model.undo();precondition(model.patch.globalValue(23)==0)
+        print("PASS: 0.20.8 delay sync/free, EQ and shimmer globals save/undo; globalRanges/globalNames length 37.")
         print("PASS: extended FX and expressive settings save, undo/redo, reset on old patch load; per-source velocity curve persists.")
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")
         print("PASS: 100% master, persistent global transpose, tap tempo, rename preserving edits, delete and undo.")
-        print("PASS: Aurora contains 300 distinct Spectrum sounds; all 300 load and all 97 parameters retain macro-center values. Motion, XY and save round trips pass.")
+        print("PASS: Aurora contains 300 distinct Spectrum sounds; all 300 load and all 99 parameters retain macro-center values. Motion, XY and save round trips pass.")
         print("PASS: 20 stable polls and 1,200 meter changes caused ZERO main-interface publications.")
         print("PASS: 1,200 unchanged meter samples caused ZERO additional publications.")
         model.selectedLayer=0

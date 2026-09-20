@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aurora Spectrum: 300 layered performances for the 97-parameter engine.
+"""Aurora Spectrum: 300 layered performances for the 99-parameter engine.
 
 No old presets are used as input. Reproducible recipes, explicit voice roles,
 center-preserving macros, and measured per-patch trims live alongside the bank.
@@ -82,7 +82,7 @@ def schema():
     values=re.search(r'defaults\[\] = \{([^}]+)',source)[1]
     defaults=[float(x) for x in values.split(',')]
     specs=re.findall(r'\{"[^"]+",([^,]+),([^,]+),(true|false),(true|false)\}',source.split('inline constexpr Spec globals')[0])
-    assert len(defaults)==len(specs)==97
+    assert len(defaults)==len(specs)==99
     return defaults,[(float(a),float(b),c=='true',d=='true') for a,b,c,d in specs]
 DEFAULTS,SPECS=schema()
 FXSPEC=[(0,1,False,False),(30,240,False,False),(0,.6,False,False),(0,.75,False,False),(0,.75,False,False),(0,.6,False,False),(0,1,False,False),(.03,5,False,False),(0,1,False,False),(-.85,.85,False,False),(.03,5,False,False),(0,1,False,False),(0,1,False,False),(.2,8,False,False),(0,7,False,True)]
@@ -190,7 +190,9 @@ def make_patch(c,i,name):
     ambient=c in ('Pads','Textures');bass=c=='Bass';variant=i//10
     delay=.025 if bass else .16 if c in ('Plucks','Arps') else .08
     reverb=.055 if bass else .27 if ambient else .14
-    fx={7:.18+.017*(i%10),8:.35,9:.12,10:.23,11:.55,12:.78 if ambient else .48,13:3.4 if ambient else 1.3,14:[0,4,2,6,5][i%5]}
+    # 0.20.8: keys 16..36 optional (app fxDefaults fill gaps). Keep classic 7..14; leave new FX at defaults.
+    # 20–22 are session EQ on Play (not patch) — never write them into factory fx.
+    fx={7:.18+.017*(i%10),8:.35,9:.12,10:.23,11:.55,12:.78 if ambient else .48,13:3.4 if ambient else 1.3,14:[0,4,2,6,5][i%5],16:1,17:375,18:1,19:.65,23:0,24:12,25:3,26:.55,27:20,28:.45,29:.7,30:.55,31:.4,32:0,33:.45,34:.35,35:.7,36:4}
     p=dict(id='spectrum-'+re.sub('[^a-z0-9]+','-',name.lower()),name=name,category=c,
       detail=f"{'Slow chords' if ambient else 'Low single notes' if bass else 'Melodic phrases' if c=='Leads' else 'Hold a chord' if c=='Arps' else 'Left below C4; right from C4' if c=='Splits' else 'Play with touch'}; "+'; '.join(f"{'ABCD'[l]}: {r}" for l,r in enumerate(roles) if layers[l][0])+f". {['Warm body with separate attack and air.','Interlocking motion and parallel filter color.','Spectral formants and textured harmonics.'][variant]} X: Color; Y: Ensemble. Wheel opens color; pressure adds expression.",
       layers=[dict(values={str(k):v for k,v in layer.items()}) for layer in layers],
@@ -221,7 +223,7 @@ def assemble():
         assert signature not in signatures;signatures.add(signature)
         assert len(p['detail'])<=500
         for l in p['layers']:
-            assert len(l['values'])==97
+            assert len(l['values'])==99
             for k,v in l['values'].items():
                 lo,hi,_,integer=SPECS[int(k)];assert math.isfinite(v) and lo<=v<=hi,(p['name'],k,v,lo,hi)
                 assert not integer or v==int(v)

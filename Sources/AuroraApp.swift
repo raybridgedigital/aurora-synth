@@ -91,8 +91,9 @@ struct LayerPatch: Codable, Equatable {
         LayerPatch(values: [0:1,1:2,2:1,3:0.35,4:7,5:0.12,6:0,
             7:2600,8:0.15,9:0.025,10:0.35,11:0.75,12:0.7,13:0.65,
             14:0,15:0,16:0.4,17:0.12,18:0,19:0,20:0.15,21:0.08,
-            22:0,23:2,24:0,25:1,26:0.65,27:0,28:127,
-            29:0.16,30:0.06,31:2,32:0,33:0,34:0.5,35:0,36:1,37:8,38:0.6,39:0,40:0])
+            22:0,23:3,24:0,25:1,26:0.65,27:0,28:127,
+            29:0.16,30:0.06,31:2,32:0,33:0,34:0.5,35:0,36:1,37:8,38:0.6,39:0,40:0,
+            97:0,98:0])
     }
 }
 struct LayerSends:Codable,Equatable {
@@ -120,7 +121,7 @@ struct MatrixAssignment:Codable,Equatable {
     }
 }
 struct SoundPreset: Identifiable, Codable {
-    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0]
+    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4]
     var fx: [Int:Double]? = nil
     func globalValue(_ id:Int)->Double {id<6 ? globals[id] : id==6 ? (phaserMix ?? 0) : (fx?[id] ?? Self.fxDefaults[id] ?? 0)}
     var id: String
@@ -187,9 +188,15 @@ struct SavedSession: Codable {
     var deletedPresets: [SoundPreset]? = nil
     var outputGain:Double?=nil
     var outputGainRevision:Int?=nil
+    /// Session house EQ (dB) — sticky across patch changes, like Output boost.
+    var eqLow:Double?=nil
+    var eqMid:Double?=nil
+    var eqHigh:Double?=nil
     var setPage: Int? = nil
     var setSlots: [[SetSlot]]? = nil
     var setCutOnSwitch: Bool? = nil
+    /// App keyboard / on-screen piano octave offset (not global transpose).
+    var keyboardOctave: Int? = nil
 }
 
 enum FactoryBank {
@@ -419,10 +426,20 @@ struct EngineReadout:View {
 }
 struct VoiceStatus:View {
     @Environment(\.auroraPalette) private var palette
-    @ObservedObject var telemetry:AudioTelemetry
-    let running:Bool
+    @ObservedObject var m:SynthModel
     var body:some View {
-        HStack{Label("\(telemetry.snapshot.voices) voices",systemImage:"waveform");Spacer();Text(running ? "Ready to play":"Enable audio in the header to start")}
+        ZStack{
+            HStack(spacing:12){
+                Label("\(m.telemetry.snapshot.voices) voices",systemImage:"waveform")
+                Spacer(minLength:8)
+                Text(m.running ? "Ready to play":"Enable audio in the header to start")
+            }
+            HStack(spacing:0){
+                Button{m.setKeyboardOctave(m.keyboardOctave-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:30).contentShape(Rectangle())}.disabled(m.keyboardOctave <= -2).accessibilityLabel("App keyboard octave down")
+                Text(m.keyboardOctave > 0 ? "+\(m.keyboardOctave)":"\(m.keyboardOctave)").monospacedDigit().font(.system(size:15,weight:palette.weight(.medium))).frame(width:34).accessibilityLabel("App keyboard octave \(m.keyboardOctave)")
+                Button{m.setKeyboardOctave(m.keyboardOctave+1)}label:{Image(systemName:"chevron.right").frame(width:28,height:30).contentShape(Rectangle())}.disabled(m.keyboardOctave >= 2).accessibilityLabel("App keyboard octave up")
+            }.buttonStyle(AuroraFlatButtonStyle()).background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:7)).help("App keyboard octave · on-screen piano and typing keys (A W S E D…) · not global transpose")
+        }
     }
 }
 
@@ -453,6 +470,18 @@ struct VoiceStatus:View {
     func setOutputGain(_ gain:Double){
         guard gain.isFinite else{return};outputGain=max(0,min(24,gain));backend.aurora_set_global(15,Float(outputGain));persist()
     }
+    /// Session EQ (dB), sticky across patches — not stored in patch.fx.
+    @Published var eqLow=0.0
+    @Published var eqMid=0.0
+    @Published var eqHigh=0.0
+    func setEqLow(_ v:Double){guard v.isFinite else{return};eqLow=max(-12,min(12,v));backend.aurora_set_global(20,Float(eqLow));persist()}
+    func setEqMid(_ v:Double){guard v.isFinite else{return};eqMid=max(-12,min(12,v));backend.aurora_set_global(21,Float(eqMid));persist()}
+    func setEqHigh(_ v:Double){guard v.isFinite else{return};eqHigh=max(-12,min(12,v));backend.aurora_set_global(22,Float(eqHigh));persist()}
+    func applySessionEQ(){
+        backend.aurora_set_global(20,Float(eqLow))
+        backend.aurora_set_global(21,Float(eqMid))
+        backend.aurora_set_global(22,Float(eqHigh))
+    }
     @Published var favoritesOnly = false
     @Published var favorites: Set<String> = []
     @Published var setPage = 0
@@ -479,6 +508,7 @@ struct VoiceStatus:View {
     @Published var saveCategory = ""
     @Published var showingSave = false
     @Published var transpose = 0
+    @Published var keyboardOctave = 0
     @Published var renameID: String? = nil
     @Published var renameName = ""
     @Published var renameCategory = ""
@@ -613,6 +643,13 @@ struct VoiceStatus:View {
     func setTranspose(_ value:Int) {
         transpose=max(-24,min(24,value));backend.aurora_set_transpose(Int32(transpose));persist()
     }
+    func setKeyboardOctave(_ value:Int) {
+        let next=max(-2,min(2,value))
+        guard next != keyboardOctave else{return}
+        for note in Array(pressed){noteOff(note)}
+        keyboardOctave=next
+        persist()
+    }
     func tapTempo(at time:TimeInterval = ProcessInfo.processInfo.systemUptime) {
         if let last=tapTimes.last, time-last > 3 || time <= last {tapTimes=[]}
         tapTimes.append(time);if tapTimes.count>5{tapTimes.removeFirst()}
@@ -662,9 +699,9 @@ struct VoiceStatus:View {
     private var outputUID: String?
     private var undoPatches: [SoundPreset] = []
     private var redoPatches: [SoundPreset] = []
-    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...3,0...3,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1]
-    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89]
-    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7]
+    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4]
+    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98]
+    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
@@ -681,16 +718,30 @@ struct VoiceStatus:View {
             guard input.importedWavetables?[slot] != nil else{return nil}
         }
         if let fx=input.fx {
-            guard fx.allSatisfy({(7...14).contains($0.key) && $0.value.isFinite}) else{return nil}
-            result.fx=fx.mapValues{$0}
-            for (p,v) in fx {let r=globalRanges[p];result.fx?[p]=max(r.lowerBound,min(r.upperBound,p==14 ? v.rounded():v))}
+            // 20–22 are session EQ (Play), not patch — drop if present in older files
+            let patchFX=fx.filter{!($0.key==20 || $0.key==21 || $0.key==22)}
+            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...36).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
+            result.fx=patchFX.mapValues{$0}
+            for (p,v) in patchFX {
+                let r=globalRanges[p]
+                let rounded = (p==14 || p==16 || p==32 || p==24) ? v.rounded() : v
+                result.fx?[p]=max(r.lowerBound,min(r.upperBound,rounded))
+            }
         }
         result.phaserMix=max(0,min(1,input.phaserMix ?? 0))
         for i in 0..<4 {
             guard input.layers[i].values.allSatisfy({(0..<ranges.count).contains($0.key) && $0.value.isFinite}) else{return nil}
             var layer=LayerPatch.initial
+            let legacyRate = input.layers[i].values[97] == nil
             for (p,v) in input.layers[i].values {
-                let r=ranges[p],clipped=max(r.lowerBound,min(r.upperBound,v))
+                var value=v
+                if legacyRate, p==23 {
+                    // Old rate 0,1,2,3 → 0,1,3,5 (1/4,1/8,1/16,1/32) before clip into expanded divisions.
+                    let map=[0.0,1.0,3.0,5.0]
+                    let idx=Int(v.rounded())
+                    if (0..<map.count).contains(idx) { value=map[idx] }
+                }
+                let r=ranges[p],clipped=max(r.lowerBound,min(r.upperBound,value))
                 layer[p]=integerParameters.contains(p) ? clipped.rounded():clipped
             }
             if layer[27]>layer[28]{layer[28]=layer[27]}
@@ -777,6 +828,10 @@ struct VoiceStatus:View {
         backend.aurora_set_global(15,Float(outputGain))
         backend.aurora_set_global(6,Float(patch.phaserMix ?? 0))
         for p in 7...14{backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
+        for p in 16...36 where p < 20 || p > 22 {
+            backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))
+        }
+        applySessionEQ() // house EQ stays session-sticky across patch loads
         for i in 0..<4 {for p in 0..<Self.ranges.count {backend.aurora_set_parameter(Int32(i),Int32(p),Float(patch.layers[i][p]))}}
         for (p,v) in patch.globals.enumerated() { backend.aurora_set_global(Int32(p),Float(v)) }
     }
@@ -848,7 +903,13 @@ struct VoiceStatus:View {
         if parameter != 0{finishComparison()}
         if !applyingDirectCC{for mapping in directMappings where mapping.target==ControlTarget(layer:-1,parameter:parameter){directPickup.remove(mapping.id);directPrevious[mapping.id]=nil}}
         guard Self.globalRanges.indices.contains(parameter),value.isFinite else{return}
-        let r=Self.globalRanges[parameter],value=max(r.lowerBound,min(r.upperBound,parameter==14 ? value.rounded():value))
+        // Output gain (15) uses setOutputGain; still allow clamping if reached via ControlTarget.
+        let needsRound = parameter==14 || parameter==16 || parameter==32 || parameter==24
+        let r=Self.globalRanges[parameter],value=max(r.lowerBound,min(r.upperBound,needsRound ? value.rounded():value))
+        if parameter==15{setOutputGain(value);return}
+        if parameter==20{setEqLow(value);return}
+        if parameter==21{setEqMid(value);return}
+        if parameter==22{setEqHigh(value);return}
         if parameter>6{if patch.fx==nil{patch.fx=[:]};patch.fx?[parameter]=value}else if parameter==6{patch.phaserMix=value}else{patch.globals[parameter]=value};backend.aurora_set_global(Int32(parameter),Float(value));dirty=true
     }
     func parameter(_ parameter:Int, layer:Int?=nil) -> Binding<Double> {
@@ -856,7 +917,10 @@ struct VoiceStatus:View {
         return Binding(get:{self.patch.layers[l][parameter]},set:{self.set(l,parameter,$0)})
     }
     func globalBinding(_ parameter:Int) -> Binding<Double> {
-        Binding(get:{self.patch.globalValue(parameter)},set:{self.global(parameter,$0)})
+        if parameter==20{return Binding(get:{self.eqLow},set:{self.setEqLow($0)})}
+        if parameter==21{return Binding(get:{self.eqMid},set:{self.setEqMid($0)})}
+        if parameter==22{return Binding(get:{self.eqHigh},set:{self.setEqHigh($0)})}
+        return Binding(get:{self.patch.globalValue(parameter)},set:{self.global(parameter,$0)})
     }
     func macro(_ index:Int,_ value:Double) {
 #if AURORA_PLUGIN
@@ -1144,7 +1208,7 @@ struct VoiceStatus:View {
         if backend.isPlugin{persistPluginLibrary();return}
         do {
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,favoritesOnly:favoritesOnly,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4,setPage:setPage,setSlots:setSlots,setCutOnSwitch:setCutOnSwitch)
+            let saved=SavedSession(directMappings:directMappings,patch:patch,favorites:favorites,favoritesOnly:favoritesOnly,routes:routes,mappings:mappings,outputUID:outputUID,buffer:buffer,transpose:transpose,deletedPresets:deletedPresets,outputGain:outputGain,outputGainRevision:4,eqLow:eqLow,eqMid:eqMid,eqHigh:eqHigh,setPage:setPage,setSlots:setSlots,setCutOnSwitch:setCutOnSwitch,keyboardOctave:keyboardOctave)
             let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
             let sessionData=try encoder.encode(saved), presetData=try encoder.encode(userPresets)
             if sessionData != lastSessionData {
@@ -1165,11 +1229,15 @@ struct VoiceStatus:View {
             directMappings=Array((s.directMappings ?? []).filter{$0.valid && directIDs.insert($0.id).inserted && directTargets.insert($0.target).inserted}.prefix(256))
             patch=valid;favorites=s.favorites;favoritesOnly=s.favoritesOnly ?? false;routes=s.routes.filter{(0...15).contains($0.value.mask) && (0...16).contains($0.value.channel)}
             outputGain=Self.restoredOutputGain(s.outputGain,revision:s.outputGainRevision)
+            eqLow=max(-12,min(12,s.eqLow ?? 0))
+            eqMid=max(-12,min(12,s.eqMid ?? 0))
+            eqHigh=max(-12,min(12,s.eqHigh ?? 0))
             mappings=s.mappings.filter{(0..<8).contains($0.macro) && (0...127).contains($0.controller) && (1...16).contains($0.channel)}
             outputUID=s.outputUID;buffer=[64,128,256,512].contains(s.buffer) ? s.buffer:128
             setPage=max(0,min(3,s.setPage ?? 0))
             setSlots=Self.normalizedSetSlots(s.setSlots)
             setCutOnSwitch=s.setCutOnSwitch ?? false
+            keyboardOctave=max(-2,min(2,s.keyboardOctave ?? 0))
         }
         if let data=try? Data(contentsOf:folder.appendingPathComponent("presets.json")),let list=try? JSONDecoder().decode([SoundPreset].self,from:data){userPresets=list.compactMap{Self.sanitized($0)}}
         // Retired factory sounds should not remain the startup sound after the
@@ -1183,7 +1251,9 @@ struct VoiceStatus:View {
     }
     func installKeyboard() {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]) { [weak self] event in
-            guard let self,NSApp.keyWindow?.firstResponder is NSTextView == false,!event.modifierFlags.contains(.command),!event.modifierFlags.contains(.control),!event.modifierFlags.contains(.option),let note=self.keyNotes[event.keyCode] else{return event}
+            guard let self,NSApp.keyWindow?.firstResponder is NSTextView == false,!event.modifierFlags.contains(.command),!event.modifierFlags.contains(.control),!event.modifierFlags.contains(.option),let base=self.keyNotes[event.keyCode] else{return event}
+            let note=base+self.keyboardOctave*12
+            guard (0...127).contains(note) else{return event}
             if event.type == .keyDown {if !event.isARepeat{self.noteOn(note)}}else{self.noteOff(note)}
             return nil
         } as Any)
@@ -1204,6 +1274,38 @@ struct EqualHeightRow: Layout {
     func placeSubviews(in bounds:CGRect,proposal:ProposedViewSize,subviews:Subviews,cache:inout ()) {
         let cell=(bounds.width-spacing*CGFloat(max(0,subviews.count-1)))/CGFloat(max(1,subviews.count))
         for (i,view) in subviews.enumerated(){view.place(at:CGPoint(x:bounds.minX+CGFloat(i)*(cell+spacing),y:bounds.minY),anchor:.topLeading,proposal:.init(width:cell,height:bounds.height))}
+    }
+}
+/// Weighted columns; row height from `heightSource` subview (default first), so a short panel is not stretched by a tall neighbor.
+struct WeightedHeightRow: Layout {
+    var spacing: CGFloat = 16
+    var weights: [CGFloat]
+    var heightSource: Int = 0
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width=proposal.width ?? 900
+        let n=subviews.count
+        guard n>0 else {return .zero}
+        let wts=Array(weights.prefix(n))+Array(repeating:1.0,count:max(0,n-weights.count))
+        let total=max(0.0001,wts.reduce(0,+))
+        let usable=width-spacing*CGFloat(max(0,n-1))
+        let heights:(Int)->CGFloat = { i in
+            subviews[i].sizeThatFits(.init(width:usable*(wts[i]/total),height:nil)).height
+        }
+        let src=min(max(0,heightSource),n-1)
+        return CGSize(width:width,height:heights(src))
+    }
+    func placeSubviews(in bounds:CGRect,proposal:ProposedViewSize,subviews:Subviews,cache:inout ()) {
+        let n=subviews.count
+        guard n>0 else {return}
+        let wts=Array(weights.prefix(n))+Array(repeating:1.0,count:max(0,n-weights.count))
+        let total=max(0.0001,wts.reduce(0,+))
+        let usable=bounds.width-spacing*CGFloat(max(0,n-1))
+        var x=bounds.minX
+        for (i,view) in subviews.enumerated(){
+            let w=usable*(wts[i]/total)
+            view.place(at:CGPoint(x:x,y:bounds.minY),anchor:.topLeading,proposal:.init(width:w,height:bounds.height))
+            x+=w+spacing
+        }
     }
 }
 struct Panel<Content:View>:View {
@@ -1271,8 +1373,10 @@ struct LayerStrip:View {
 struct PianoView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var model:SynthModel
-    private let whites=(48...84).filter{[0,2,4,5,7,9,11].contains($0%12)}
-    private var blacks:[(Int,Int)]{(48...84).filter{[1,3,6,8,10].contains($0%12)}.map{note in (note,whites.filter{$0<note}.count-1)}}
+    private var low:Int{48+model.keyboardOctave*12}
+    private var high:Int{84+model.keyboardOctave*12}
+    private var whites:[Int]{(low...high).filter{[0,2,4,5,7,9,11].contains($0%12)}}
+    private var blacks:[(Int,Int)]{(low...high).filter{[1,3,6,8,10].contains($0%12)}.map{note in (note,whites.filter{$0<note}.count-1)}}
     func key(_ note:Int,black:Bool)->some View {
         RoundedRectangle(cornerRadius:4).fill(model.pressed.contains(note) ? palette.accent:(black ? Color(red:0.08,green:0.10,blue:0.085):Color(red:0.81,green:0.84,blue:0.79)))
             .overlay(alignment:.bottom){if !black{Text(note%12==0 ? "C\(note/12-1)":"").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(.black.opacity(0.5)).padding(.bottom,7)}}
@@ -1281,8 +1385,9 @@ struct PianoView:View {
             .accessibilityAction{model.noteOn(note);Task{@MainActor in try? await Task.sleep(for:.milliseconds(250));model.noteOff(note)}}
     }
     var body:some View {
-        VStack(spacing:8){HStack{Text("PLAY A LITTLE").tracking(1.4);Spacer();Text("Typing keys A W S E D… · middle C = MIDI 60")}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-            GeometryReader{g in let width=g.size.width/Double(whites.count)
+        let middleC=60+model.keyboardOctave*12
+        return VStack(spacing:8){HStack{Text("PLAY A LITTLE").tracking(1.4);Spacer();Text("Typing keys A W S E D… · middle C = MIDI \(middleC)")}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+            GeometryReader{g in let width=g.size.width/Double(max(1,whites.count))
                 ZStack(alignment:.topLeading){HStack(spacing:2){ForEach(whites,id:\.self){note in key(note,black:false)}}
                     ForEach(blacks,id:\.0){note,pos in key(note,black:true).frame(width:width*0.6,height:51).offset(x:width*Double(pos+1)-width*0.3)}
                 }
@@ -1440,7 +1545,6 @@ struct EditorView:View {
             WavetableSection(m:m)
             MotionEnvelopePanel(m:m).id(m.selectedLayer)
             ArpEffectsView(m:m)
-            FXDetailView(m:m)
             EqualHeightRow(spacing:16){
                 Panel(title:"Pulse & PWM"){
                     slider("Pulse width",34,0.05...0.95)
@@ -1477,62 +1581,162 @@ struct EditorView:View {
 struct ArpEffectsView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    func choices(_ label:String,_ parameter:Int,_ options:[String])->some View {
-        VStack(alignment:.leading,spacing:8){Text(label).foregroundStyle(palette.muted)
-            HStack(spacing:4){ForEach(Array(options.enumerated()),id:\.offset){i,name in
-                Button{m.checkpoint();m.set(m.selectedLayer,parameter,Double(i))}label:{Text(name).font(.system(size:14,weight:Int(m.patch.layers[m.selectedLayer][parameter])==i ? .bold:.regular)).frame(maxWidth:.infinity).padding(.vertical,8).background(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:6)).foregroundStyle(Int(m.patch.layers[m.selectedLayer][parameter])==i ? palette.selectedText:Color.white).contentShape(Rectangle())}.buttonStyle(AuroraFlatButtonStyle(selected:Int(m.patch.layers[m.selectedLayer][parameter])==i)).accessibilityLabel("\(label) \(name)")
-            }}
-        }
-    }
-    var body:some View {
-        EqualHeightRow(spacing:16){
-            Panel(title:"Arpeggiator · layer \(layerLetters[m.selectedLayer])"){
-                Toggle("Arpeggiator enabled",isOn:Binding(get:{m.patch.layers[m.selectedLayer][22]>0.5},set:{m.checkpoint();m.set(m.selectedLayer,22,$0 ? 1:0)})).tint(palette.accent)
-                choices("Pattern",24,["Up","Down","Up/down","Random"])
-                choices("Division",23,["1/4","1/8","1/16","1/32"])
-                Stepper("Octaves: \(Int(m.patch.layers[m.selectedLayer][25]))",value:Binding(get:{Int(m.patch.layers[m.selectedLayer][25])},set:{m.set(m.selectedLayer,25,Double($0))}),in:1...4)
-                ParameterSlider(title:"Gate",value:m.parameter(26),range:0.1...0.95)
-            }.font(.system(size:15,weight:palette.weight(.regular)))
-            Panel(title:"Delay"){
-                Picker("Timing",selection:Binding(get:{Int(m.patch.globalValue(14))},set:{m.checkpoint();m.global(14,Double($0))})){
-                    ForEach(Array(["1/4","1/8","1/16","1/2","1/8 dotted","1/4 dotted","1/8 triplet","1/4 triplet"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
-                }
-                ParameterSlider(title:"Mix",value:m.globalBinding(2),range:0...0.6).modifier(MatrixFeedback(model:m,destination:11))
-                ParameterSlider(title:"Feedback",value:m.globalBinding(3),range:0...0.75)
-            }
-            Panel(title:"FX"){
-                ParameterSlider(title:"Chorus",value:m.globalBinding(5),range:0...0.6).modifier(MatrixFeedback(model:m,destination:8))
-                ParameterSlider(title:"Phaser",value:m.globalBinding(6),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:9))
-                ParameterSlider(title:"Reverb",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
-                Text("Shared FX returns. Each layer has independent Delay and Reverb sends above.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-            }
-        }
-    }
-}
-struct FXDetailView:View {
-    @Environment(\.auroraPalette) private var palette
-    @ObservedObject var m:SynthModel
     func control(_ title:String,_ id:Int,_ range:ClosedRange<Double> = 0...1,_ format:@escaping(Double)->String={String(format:"%.0f%%",$0*100)})->some View {
         ParameterSlider(title:title,value:m.globalBinding(id),range:range,format:format,onBegin:{m.checkpoint()})
             .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:-1,parameter:id)))
     }
+    func divisionButtons()->some View {
+        let options=["1/4","1/8","1/8T","1/16","1/16T","1/32"]
+        return HStack(spacing:8){
+            Text("Division").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
+            HStack(spacing:3){
+                ForEach(Array(options.enumerated()),id:\.offset){index,name in
+                    let selected=Int(m.patch.layers[m.selectedLayer][23])==index
+                    Button{m.checkpoint();m.set(m.selectedLayer,23,Double(index))}label:{
+                        Text(name).font(.system(size:12,weight:selected ? .bold:.regular)).lineLimit(1).frame(maxWidth:.infinity).frame(height:22).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? palette.selectedText:Color.white).contentShape(Rectangle())
+                    }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help("Division \(name)").accessibilityLabel("Division \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
+                }
+            }
+        }.frame(height:22).modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:23)))
+    }
+    /// Matches ParameterSlider footprint: title row + control row, so it lines up with Mix/Pitch neighbors.
+    func reverseButtons()->some View {
+        let options=["Forward","Reverse"]
+        return VStack(spacing:5){
+            HStack{
+                Text("Direction").foregroundStyle(palette.muted)
+                Spacer()
+                Text(" ").monospacedDigit().hidden()
+            }.font(.system(size:15,weight:palette.weight(.regular)))
+            HStack(spacing:3){
+                ForEach(Array(options.enumerated()),id:\.offset){index,name in
+                    let selected=Int(m.patch.globalValue(32))==index
+                    Button{m.checkpoint();m.global(32,Double(index))}label:{
+                        Text(name).font(.system(size:12,weight:selected ? .bold:.regular)).lineLimit(1).frame(maxWidth:.infinity).frame(maxHeight:.infinity).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? palette.selectedText:Color.white).contentShape(Rectangle())
+                    }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help(name).accessibilityLabel(name).accessibilityAddTraits(selected ? [.isSelected]:[])
+                }
+            }
+            .frame(maxWidth:.infinity)
+            .frame(height:20)
+        }.modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:-1,parameter:32)))
+    }
+    func delaySyncButtons()->some View {
+        let options=["Free","Tempo"]
+        return HStack(spacing:8){
+            Text("Sync").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
+            HStack(spacing:3){
+                ForEach(Array(options.enumerated()),id:\.offset){index,name in
+                    let selected=Int(m.patch.globalValue(16))==index
+                    Button{m.checkpoint();m.global(16,Double(index))}label:{
+                        Text(name).font(.system(size:12,weight:selected ? .bold:.regular)).lineLimit(1).frame(maxWidth:.infinity).frame(height:22).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? palette.selectedText:Color.white).contentShape(Rectangle())
+                    }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help(name).accessibilityLabel("Sync \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
+                }
+            }
+        }.frame(height:22).modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:-1,parameter:16)))
+    }
     var body:some View {
-        EqualHeightRow(spacing:16){
-            Panel(title:"Phaser · character"){
-                control("Rate",7,0.03...5,{String(format:"%.2f Hz",$0)})
-                control("Depth",8)
-                control("Feedback",9,-0.85...0.85)
+        VStack(alignment:.leading,spacing:16) {
+            // Row 1 — Arpeggiator (1/3) | Shimmer (2/3), height from Shimmer
+            WeightedHeightRow(spacing:16,weights:[1,2],heightSource:1){
+                Panel(title:"Arpeggiator"){
+                    Toggle("Enabled",isOn:Binding(get:{m.patch.layers[m.selectedLayer][22] > 0.5},set:{m.checkpoint();m.set(m.selectedLayer,22,$0 ? 1:0)}))
+                    Picker("Pattern",selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][24])},set:{m.checkpoint();m.set(m.selectedLayer,24,Double($0))})){
+                        ForEach(Array([
+                            "Up","Down","Up/Down","Random",
+                            "As played","As played ↑↓","Chord stab","Outside-in","Inside-out",
+                            "Pinky walk","Thumb walk","Octave hop","Fifth leap","Converge","Diverge",
+                            "Brownian","Skip 2","Pairwise","Hex rotate","Blue notes favor","Pendulum 3 over 2",
+                            "Repeat ×2","Repeat ×3","First + climb","Last + fall","Bass drone + up","Bass drone + down",
+                            "Melody hold + arp below","Spread walk"
+                        ].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                    }
+                    divisionButtons()
+                    Stepper("Octaves: \(Int(m.patch.layers[m.selectedLayer][25]))",value:Binding(get:{Int(m.patch.layers[m.selectedLayer][25])},set:{m.set(m.selectedLayer,25,Double($0))}),in:1...4)
+                    ParameterSlider(title:"Gate",value:m.parameter(26),range:0.1...0.95)
+                    ParameterSlider(title:"Swing",value:m.parameter(97),range:0...1)
+                    Picker("Velocity shape",selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][98])},set:{m.checkpoint();m.set(m.selectedLayer,98,Double($0))})){
+                        ForEach(Array(["Off","Accent 1st","Accent every 2","Ramp up","Ramp down"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                    }
+                    Toggle("Latch",isOn:Binding(get:{m.holding},set:{m.setHold($0)}))
+                        .tint(palette.accent)
+                        .help("Keeps the chord/arp running after you lift keys (same as Hold). Panic or Latch off clears.")
+                    Text("Latch uses the global Hold — Panic or Latch off clears held arp notes.")
+                        .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }.font(.system(size:15,weight:palette.weight(.regular)))
+                Panel(title:"Shimmer"){
+                    VStack(alignment:.leading,spacing:10){
+                        HStack(alignment:.center,spacing:12){
+                            control("Mix",23)
+                            control("Pitch",24,-12...24,{String(format:"%+.0f st",$0)})
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Decay",25,0.2...12,{String(format:"%.1f s",$0)})
+                            control("Tone",26)
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Pre-delay",27,0...200,{String(format:"%.0f ms",$0)})
+                            control("Amount",28,0...0.95)
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Voice +5",29)
+                            control("Voice +7",30)
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Voice +12",31)
+                            reverseButtons()
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Early level",33)
+                            control("Early size",34)
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Late level",35)
+                            control("Late decay",36,0.2...12,{String(format:"%.1f s",$0)})
+                        }
+                        Text("Pitch-shifted multi-voice diffusion · +5 / +7 / +12 relative to Pitch.")
+                            .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                    }
+                }
             }
-            Panel(title:"Chorus · movement"){
-                control("Rate",10,0.03...5,{String(format:"%.2f Hz",$0)})
-                control("Depth",11)
-                Text("Adjust wet level in FX above.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+
+            // Row 2 — Delay | Chorus | Phaser | Reverb
+            EqualHeightRow(spacing:16){
+                Panel(title:"Delay"){
+                    delaySyncButtons()
+                    if m.patch.globalValue(16) >= 0.5 {
+                        Picker("Timing",selection:Binding(get:{Int(m.patch.globalValue(14))},set:{m.checkpoint();m.global(14,Double($0))})){
+                            ForEach(Array(["1/4","1/8","1/16","1/2","1/8 dotted","1/4 dotted","1/8 triplet","1/4 triplet"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                        }
+                    } else {
+                        control("Time",17,1...2000,{String(format:"%.0f ms",$0)})
+                    }
+                    ParameterSlider(title:"Mix",value:m.globalBinding(2),range:0...0.6).modifier(MatrixFeedback(model:m,destination:11))
+                    ParameterSlider(title:"Feedback",value:m.globalBinding(3),range:0...0.75)
+                    control("Ping-pong",18)
+                    control("Tone",19)
+                    ParameterSlider(title:"Delay send",value:m.sendBinding(true),onBegin:{m.checkpoint()})
+                    Text("Layer send into shared delay return.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Chorus"){
+                    ParameterSlider(title:"Mix",value:m.globalBinding(5),range:0...0.6).modifier(MatrixFeedback(model:m,destination:8))
+                    control("Rate",10,0.03...5,{String(format:"%.2f Hz",$0)})
+                    control("Depth",11)
+                }
+                Panel(title:"Phaser"){
+                    ParameterSlider(title:"Mix",value:m.globalBinding(6),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:9))
+                    control("Rate",7,0.03...5,{String(format:"%.2f Hz",$0)})
+                    control("Depth",8)
+                    control("Feedback",9,-0.85...0.85)
+                }
+                Panel(title:"Reverb"){
+                    ParameterSlider(title:"Mix",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
+                    control("Size",12)
+                    control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
+                    ParameterSlider(title:"Reverb send",value:m.sendBinding(false),onBegin:{m.checkpoint()})
+                    Text("Layer send into shared room.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
             }
-            Panel(title:"Reverb · space"){
-                control("Size",12)
-                control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
-                Text("Room size and approximate decay time. Shared across the patch.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-            }
+
         }
     }
 }
@@ -2016,14 +2220,24 @@ struct AuroraContentView:View {
                             if m.soloLayer>=0{Button("Clear solo"){m.toggleSolo(m.soloLayer)}}
                         }
                         HStack(spacing:10){ForEach(0..<4){LayerStrip(model:m,index:$0)}}
-                        PerformanceSetRack(m:m)
-                        HStack(spacing:22){
-                            Text("Layer \(layerLetters[m.selectedLayer])\nFX sends").font(.system(size:14,weight:palette.weight(.medium))).foregroundStyle(palette.muted)
-                            ParameterSlider(title:"Delay send",value:m.sendBinding(true),onBegin:{m.checkpoint()})
-                            ParameterSlider(title:"Reverb send",value:m.sendBinding(false),onBegin:{m.checkpoint()})
-                        }.padding(12).background(palette.surface,in:RoundedRectangle(cornerRadius:10)).help("Send levels for the selected layer. Delay and Reverb Mix still control the shared returns.")
-                        PerformanceTools(m:m,telemetry:m.performanceTelemetry)
-                        if m.screen=="Play" {play} else if m.screen=="Edit" {EditorView(m:m)} else if m.screen=="Matrix" {MatrixView(m:m)} else {RoutingView(m:m)}
+                        if m.screen=="Play" {
+                            PerformanceSetRack(m:m)
+                            HStack(alignment:.center,spacing:16){
+                                Text("EQ")
+                                    .font(.system(size:28,weight:palette.weight(.semibold)))
+                                    .foregroundStyle(Color.white)
+                                    .frame(width:56,alignment:.center)
+                                    .frame(maxHeight:.infinity,alignment:.center)
+                                ParameterSlider(title:"Low",value:Binding(get:{m.eqLow},set:{m.setEqLow($0)}),range:-12...12,format:{String(format:"%+.1f dB",$0)},onBegin:{m.checkpoint()})
+                                ParameterSlider(title:"Mid",value:Binding(get:{m.eqMid},set:{m.setEqMid($0)}),range:-12...12,format:{String(format:"%+.1f dB",$0)},onBegin:{m.checkpoint()})
+                                ParameterSlider(title:"High",value:Binding(get:{m.eqHigh},set:{m.setEqHigh($0)}),range:-12...12,format:{String(format:"%+.1f dB",$0)},onBegin:{m.checkpoint()})
+                            }
+                            .fixedSize(horizontal:false,vertical:true)
+                            .padding(12)
+                            .background(palette.surface,in:RoundedRectangle(cornerRadius:10))
+                            .help("House EQ for the whole mix · stays when you change patches (like Output boost)")
+                            play
+                        } else if m.screen=="Edit" {EditorView(m:m)} else if m.screen=="Matrix" {MatrixView(m:m)} else {RoutingView(m:m)}
                     }.padding(24)
                 }.background(palette.background)
             }
@@ -2145,10 +2359,12 @@ struct AuroraContentView:View {
         }.background(m.patch.id==p.id ? palette.buttonSelected.opacity(0.25):palette.buttonSurface.opacity(0.22),in:RoundedRectangle(cornerRadius:8))
     }
     var play:some View {
-        VStack(alignment:.leading,spacing:23){HStack{Text("Make it yours").font(.system(size:20,weight:palette.weight(.medium)));Spacer();Text("8 performance macros").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
+        VStack(alignment:.leading,spacing:23){
             XYPadPanel(m:m)
+            HStack{Text("Make it yours").font(.system(size:20,weight:palette.weight(.medium)));Spacer();Text("8 performance macros").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
             LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:4),spacing:16){ForEach(0..<8){MacroDial(model:m,index:$0)}}
-            VoiceStatus(telemetry:m.telemetry,running:m.running).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).padding(13).background(palette.surface,in:RoundedRectangle(cornerRadius:10))
+            PerformanceTools(m:m,telemetry:m.performanceTelemetry)
+            VoiceStatus(m:m).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).padding(13).background(palette.surface,in:RoundedRectangle(cornerRadius:10))
             PianoView(model:m)
         }
     }
