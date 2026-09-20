@@ -91,7 +91,7 @@ public:
     tresult PLUGIN_API setupProcessing(ProcessSetup& setup)override{
         if(setup.sampleRate<8000||setup.sampleRate>192000||setup.maxSamplesPerBlock<1||setup.maxSamplesPerBlock>1048576)return kInvalidArgument;
         temporaryL.resize(setup.maxSamplesPerBlock);temporaryR.resize(setup.maxSamplesPerBlock);
-        core.sampleRate=setup.sampleRate;core.blockSize=setup.maxSamplesPerBlock;core.engine.prepare(setup.sampleRate);
+        core.blockSize=setup.maxSamplesPerBlock;core.prepare(setup.sampleRate);
         haveTransport=false;return SingleComponentEffect::setupProcessing(setup);
     }
     tresult PLUGIN_API setActive(TBool state)override{core.active=state;if(!state)core.engine.panic();return kResultOk;}
