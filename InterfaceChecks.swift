@@ -53,6 +53,7 @@ import SwiftUI
         defer { aurora_shutdown() }
         print("Factory bank counts · Spectrum \(FactoryBank.expansion.count + FactoryBank.prism.count + FactoryBank.nova.count) · GB \(FactoryBank.gb.count) · Shimmer \(FactoryBank.shimmer.count) · total \(FactoryBank.all.count)")
         precondition(model.collection == "Aurora","Initial collection is \(model.collection), expected Aurora")
+        print("PASS: initial collection is Aurora.")
         precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9,"Default output gain migration failed")
         precondition(SynthModel.restoredOutputGain(6,revision:nil)==9,"Unversioned output gain migration failed")
         precondition(SynthModel.restoredOutputGain(12,revision:2)==9,"Revision 2 output gain migration failed")
@@ -60,11 +61,21 @@ import SwiftUI
         precondition(SynthModel.restoredOutputGain(24,revision:3)==9,"Untouched revision 3 +24 dB did not migrate to +9 dB")
         precondition(SynthModel.restoredOutputGain(30,revision:3)==24,"Revision 3 custom output gain did not clamp to +24 dB")
         precondition(SynthModel.restoredOutputGain(12,revision:4)==12,"Revision 4 output gain was not preserved")
+        print("PASS: output-gain migration fixtures.")
         precondition(FactoryBank.all.count == 438,"Factory bank total is \(FactoryBank.all.count), expected 438")
-        let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
-        let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
-        precondition(try! SynthModel.presets(in:singlePresetData).count==1)
-        precondition(try! SynthModel.presets(in:presetBankData).count==12)
+        print("PASS: factory bank total.")
+        do {
+            let singlePresetData=try JSONEncoder().encode(FactoryBank.all[0])
+            let presetBankData=try JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
+            let singleCount=try SynthModel.presets(in:singlePresetData).count
+            let bankCount=try SynthModel.presets(in:presetBankData).count
+            print("Preset decode counts · single \(singleCount) · bank \(bankCount)")
+            precondition(singleCount==1,"Single-preset decode returned \(singleCount)")
+            precondition(bankCount==12,"Preset-bank decode returned \(bankCount)")
+        } catch {
+            print("Preset encode/decode error: \(error)")
+            fatalError("Preset batch format failed")
+        }
         precondition((try? SynthModel.presets(in:Data("not a preset".utf8)))==nil)
         print("PASS: batch preset format accepts one preset or a multi-preset bank and rejects malformed data.")
         precondition(SynthModel.ranges.count==99 && ControlTarget.layerNames.count==99)
