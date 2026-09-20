@@ -51,15 +51,16 @@ import SwiftUI
             print("PASS: concurrent plug-in library additions, renames, favorites and deletions preserve unrelated edits.")
         }
         defer { aurora_shutdown() }
-        precondition(model.collection == "Aurora")
-        precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9)
-        precondition(SynthModel.restoredOutputGain(6,revision:nil)==9)
-        precondition(SynthModel.restoredOutputGain(12,revision:2)==9)
-        precondition(SynthModel.restoredOutputGain(6,revision:3)==6) // customized rev-3 kept
-        precondition(SynthModel.restoredOutputGain(24,revision:3)==9) // untouched +24 migrates to +9
-        precondition(SynthModel.restoredOutputGain(30,revision:3)==24) // clamped custom kept
-        precondition(SynthModel.restoredOutputGain(12,revision:4)==12)
-        precondition(FactoryBank.all.count == 438)
+        print("Factory bank counts · Spectrum \(FactoryBank.expansion.count + FactoryBank.prism.count + FactoryBank.nova.count) · GB \(FactoryBank.gb.count) · Shimmer \(FactoryBank.shimmer.count) · total \(FactoryBank.all.count)")
+        precondition(model.collection == "Aurora","Initial collection is \(model.collection), expected Aurora")
+        precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9,"Default output gain migration failed")
+        precondition(SynthModel.restoredOutputGain(6,revision:nil)==9,"Unversioned output gain migration failed")
+        precondition(SynthModel.restoredOutputGain(12,revision:2)==9,"Revision 2 output gain migration failed")
+        precondition(SynthModel.restoredOutputGain(6,revision:3)==6,"Customized revision 3 output gain was not preserved")
+        precondition(SynthModel.restoredOutputGain(24,revision:3)==9,"Untouched revision 3 +24 dB did not migrate to +9 dB")
+        precondition(SynthModel.restoredOutputGain(30,revision:3)==24,"Revision 3 custom output gain did not clamp to +24 dB")
+        precondition(SynthModel.restoredOutputGain(12,revision:4)==12,"Revision 4 output gain was not preserved")
+        precondition(FactoryBank.all.count == 438,"Factory bank total is \(FactoryBank.all.count), expected 438")
         let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
         let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
         precondition(try! SynthModel.presets(in:singlePresetData).count==1)
