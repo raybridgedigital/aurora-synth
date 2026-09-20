@@ -61,14 +61,17 @@ void ownership() {
 }
 void routingAndPrepare() {
     SynthEngine e;dry(e);e.setParameter(1,APEnabled,1);e.setParameter(1,APRelease,.02f);
-    e.route(808,2,2);e.panic();e.prepare(44100); // Route survives prepare and stale panic.
+    e.route(808,2,2);e.panic();
+    e.setParameter(1,APRelease,.031f);e.setGlobal(AGMaster,.31f);
+    e.prepare(44100); // Route survives prepare; deferred patch state commits at this silent boundary.
+    assert(std::abs(e.getParameter(1,APRelease)-.031f)<.0001f&&std::abs(e.getGlobal(AGMaster)-.31f)<.0001f);
     note(e,808,60,100,0);render(e);assert(e.activeVoices()==0);
     note(e,808,60,100,1);render(e);assert(e.activeVoices()==1);
     note(e,0,65);render(e);assert(e.activeVoices()==3); // GUI follows all enabled layers.
     e.route(808,1,1);render(e);assert(e.activeVoices()==2);
     (void)drainPanic(e);note(e,808,60,100,0);render(e);assert(e.activeVoices()==1);
     note(e,808,63);e.prepare(96000);render(e);assert(e.activeVoices()==0); // Stopped notes discarded.
-    std::puts("PASS: channel/layer routing, GUI layers, prepare state preservation");
+    std::puts("PASS: channel/layer routing, GUI layers, prepare state and deferred patch preservation");
 }
 double frequency(const std::vector<float>& audio,int start,int count) {
     int crossings=0;for(int i=start+1;i<start+count;i++)crossings+=audio[i-1]<=0&&audio[i]>0;
