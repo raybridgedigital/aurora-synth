@@ -9,6 +9,16 @@
 namespace auroraPlugin {
 constexpr int globalBase=1000,macroBase=2000,xyX=2010,xyY=2011,transposeID=2012,holdID=2013,sendBase=2020,midiBase=3000;
 constexpr int routeMaskID=2030,routeChannelID=2031,velocityID=2032;
+constexpr int layerDReverbSendID=2050,layerDShimmerSendID=2051;
+constexpr int sendID(int layer,int kind){
+    return layer==3&&kind==1?layerDReverbSendID:layer==3&&kind==2?layerDShimmerSendID:sendBase+layer*3+kind;
+}
+constexpr bool isSendID(int id){
+    return (id>=sendBase&&id<=sendBase+9)||id==layerDReverbSendID||id==layerDShimmerSendID;
+}
+constexpr int sendLayerForID(int id){
+    return id==layerDReverbSendID||id==layerDShimmerSendID?3:(id-sendBase)/3;
+}
 constexpr int outputGainID=2040;
 // Keep every v0.16 parameter ID stable. New layer controls occupy a separate block.
 constexpr int layerID(int l,int p){return p<58?l*58+p:6000+l*128+p-58;}
