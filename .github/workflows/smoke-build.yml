@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           rm -rf build
-          scripts/build.sh
+          bash scripts/build.sh
 
       - name: Run interface regression checks
         shell: bash
@@ -68,14 +68,14 @@ jobs:
         env:
           AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
         run: |
-          scripts/build_plugins.sh
+          bash scripts/build_plugins.sh
 
       - name: Install CI plugin copies
         shell: bash
         env:
           AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
         run: |
-          scripts/install_plugins.sh
+          bash scripts/install_plugins.sh
           killall -9 AudioComponentRegistrar 2>/dev/null || true
 
       - name: Run plugin validation
@@ -83,4 +83,4 @@ jobs:
         env:
           AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
         run: |
-          scripts/check_plugins.sh
+          bash scripts/check_plugins.sh
