@@ -16,6 +16,7 @@ int main(){@autoreleasepool {
     Core a,b;int tested=0;
     assert(a.values[outputGainID]==9);
     static_assert(layerID(3,57)==231 && layerID(0,58)==6000 && layerID(3,78)==6404);
+    static_assert(sendID(3,1)!=routeMaskID && sendID(3,2)!=routeChannelID);
     for(NSString* file in @[@"Aurora100",@"AuroraPrism100",@"AuroraNova100",@"AuroraReference"]){
         NSData* data=[NSData dataWithContentsOfFile:[NSString stringWithFormat:@"Resources/%@.json",file]];
         NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count==([file isEqualToString:@"AuroraReference"]?2:100));
