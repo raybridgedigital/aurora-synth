@@ -34,12 +34,17 @@ int main(){@autoreleasepool {
             }
             if(!(energy>0)){
                 std::cerr<<"No rendered audio for patch: "<<[patch[@"name"] UTF8String]<<" · id "<<[patch[@"id"] UTF8String]
-                         <<" · voices "<<a.engine.activeVoices()<<std::endl;
+                         <<" · voices "<<a.engine.activeVoices()
+                         <<" · routeMask "<<a.values[routeMaskID].load()
+                         <<" · routeChannel "<<a.values[routeChannelID].load()
+                         <<" · velocityCurve "<<a.values[velocityID].load()<<std::endl;
                 for(int layer=0;layer<4;layer++)
                     std::cerr<<"  layer "<<layer
                              <<" enabled="<<a.engine.getParameter(layer,APEnabled)
                              <<" level="<<a.engine.getParameter(layer,APLevel)
                              <<" key="<<a.engine.getParameter(layer,APKeyLow)<<".."<<a.engine.getParameter(layer,APKeyHigh)
+                             <<" arp="<<a.engine.getParameter(layer,APArpEnabled)
+                             <<" voiceMode="<<a.engine.getParameter(layer,APVoiceMode)
                              <<" wt="<<a.engine.getParameter(layer,APWT1Table)<<"/"<<a.engine.getParameter(layer,APWT2Table)
                              <<std::endl;
                 return 2;
