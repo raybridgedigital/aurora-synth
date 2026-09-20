@@ -152,7 +152,7 @@ struct MotionGraph:View {
                     guard settings.points.count<16 else{return}
                     let x=settings.snapped(max(0,min(1,event.location.x/g.size.width)))
                     guard settings.points.allSatisfy({abs($0.x-x)>0.002}) else{return}
-                    m.checkpoint();m.changeMotion{$0.points.append(MotionPoint(x:x,y:rawY(1-event.location.y/g.size.height)));$0.points.sort{$0.x<$1.x}}
+                    m.checkpoint();m.changeMotion{$0.points.append(MotionPoint(x:x,y:rawY(1.0-Double(event.location.y/g.size.height))));$0.points.sort{$0.x<$1.x}}
                     editor.selected=settings.points.firstIndex(where:{abs($0.x-x)<0.00001}) ?? 0
                 })
                 MotionPlayhead(telemetry:m.motionTelemetry,layer:m.selectedLayer)
@@ -164,7 +164,7 @@ struct MotionGraph:View {
                             if !editor.dragging{m.checkpoint();editor.dragging=true};editor.selected=i
                             m.changeMotion{settings in
                                 if i>0 && i<settings.points.count-1 {settings.points[i].x=max(settings.points[i-1].x+0.001,min(settings.points[i+1].x-0.001,settings.snapped(event.location.x/g.size.width)))}
-                                settings.points[i].y=rawY(1-event.location.y/g.size.height)
+                                settings.points[i].y=rawY(1.0-Double(event.location.y/g.size.height))
                             }
                         }.onEnded{_ in editor.dragging=false})
                         .accessibilityLabel("Envelope point \(i+1)")
