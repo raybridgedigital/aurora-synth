@@ -67,7 +67,7 @@ Documents MainStage 4.3.1 verification of the 0.20.3/0.20.4 Audio Unit (load, ed
 
 ## Soft pad switch · 0.20.3
 
-Set pads soft-load by default so held notes and FX can finish; turn on **Cut on switch** for a hard Panic cut. Pad names under the numbers are slightly larger.
+Set pads soft-load by default so held notes and FX can finish; turn on **Cut on switch** for a Panic cut (mute-bus fade, then wipe at silence — same path as the Panic button). Pad names under the numbers are slightly larger.
 
 ## Set pads · 0.20.2
 

@@ -27,6 +27,15 @@ float render(SynthEngine& e,int frames=4800) {
     }
     return peak;
 }
+
+float drainPanic(SynthEngine& e) {
+    // Mute-bus Panic: fade out (~100–200 ms) + hold wipe (~80 ms) + short fade-in.
+    // Peak during the fade is expected; assert silence only after the wipe.
+    // Use enough frames for the highest SR exercised in these tests (192 kHz).
+    e.panic();
+    render(e, int(192000 * 0.45));
+    return render(e, 4800);
+}
 void note(SynthEngine& e,int source,int key,int velocity=100,int channel=0){e.midi(source,uint8_t(0x90|channel),uint8_t(key),uint8_t(velocity));}
 void off(SynthEngine& e,int source,int key,int channel=0){e.midi(source,uint8_t(0x80|channel),uint8_t(key),0);}
 void cc(SynthEngine& e,int source,int number,int value,int channel=0){e.midi(source,uint8_t(0xb0|channel),uint8_t(number),uint8_t(value));}
@@ -47,7 +56,7 @@ void ownership() {
     e.disconnect(10);render(e);assert(e.activeVoices()==1);
     note(e,10,62);render(e);assert(e.activeVoices()==1); // Late callback is ignored.
     e.route(10,1,0);note(e,10,62);render(e);assert(e.activeVoices()==2);
-    e.panic();assert(render(e)<1e-7f);assert(e.activeVoices()==0);
+    assert(drainPanic(e)<1e-7f);assert(e.activeVoices()==0);
     std::puts("PASS: notes, release, source/channel/sustain ownership, transpose, disconnect, panic");
 }
 void routingAndPrepare() {
@@ -57,7 +66,7 @@ void routingAndPrepare() {
     note(e,808,60,100,1);render(e);assert(e.activeVoices()==1);
     note(e,0,65);render(e);assert(e.activeVoices()==3); // GUI follows all enabled layers.
     e.route(808,1,1);render(e);assert(e.activeVoices()==2);
-    e.panic();render(e);note(e,808,60,100,0);render(e);assert(e.activeVoices()==1);
+    (void)drainPanic(e);note(e,808,60,100,0);render(e);assert(e.activeVoices()==1);
     note(e,808,63);e.prepare(96000);render(e);assert(e.activeVoices()==0); // Stopped notes discarded.
     std::puts("PASS: channel/layer routing, GUI layers, prepare state preservation");
 }
@@ -103,7 +112,8 @@ void arp() {
 void overflowAndConcurrent() {
     SynthEngine e;dry(e);note(e,1,60);render(e);
     for(int i=0;i<10000;i++)note(e,1,i%128);
-    assert(render(e)<1e-7f);assert(e.activeVoices()==0);
+    // Queue overflow triggers mute-bus Panic — wait for wipe, then assert silence.
+    assert(drainPanic(e)<1e-7f);assert(e.activeVoices()==0);
     note(e,1,60);assert(render(e)>.001f);off(e,1,60);render(e);
     std::atomic<bool> begin{false};std::array<std::thread,4> producers;
     for(int p=0;p<4;p++)producers[p]=std::thread([&,p] {
@@ -112,7 +122,7 @@ void overflowAndConcurrent() {
     });
     begin.store(true,std::memory_order_release);
     for(int i=0;i<250;i++)render(e,128);
-    for(auto& t:producers)t.join();e.panic();assert(render(e)<1e-7f);assert(e.activeVoices()==0);
+    for(auto& t:producers)t.join();assert(drainPanic(e)<1e-7f);assert(e.activeVoices()==0);
     std::puts("PASS: bounded queue overflow recovery and four concurrent MIDI/control producers");
 }
 void extremesAndCapacity() {
@@ -133,8 +143,8 @@ void extremesAndCapacity() {
             e.setParameter(l,APFilterType,float(filter));e.setParameter(l,APCutoff,filter==0?20:20000);}
         render(e,1024);
     }
-    e.panic();render(e);for(int source=1;source<60;source++)note(e,source,60);render(e);assert(e.activeVoices()<=32);
-    e.panic();render(e);std::puts("PASS: finite extreme controls, oscillator/filter modes, 64 voices, bounded source capacity");
+    (void)drainPanic(e);for(int source=1;source<60;source++)note(e,source,60);render(e);assert(e.activeVoices()<=32);
+    (void)drainPanic(e);std::puts("PASS: finite extreme controls, oscillator/filter modes, 64 voices, bounded source capacity");
 }
 void phaserEffect() {
     for(double sampleRate:{44100.,48000.,96000.,192000.}) {
@@ -148,7 +158,7 @@ void phaserEffect() {
             for(int i=0;i<256;i++){assert(std::isfinite(wl[i])&&std::isfinite(wr[i]));assert(std::abs(wl[i])<=1 && std::abs(wr[i])<=1);difference+=std::abs(wl[i]-dl[i]);}
         }
         assert(difference>1);
-        wetEngine.panic();assert(render(wetEngine)<1e-7f);
+        assert(drainPanic(wetEngine)<1e-7f);
         wetEngine.setGlobal(AGPhaserMix,2);assert(wetEngine.getGlobal(AGPhaserMix)==1);
     }
     std::puts("PASS: phaser audibly changes output, remains finite at four sample rates, clamps and clears on panic");
@@ -159,7 +169,7 @@ void scopeCapture() {
     assert(e.copyScope(samples.data(),256)==256);
     float peak=0;for(float x:samples){assert(std::isfinite(x));peak=std::max(peak,std::abs(x));}
     assert(peak>.001f);assert(e.copyScope(nullptr,256)==0);
-    e.panic();render(e,4096);e.copyScope(samples.data(),256);
+    (void)drainPanic(e);e.copyScope(samples.data(),256);
     for(float x:samples)assert(x==0);
     std::puts("PASS: scope captures actual output and clears after panic");
 }
@@ -189,7 +199,7 @@ std::vector<float> matrixAudio(int bank,int source,int destination,int target=4,
     note(e,55,60,100);
     std::vector<float> left(rate),right(rate);e.render(left.data(),right.data(),uint32_t(left.size()));
     for(size_t i=0;i<left.size();i++){assert(std::isfinite(left[i])&&std::isfinite(right[i]));assert(std::abs(left[i])<=1&&std::abs(right[i])<=1);}
-    e.panic();assert(render(e)<1e-7f);
+    assert(drainPanic(e)<1e-7f);
     left.insert(left.end(),right.begin(),right.end());return left;
 }
 void matrices() {
@@ -230,7 +240,7 @@ void oscillatorCharacter() {
     for(int i=0;i<rate;i++){assert(mono[i]==mono[i+rate]);width+=std::abs(stereo[i]-stereo[i+rate]);}assert(width>1);
     for(double sr:{44100.,48000.,96000.,192000.}){
         SynthEngine e;dry(e);e.prepare(sr);e.setParameter(0,APUnison,4);e.setParameter(0,APPWMDepth,1);e.setParameter(0,APSync,1);e.setParameter(0,APSyncTune,36);
-        for(int wave=0;wave<5;wave++){e.setParameter(0,APWave1,float(wave));e.setParameter(0,APWave2,float(wave));note(e,0,12);note(e,0,127);render(e);e.panic();assert(render(e)<1e-7f);}
+        for(int wave=0;wave<5;wave++){e.setParameter(0,APWave1,float(wave));e.setParameter(0,APWave2,float(wave));note(e,0,12);note(e,0,127);render(e);assert(drainPanic(e)<1e-7f);}
     }
     std::puts("PASS: pulse width, PWM, unison, stereo spread and sync change audio; stereo isolation, note release and extremes at four sample rates");
 }
@@ -241,7 +251,7 @@ void modulationFeedback() {
     assert(feedback[5]>0 && feedback[5]<=.501f);assert(std::abs(feedback[27]+.75f)<.001f);
     for(int i=0;i<30;i++)if(i!=5&&i!=27)assert(feedback[i]==0);
     e.setMatrix(4,3,false,0,2,0,1,-.75f);render(e);e.copyModulation(feedback.data(),30);assert(feedback[27]==0);
-    e.panic();render(e);e.copyModulation(feedback.data(),30);for(float x:feedback)assert(x==0);
+    (void)drainPanic(e);e.copyModulation(feedback.data(),30);for(float x:feedback)assert(x==0);
     std::puts("PASS: signed modulation feedback preserves sparse route slots, bypasses and clears on panic");
 }
 void expressivePlaying() {
@@ -265,19 +275,19 @@ void expressivePlaying() {
     std::puts("PASS: mono/legato last-note return, sustain, source isolation, disconnect, glide trajectory, live bend range and velocity curves");
 }
 void extendedEffects() {
-    auto sound=[](int parameter,float value){SynthEngine e;dry(e);e.setGlobal(AGPhaserMix,.8f);e.setGlobal(AGChorusMix,.6f);e.setGlobal(AGReverbMix,.7f);e.setGlobal(AGDelayMix,.6f);if(parameter>=0)e.setGlobal(parameter,value);note(e,0,60);render(e,2400);off(e,0,60);std::vector<float> l(rate*2),r(rate*2);e.render(l.data(),r.data(),uint32_t(l.size()));for(float x:l)assert(std::isfinite(x)&&std::abs(x)<=1);e.panic();assert(render(e)<1e-7f);return l;};
+    auto sound=[](int parameter,float value){SynthEngine e;dry(e);e.setGlobal(AGPhaserMix,.8f);e.setGlobal(AGChorusMix,.6f);e.setGlobal(AGReverbMix,.7f);e.setGlobal(AGDelayMix,.6f);if(parameter>=0)e.setGlobal(parameter,value);note(e,0,60);render(e,2400);off(e,0,60);std::vector<float> l(rate*2),r(rate*2);e.render(l.data(),r.data(),uint32_t(l.size()));for(float x:l)assert(std::isfinite(x)&&std::abs(x)<=1);assert(drainPanic(e)<1e-7f);return l;};
     auto baseline=sound(-1,0);
     for(auto pair:std::array<std::pair<int,float>,8>{{{AGPhaserRate,3},{AGPhaserDepth,.1f},{AGPhaserFeedback,.7f},{AGChorusRate,3},{AGChorusDepth,.1f},{AGReverbSize,1},{AGReverbDecay,5},{AGDelayTiming,4}}}){
         auto other=sound(pair.first,pair.second);double delta=0;for(size_t i=0;i<other.size();i++)delta+=std::abs(other[i]-baseline[i]);assert(delta>.01);
     }
-    for(double sr:{44100.,48000.,96000.,192000.}){SynthEngine e;e.prepare(sr);e.setGlobal(AGTempo,30);e.setGlobal(AGDelayMix,1);e.setGlobal(AGPhaserMix,1);e.setGlobal(AGPhaserFeedback,.85f);e.setGlobal(AGReverbMix,1);e.setGlobal(AGReverbDecay,8);e.setGlobal(AGReverbSize,1);note(e,0,60);for(int timing=0;timing<8;timing++){e.setGlobal(AGDelayTiming,float(timing));render(e,4096);}e.panic();assert(render(e)<1e-7f);}
+    for(double sr:{44100.,48000.,96000.,192000.}){SynthEngine e;e.prepare(sr);e.setGlobal(AGTempo,30);e.setGlobal(AGDelayMix,1);e.setGlobal(AGPhaserMix,1);e.setGlobal(AGPhaserFeedback,.85f);e.setGlobal(AGReverbMix,1);e.setGlobal(AGReverbDecay,8);e.setGlobal(AGReverbSize,1);note(e,0,60);for(int timing=0;timing<8;timing++){e.setGlobal(AGDelayTiming,float(timing));render(e,4096);}assert(drainPanic(e)<1e-7f);}
     std::puts("PASS: all eight FX controls change rendered audio; all delay timings and maximum feedback stay bounded at four sample rates");
 }
 void performanceTools() {
     SynthEngine e;dry(e);e.hold(true);note(e,9,60);render(e);off(e,9,60);render(e,rate);assert(e.activeVoices()==1);
     e.hold(false);render(e,rate);assert(e.activeVoices()==0);
     e.hold(true);note(e,9,60);cc(e,9,64,127);off(e,9,60);e.hold(false);render(e);assert(e.activeVoices()==1);cc(e,9,64,0);render(e,rate);assert(e.activeVoices()==0);
-    e.hold(true);e.panic();assert(render(e)<1e-7f);note(e,9,60);off(e,9,60);render(e,rate);assert(e.activeVoices()==0);
+    e.hold(true);assert(drainPanic(e)<1e-7f);note(e,9,60);off(e,9,60);render(e,rate);assert(e.activeVoices()==0);
     e.setParameter(0,APArpEnabled,1);e.clockSource(true,9);note(e,9,60);render(e);assert(e.activeVoices()==0);
     e.clock(8,0xf8,1);e.clock(8,0xf8,1.02);render(e);assert(e.clockTempo()==0);
     e.clock(9,0xfa,1);
@@ -286,7 +296,7 @@ void performanceTools() {
     e.clock(9,0xfc,2);render(e,rate);assert(e.activeVoices()==0&&e.clockTempo()==0);
     e.clock(9,0xfb,3);for(int tick=0;tick<12;tick++){e.clock(9,0xf8,3+tick/48.0);render(e,1000);}assert(e.clockTempo()>119);
     render(e,rate);assert(e.activeVoices()==0&&e.clockTempo()==0);
-    e.clockSource(false,9);assert(render(e,rate)>.001f);e.panic();assert(render(e)<1e-7f);
+    e.clockSource(false,9);assert(render(e,rate)>.001f);assert(drainPanic(e)<1e-7f);
     std::puts("PASS: hold/release, sustain ownership, panic resets hold; selected MIDI clock tempo, Start/Stop/Continue, timeout and internal fallback");
 }
 void benchmark(int unison=1) {

@@ -85,10 +85,12 @@ AudioStats render(aurora::SynthEngine& engine, double seconds) {
 }
 
 bool checkPanic(aurora::SynthEngine& engine, NSMutableArray *errors) {
+    // Panic is a mute-bus fade (~100–200 ms) then wipe at silence, not an instant hard cut.
     engine.panic();
+    (void)render(engine, 0.40); // drain fade + hold wipe
     auto stats = render(engine, double(blockSize)/sampleRate);
     bool passed = stats.finite && stats.peak == 0 && engine.activeVoices() == 0;
-    if (!passed) [errors addObject:@"Panic did not immediately clear audio and active voices"];
+    if (!passed) [errors addObject:@"Panic did not reach silence after mute-bus fade (voices/FX should be clear)"];
     return passed;
 }
 
@@ -342,7 +344,7 @@ int main(int argc, const char *argv[]) {
             @"highestPeak":@(highestPeak), @"highestStressPeak":@(highestStressPeak),
             @"lowestHoldRMS":@(lowestRMS == std::numeric_limits<double>::max() ? 0 : lowestRMS),
             @"elapsedSeconds":@(elapsed), @"possibleDuplicateRenders":duplicates, @"patches":results,
-            @"method":@"48 kHz stereo; four-second category-appropriate held phrase at velocity 100; eight-second release; eight notes at velocity 127 and Master 100% for eight seconds so slow attacks also reach full level; extended FX and modulation matrices enabled; Panic verification. FNV-1a hash of 24-bit quantized held audio. Identical renders are reported for review, not automatically rejected."};
+            @"method":@"48 kHz stereo; four-second category-appropriate held phrase at velocity 100; eight-second release; eight notes at velocity 127 and Master 100% for eight seconds so slow attacks also reach full level; extended FX and modulation matrices enabled; Panic verification (mute-bus fade then wipe). FNV-1a hash of 24-bit quantized held audio. Identical renders are reported for review, not automatically rejected."};
         NSData *reportData = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted|NSJSONWritingSortedKeys error:&error];
         if (!reportData || ![reportData writeToFile:@(argv[2]) options:NSDataWritingAtomic error:&error]) {
             std::fprintf(stderr, "Cannot write report: %s\n", error.localizedDescription.UTF8String);

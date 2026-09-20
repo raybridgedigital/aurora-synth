@@ -35,7 +35,7 @@ int main(){
     assert(rms(floor,1200,1200)>rms(swell,1200,1200)*2);
     configure(e);shape=setting();shape.data[1]=1;publish(e,shape);e.midi(1,0x90,69,100);render(e,12000);assert(std::abs(e.motionPhase(0)-.25)<.001);
     e.midi(1,0x90,72,100);render(e,2400);assert(e.activeVoices()==2&&std::abs(e.motionPhase(0)-.25)<.001);
-    e.panic();render(e,128);assert(e.activeVoices()==0&&e.motionPhase(0)==-1);
+    e.panic();render(e, int(48000*0.40));assert(e.activeVoices()==0&&e.motionPhase(0)==-1);
     puts("PASS: curve interpolation/bending, floor scaling/inversion, slow volume swell, nonzero starting volume, release, loop, polyphonic retrigger and Panic.");
     for(int destination=0;destination<8;destination++){
         SynthEngine dry,wet;configure(dry);configure(wet);

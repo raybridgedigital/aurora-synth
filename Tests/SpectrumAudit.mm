@@ -47,7 +47,7 @@ int main(int argc,char** argv){@autoreleasepool{
         }else{
             for(int n:keys)c.midi(0x80,n,0);auto tail=render(c,5);peak=std::max(peak,tail.peak);
             if(!tail.finite||c.engine.activeVoices()!=0)[issues addObject:@"Invalid or stuck release"];
-            c.engine.panic();auto panic=render(c,.02);if(panic.peak!=0)[issues addObject:@"Panic failed"];
+            c.engine.panic();(void)render(c,.40);auto panic=render(c,.02);if(panic.peak!=0)[issues addObject:@"Panic failed (expected silence after mute-bus fade)"];
             play(c,{36,48,55,60,64,67,72,84},127);auto stress=render(c,1.5);peak=std::max(peak,stress.peak);if(!stress.finite||stress.peak>.98001)[issues addObject:@"Invalid stress output"];
             for(int macro=0;macro<8;macro++)for(double value:{0.,1.}){
                 if(!load(c,p))return 4;c.engine.panic();render(c,.01);c.setActual(macroBase+macro,value);play(c,keys);auto m=render(c,.5);maxMacroPeak=std::max(maxMacroPeak,m.peak);if(!m.finite||m.peak>.98001||m.peak<1e-7)[issues addObject:@"Invalid macro endpoint output"];
