@@ -656,7 +656,13 @@ struct VoiceStatus:View {
         normalizingRecording=true;recordingMessage="Normalizing…"
         normalizationQueue.async{[weak self] in
             let normalized=aurora_normalize_recording(url.path)==1
-            DispatchQueue.main.async{self?.normalizingRecording=false;self?.recordingMessage=normalized ? "Saved to Desktop/Aurora · normalized to −3 dB":"Saved original WAV; normalization failed."}
+            guard let model=self else{return}
+            DispatchQueue.main.async{
+                MainActor.assumeIsolated {
+                    model.normalizingRecording=false
+                    model.recordingMessage=normalized ? "Saved to Desktop/Aurora · normalized to −3 dB":"Saved original WAV; normalization failed."
+                }
+            }
         }
     }
     func setTranspose(_ value:Int) {
@@ -828,7 +834,7 @@ struct VoiceStatus:View {
         refresh()
         if !backend.isPlugin{installKeyboard()}
         let updateTimer = Timer(timeInterval:0.05,repeats:true) { [weak self] _ in
-            Task { @MainActor in self?.poll() }
+            MainActor.assumeIsolated { self?.poll() }
         }
         updateTimer.tolerance=0.005
         RunLoop.main.add(updateTimer,forMode:.common)
@@ -1277,7 +1283,10 @@ struct VoiceStatus:View {
             return nil
         } as Any)
         NotificationCenter.default.addObserver(forName:NSApplication.didResignActiveNotification,object:nil,queue:.main){[weak self] _ in
-            Task { @MainActor in guard let self else{return};for note in Array(self.pressed){self.noteOff(note)} }
+            MainActor.assumeIsolated {
+                guard let self else{return}
+                for note in Array(self.pressed){self.noteOff(note)}
+            }
         }
     }
     func shutdown() {if recording{finishRecording()};normalizationQueue.sync{};persist();timer?.invalidate();for m in monitors{NSEvent.removeMonitor(m)};backend.aurora_shutdown()}
