@@ -76,7 +76,7 @@ public:
         add(xyX,"XY / X");add(xyY,"XY / Y");add(transposeID,"Global transpose");add(holdID,"Hold");
         add(routeMaskID,"MIDI / Layers");add(routeChannelID,"MIDI / Channel");add(velocityID,"MIDI / Velocity curve");
         add(outputGainID,"Output boost / dB");
-        for(int l=0;l<4;l++){add(sendBase+l*3,std::string(1,char('A'+l))+" / Delay send");add(sendBase+l*3+1,std::string(1,char('A'+l))+" / Reverb send");add(sendBase+l*3+2,std::string(1,char('A'+l))+" / Shimmer send");}
+        for(int l=0;l<4;l++){add(sendID(l,0),std::string(1,char('A'+l))+" / Delay send");add(sendID(l,1),std::string(1,char('A'+l))+" / Reverb send");add(sendID(l,2),std::string(1,char('A'+l))+" / Shimmer send");}
         for(int ch=0;ch<16;ch++)for(int cc=0;cc<130;cc++)add(midiBase+ch*130+cc,"MIDI "+std::to_string(ch+1)+" / "+std::to_string(cc),ParameterInfo::kIsHidden);
         core.notify=[this](int id,double value){beginEdit(id);EditControllerEx1::setParamNormalized(id,value);performEdit(id,value);endEdit(id);};
         core.stateChanged=[this]{if(componentHandler)componentHandler->restartComponent(kParamValuesChanged);if(componentHandler2)componentHandler2->setDirty(true);};
