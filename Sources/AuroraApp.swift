@@ -552,11 +552,11 @@ struct VoiceStatus:View {
         let edits=patch;reference.globals[0]=edits.globals[0]
         comparingSaved=true;patch=reference;applyPatch();patch=edits
     }
-    func browsePatch(_ delta:Int){
+    func browsePatch(_ delta:Int, panic:Bool = true){
         let sounds=library.sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
         guard !sounds.isEmpty else{return}
         let index=sounds.firstIndex{$0.id==patch.id} ?? (delta>0 ? -1:0)
-        loadPreset(sounds[(index+delta+sounds.count)%sounds.count])
+        loadPreset(sounds[(index+delta+sounds.count)%sounds.count], panic: panic)
     }
     func toggleSolo(_ layer:Int){soloLayer=soloLayer==layer ? -1:layer;backend.aurora_solo_layer(Int32(soloLayer))}
     func copyLayer(_ layer:Int){
@@ -564,9 +564,9 @@ struct VoiceStatus:View {
         layerClipboard=LayerClipboard(layer:patch.layers[layer],matrix:patch.soundMatrix?[layer] ?? MatrixAssignment.empty,motion:patch.motion?[layer] ?? MotionSettings(),sends:patch.sends?[layer] ?? LayerSends(),waves:waves)
         notice="Copied layer \(layerLetters[layer]), including modulation, sends and imported waves."
     }
-    func pasteLayer(_ layer:Int){
+    func pasteLayer(_ layer:Int, panic:Bool = true){
         guard let copied=layerClipboard else{return};checkpoint()
-        backend.aurora_panic();pressed=[];holding=false
+        if panic { backend.aurora_panic();pressed=[];holding=false }
         patch.layers[layer]=copied.layer
         var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.empty,count:4);matrix[layer]=copied.matrix;patch.soundMatrix=matrix
         var motion=patch.motion ?? Array(repeating:MotionSettings(),count:4);motion[layer]=copied.motion;patch.motion=motion
