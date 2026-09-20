@@ -488,6 +488,13 @@ struct SynthEngine::Impl {
         eventGeneration.fetch_add(1,std::memory_order_acq_rel);
         for(size_t n=0;n<queueSize&&queue.pop(event);n++)if(event.kind!=Event::MIDI)processEvent(event);
         panicRequested.store(false,std::memory_order_release);
+        // prepare() is a silent hard-reset boundary. If a patch load deferred
+        // parameter/global writes for Panic, commit them before clearing the
+        // transition state so host startup/device reconfiguration cannot lose them.
+        if(panicDeferParams.load(std::memory_order_acquire)){
+            flushPendingToLive();
+            panicDeferParams.store(false,std::memory_order_release);
+        }
         clearSound(); snapshot();
         for(auto& layer:layers){layer.delaySend=layer.delayTarget;layer.reverbSend=layer.reverbTarget;layer.shimmerSend=layer.shimmerTarget;}
         constexpr float times[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
