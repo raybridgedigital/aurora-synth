@@ -266,6 +266,18 @@ struct SynthEngine::Impl {
     float phaserPhase=0,phaserMix=0;
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
     size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1,outputLimiter=1;
+    // Mute-bus panic: fade FINAL stereo only; wipe large FX rings only under true silence.
+    enum class PanicPhase : uint8_t { Idle=0, FadingOut=1, Silent=2, FadingIn=3 };
+    PanicPhase panicPhase{PanicPhase::Idle};
+    float panicGain{1.f};
+    uint32_t panicSamplesLeft{0};
+    uint32_t panicFadeTotal{1};
+    bool panicWipePending{false};
+    bool panicFxStarved{false};
+    static constexpr float kPanicFadeOutMs=30.f;
+    static constexpr float kPanicFadeInMs=20.f;
+    static constexpr float kPanicHoldMs=60.f;
+    static float smoothstep01(float t){t=std::clamp(t,0.f,1.f);return t*t*(3.f-2.f*t);}
     // Delay tone LPFs in feedback path (0=dark … 1=bright)
     float delayToneL=0,delayToneR=0;
     // 3-band EQ state (shelves + presence) on final stereo bus
@@ -321,7 +333,8 @@ struct SynthEngine::Impl {
         globals[AGShimmerLateLevel].store(.7f);globals[AGShimmerLateDecay].store(4);
         prepare(48000);
     }
-    void clearSound() {
+    void clearPerformance() {
+        // Kill voices / notes / modulation — no large ring wipes.
         for(auto& p:motionPlayheads)p.store(-1);
         holding=false;clockAge=0;lastClock=clockInterval=0;clockBPM=0;
         for(auto& value:modulationFeedback)value.store(0,std::memory_order_relaxed);
@@ -334,6 +347,23 @@ struct SynthEngine::Impl {
             s.sustain.fill(false);s.bend.fill(0);s.wheel.fill(0);s.expression.fill(1);
         }
         for(auto& l:layers){l.arpCountdown=0;l.gateCountdown=0;l.arpStep=0;l.arpWaiting=true;}
+        outputPeak.store(0,std::memory_order_relaxed);voiceCount.store(0,std::memory_order_relaxed);
+        previewActiveLayers.store(0);
+    }
+    void starveFxFeedback() {
+        // Stop regenerating delay/shimmer/reverb energy without clearing rings mid-stream.
+        shimmerFbL=shimmerFbR=0;
+        shimmerToneStateL=shimmerToneStateR=0;
+        shimmerEarlyStateL=shimmerEarlyStateR=0;
+        for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;}
+        delayToneL=delayToneR=0;
+        phaserFeedback.fill(0);
+        for(auto& c:combs)c.feedback=0;
+        for(auto& c:shimmerCombs)c.feedback=0;
+        panicFxStarved=true;
+    }
+    void clearFxRingsAndFilters() {
+        // ONLY call while panicGain is locked at 0 (true silence).
         for(auto& channel:phaserState)channel.fill(0);
         phaserPhase=0;phaserMix=0;
         phaserFeedback.fill(0);
@@ -346,10 +376,75 @@ struct SynthEngine::Impl {
         for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;shimmerReadL[i]=shimmerReadR[i]=0;}
         for(auto& c:combs)c.clear();for(auto& a:allpasses)a.clear();
         for(auto& c:shimmerCombs)c.clear();for(auto& a:shimmerAllpasses)a.clear();
-        delaySamples=float(sampleRate*.5);delayPosition=0;delayToneL=delayToneR=0;
-        outputLimiter=1.f; // Panic must restore audible level after feedback lockup
-        outputPeak.store(0,std::memory_order_relaxed);voiceCount.store(0,std::memory_order_relaxed);
-        previewActiveLayers.store(0);
+        outputLimiter=1.f;
+        delayPosition=chorusPosition=0;
+    }
+    void clearSound() {
+        // Full reset (prepare / device change): performance + FX under known stop.
+        clearPerformance();
+        clearFxRingsAndFilters();
+        panicPhase=PanicPhase::Idle;panicGain=1.f;panicSamplesLeft=0;panicFadeTotal=1;panicWipePending=false;panicFxStarved=false;
+    }
+    void beginPanicMute() {
+        clearPerformance();
+        starveFxFeedback();
+        if(panicPhase==PanicPhase::FadingOut)return;
+        if(panicPhase==PanicPhase::Silent){
+            panicWipePending=true;
+            panicSamplesLeft=std::max(panicSamplesLeft,uint32_t(sampleRate*kPanicHoldMs*.001));
+            return;
+        }
+        float start=std::clamp(panicGain,0.f,1.f);
+        panicPhase=PanicPhase::FadingOut;
+        panicFadeTotal=std::max(1u,uint32_t(sampleRate*kPanicFadeOutMs*.001));
+        panicSamplesLeft=std::max(1u,uint32_t(float(panicFadeTotal)*std::max(0.05f,start)));
+        panicFadeTotal=panicSamplesLeft;
+        panicGain=start;
+    }
+    float advancePanicGain() {
+        switch(panicPhase){
+        case PanicPhase::Idle:
+            panicGain=1.f;return 1.f;
+        case PanicPhase::FadingOut: {
+            uint32_t total=std::max(1u,panicFadeTotal);
+            float progress=1.f-float(panicSamplesLeft)/float(total);
+            panicGain=1.f-smoothstep01(progress);
+            if(panicSamplesLeft>0) --panicSamplesLeft;
+            else {
+                panicGain=0.f;
+                panicPhase=PanicPhase::Silent;
+                panicSamplesLeft=std::max(1u,uint32_t(sampleRate*kPanicHoldMs*.001));
+                panicWipePending=true;
+            }
+            return panicGain;
+        }
+        case PanicPhase::Silent:
+            panicGain=0.f;
+            if(panicWipePending){
+                clearFxRingsAndFilters();
+                panicWipePending=false;
+            }
+            if(panicSamplesLeft>0) --panicSamplesLeft;
+            if(panicSamplesLeft==0){
+                panicPhase=PanicPhase::FadingIn;
+                panicFadeTotal=std::max(1u,uint32_t(sampleRate*kPanicFadeInMs*.001));
+                panicSamplesLeft=panicFadeTotal;
+                panicFxStarved=false;
+            }
+            return 0.f;
+        case PanicPhase::FadingIn: {
+            uint32_t total=std::max(1u,panicFadeTotal);
+            float progress=1.f-float(panicSamplesLeft)/float(total);
+            panicGain=smoothstep01(progress);
+            if(panicSamplesLeft>0) --panicSamplesLeft;
+            else {
+                panicGain=1.f;
+                panicPhase=PanicPhase::Idle;
+            }
+            return panicGain;
+        }
+        }
+        return panicGain;
     }
     void prepare(double rate) {
         sampleRate=std::isfinite(rate)?std::clamp(rate,8000.,192000.):48000;
@@ -487,7 +582,7 @@ struct SynthEngine::Impl {
         constexpr float roomTimes[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
         for(int i=0;i<8;i++){
             auto& c=combs[i];c.length=std::clamp(int(sampleRate*roomTimes[i]*(.5f+global[AGReverbSize])),1,16384);c.position%=c.length;
-            c.feedback=std::min(.98f,std::pow(.001f,float(c.length/sampleRate)/global[AGReverbDecay]));
+            c.feedback=panicFxStarved?0.f:std::min(.98f,std::pow(.001f,float(c.length/sampleRate)/global[AGReverbDecay]));
         }
         for(int l=0;l<kLayers;l++) {
             auto& layer=layers[l];auto& p=layer.p;
@@ -776,9 +871,17 @@ struct SynthEngine::Impl {
         snapshot();Event event;
         bool recover=panicRequested.exchange(false,std::memory_order_acq_rel);
         auto generation=eventGeneration.load(std::memory_order_acquire);
-        if(recover)clearSound();
-        for(size_t n=0;n<queueSize&&queue.pop(event);n++)
-            if((event.kind!=Event::MIDI&&event.kind!=Event::Hold&&event.kind!=Event::Clock)||(!recover&&event.generation==generation))processEvent(event);
+        if(recover)beginPanicMute();
+        const bool panicBusy=panicPhase!=PanicPhase::Idle;
+        for(size_t n=0;n<queueSize&&queue.pop(event);n++){
+            // Always apply device/config events. Notes/Hold/Clock need current generation.
+            // During Panic fade/clear, drop MIDI/Hold so nothing re-triggers the bus mid-wipe.
+            const bool timed=event.kind==Event::MIDI||event.kind==Event::Hold||event.kind==Event::Clock;
+            if(!timed){processEvent(event);continue;}
+            if(event.generation!=generation)continue;
+            if(panicBusy&&(event.kind==Event::MIDI||event.kind==Event::Hold))continue;
+            processEvent(event);
+        }
         // Shared FX follow the latest received performance message, including
         // controllers moved before playing. Layer destinations retain source/channel ownership.
         frameFeedback.fill(0);
@@ -794,6 +897,12 @@ struct SynthEngine::Impl {
         float gainTarget=std::pow(10.f,global[AGOutputGain]/20.f);
         float limiterRelease=1-std::exp(-1.f/float(sampleRate*.1));
         for(uint32_t frame=0;frame<frames;frame++,sampleCounter++) {
+            // True silence: skip ALL FX DSP (chorus/phaser still had unducked wet in the old path → click).
+            if(panicPhase==PanicPhase::Silent){
+                (void)advancePanicGain();
+                left[frame]=0;right[frame]=0;
+                continue;
+            }
             if(externalClock&&++clockAge==uint64_t(sampleRate*.5)){clockBPM=0;lastClock=clockInterval=0;for(int l=0;l<kLayers;l++)releaseLayerArp(l);}
             if(externalClock&&clockBPM>0)global[AGTempo]=clockBPM.load(std::memory_order_relaxed);
             for(int l=0;l<kLayers;l++) {
@@ -975,8 +1084,10 @@ struct SynthEngine::Impl {
             chorusL[chorusPosition]=outL;chorusR[chorusPosition]=outR;
             float chorusDelayL=float(sampleRate)*(.009f+.0028f*global[AGChorusDepth]*std::sin(tau*chorusPhase));
             float chorusDelayR=float(sampleRate)*(.011f+.0028f*global[AGChorusDepth]*std::sin(tau*(chorusPhase+.25f)));
-            outL+=delayed(chorusL,chorusPosition,chorusDelayL)*global[AGChorusMix]*.5f;
-            outR+=delayed(chorusR,chorusPosition,chorusDelayR)*global[AGChorusMix]*.5f;
+            if(!panicFxStarved){
+                outL+=delayed(chorusL,chorusPosition,chorusDelayL)*global[AGChorusMix]*.5f;
+                outR+=delayed(chorusR,chorusPosition,chorusDelayR)*global[AGChorusMix]*.5f;
+            }
             chorusPosition=(chorusPosition+1)%chorusSize;chorusPhase+=global[AGChorusRate]/float(sampleRate);if(chorusPhase>=1)chorusPhase-=1;
             // Four swept all-pass stages per channel form moving cancellation
             // notches when blended with the dry signal. Coefficients stay stable.
@@ -996,8 +1107,10 @@ struct SynthEngine::Impl {
                 state=input-phaserCoefficient[channel]*phased[channel];
             }
             for(int channel=0;channel<2;channel++)phaserFeedback[channel]=std::tanh(phased[channel]);
-            outL+=phaserMix*.5f*(phased[0]-outL);
-            outR+=phaserMix*.5f*(phased[1]-outR);
+            if(!panicFxStarved){
+                outL+=phaserMix*.5f*(phased[0]-outL);
+                outR+=phaserMix*.5f*(phased[1]-outR);
+            }
             phaserPhase+=global[AGPhaserRate]/float(sampleRate);if(phaserPhase>=1)phaserPhase-=1;
             constexpr float divisions[8]={1,.5f,.25f,2,.75f,1.5f,1.f/3,2.f/3};
             float delayTargetSamples;
@@ -1022,7 +1135,9 @@ struct SynthEngine::Impl {
             delayToneR+=toneCoeff*(fbInR-delayToneR);
             if(!std::isfinite(delayToneL)||!std::isfinite(delayToneR)){delayToneL=0;delayToneR=0;}
             // Soft-clip feedback so scrubbing Mix/Feedback/Tone cannot lock the bus/limiter
+            // During Panic fade-out, freeze delay regeneration so the wipe is near energy-free
             float fbAmt=std::clamp(global[AGDelayFeedback],0.f,.85f);
+            if(panicFxStarved)fbAmt=0;
             float fbL=std::tanh(delayToneL*fbAmt);
             float fbR=std::tanh(delayToneR*fbAmt);
             float writeL=sendDL+fbL, writeR=sendDR+fbR;
@@ -1032,15 +1147,24 @@ struct SynthEngine::Impl {
             float reverbInput=(sendRL+sendRR)*.16f,rl=0,rr=0;
             for(int i=0;i<4;i++){rl+=combs[i].process(reverbInput);rr+=combs[i+4].process(reverbInput);}
             rl=allpasses[1].process(allpasses[0].process(rl));rr=allpasses[3].process(allpasses[2].process(rr));
-            outL+=dl*global[AGDelayMix]+rl*global[AGReverbMix]*.25f;
-            outR+=dr*global[AGDelayMix]+rr*global[AGReverbMix]*.25f;
+            {
+                float wetDuck=panicFxStarved?0.f:1.f;
+                outL+=(dl*global[AGDelayMix]+rl*global[AGReverbMix]*.25f)*wetDuck;
+                outR+=(dr*global[AGDelayMix]+rr*global[AGReverbMix]*.25f)*wetDuck;
+            }
 
             // ---- Full Shimmer (pitch-shifted multi-voice diffusion) ----
+            // Input is reverb-send only — never the wet bus — so Mix/Amount cannot form an outer feedback loop.
             {
-                float shimmerSend=(sendRL+sendRR)*.12f+(outL+outR)*.04f;
-                // Pre-delay write/read
-                shimmerPreL[shimmerPreWrite]=shimmerSend+shimmerFbL;
-                shimmerPreR[shimmerPreWrite]=shimmerSend+shimmerFbR;
+                float shimmerSend=std::tanh((sendRL+sendRR)*.10f);
+                // Soft-clip predelay write (send + internal fb)
+                float fbLIn=panicFxStarved?0.f:shimmerFbL;
+                float fbRIn=panicFxStarved?0.f:shimmerFbR;
+                float preWriteL=std::tanh(shimmerSend+fbLIn);
+                float preWriteR=std::tanh(shimmerSend+fbRIn);
+                if(!std::isfinite(preWriteL))preWriteL=0; if(!std::isfinite(preWriteR))preWriteR=0;
+                shimmerPreL[shimmerPreWrite]=preWriteL;
+                shimmerPreR[shimmerPreWrite]=preWriteR;
                 float preSamples=std::clamp(global[AGShimmerPredelay]*.001f*float(sampleRate),0.f,float(shimmerPredelaySize-2));
                 size_t preRead=(shimmerPreWrite+shimmerPredelaySize-size_t(preSamples))%shimmerPredelaySize;
                 float preL=shimmerPreL[preRead],preR=shimmerPreR[preRead];
@@ -1051,6 +1175,7 @@ struct SynthEngine::Impl {
                 float earlyCoeff=std::exp(-1.f/(earlySize*float(sampleRate)+1.f));
                 shimmerEarlyStateL=earlyCoeff*shimmerEarlyStateL+(1.f-earlyCoeff)*preL;
                 shimmerEarlyStateR=earlyCoeff*shimmerEarlyStateR+(1.f-earlyCoeff)*preR;
+                if(!std::isfinite(shimmerEarlyStateL)||!std::isfinite(shimmerEarlyStateR)){shimmerEarlyStateL=shimmerEarlyStateR=0;}
                 float earlyL=shimmerEarlyStateL*global[AGShimmerEarlyLevel];
                 float earlyR=shimmerEarlyStateR*global[AGShimmerEarlyLevel];
 
@@ -1094,36 +1219,43 @@ struct SynthEngine::Impl {
                     float lvl=std::clamp(voiceLvl[v],0.f,1.f);
                     pitchedL+=gL*lvl;pitchedR+=gR*lvl;
                 }
+                // Soft-clip stacked voices so +5/+7/+12 cannot overdrive diffusion
+                pitchedL=std::tanh(pitchedL*.55f);pitchedR=std::tanh(pitchedR*.55f);
                 shimmerWrite=(shimmerWrite+1)%shimmerSize;
 
                 // Late diffusion: Schroeder-ish on pitched signal, decay from LateDecay/ShimmerDecay
                 float lateDecay=std::max(global[AGShimmerLateDecay],global[AGShimmerDecay]);
                 for(int i=0;i<4;i++){
-                    shimmerCombs[i].feedback=std::min(.97f,std::pow(.001f,float(shimmerCombs[i].length/sampleRate)/std::max(.2f,lateDecay)));
+                    shimmerCombs[i].feedback=std::min(.92f,std::pow(.001f,float(shimmerCombs[i].length/sampleRate)/std::max(.2f,lateDecay)));
                 }
-                float lateIn=(pitchedL+pitchedR)*.35f;
+                float lateIn=std::tanh((pitchedL+pitchedR)*.30f);
                 float late=0;
                 for(int i=0;i<4;i++)late+=shimmerCombs[i].process(lateIn);
                 late=shimmerAllpasses[1].process(shimmerAllpasses[0].process(late));
+                if(!std::isfinite(late))late=0;
                 late*=global[AGShimmerLateLevel];
 
-                // Tone LPF on feedback path
+                // Tone LPF; Amount uses a squared curve so high settings stay musical without runaway
                 float st=std::clamp(global[AGShimmerTone],0.f,1.f);
                 float stCoeff=.04f+.5f*st;
                 float wetL=earlyL+pitchedL*.45f+late*.55f;
                 float wetR=earlyR+pitchedR*.45f+late*.55f;
                 shimmerToneStateL+=stCoeff*(wetL-shimmerToneStateL);
                 shimmerToneStateR+=stCoeff*(wetR-shimmerToneStateR);
+                if(!std::isfinite(shimmerToneStateL)||!std::isfinite(shimmerToneStateR)){shimmerToneStateL=shimmerToneStateR=0;}
                 float amount=std::clamp(global[AGShimmerAmount],0.f,.95f);
-                shimmerFbL=std::tanh(shimmerToneStateL*amount*.55f);
-                shimmerFbR=std::tanh(shimmerToneStateR*amount*.55f);
-                if(!std::isfinite(shimmerFbL)||!std::isfinite(shimmerFbR)){shimmerFbL=shimmerFbR=0;shimmerToneStateL=shimmerToneStateR=0;}
-
-                float mix=std::clamp(global[AGShimmerMix],0.f,1.f);
-                if(std::isfinite(shimmerToneStateL)&&std::isfinite(shimmerToneStateR)){
-                    outL+=shimmerToneStateL*mix;
-                    outR+=shimmerToneStateR*mix;
+                float fbGain=amount*amount*.38f;
+                if(panicFxStarved){
+                    shimmerFbL=shimmerFbR=0;
+                }else{
+                    shimmerFbL=std::tanh(shimmerToneStateL*fbGain);
+                    shimmerFbR=std::tanh(shimmerToneStateR*fbGain);
+                    if(!std::isfinite(shimmerFbL)||!std::isfinite(shimmerFbR)){shimmerFbL=shimmerFbR=0;shimmerToneStateL=shimmerToneStateR=0;}
                 }
+
+                float mix=panicFxStarved?0.f:std::clamp(global[AGShimmerMix],0.f,1.f);
+                outL+=std::tanh(shimmerToneStateL)*mix*.9f;
+                outR+=std::tanh(shimmerToneStateR)*mix*.9f;
             }
 
             // ---- Insert EQ on final stereo bus (before master/limiter) ----
@@ -1155,13 +1287,16 @@ struct SynthEngine::Impl {
                 finalL*=outputGain;finalR*=outputGain;
                 float peak=std::max(std::abs(finalL),std::abs(finalR));
                 float target=std::min(1.f,.98f/std::max(.00001f,peak));
-                // Attack fast on peaks; release quicker when quiet so Delay scrubbing cannot leave the bus muted
+                // Attack fast on peaks; release quieter when quiet so Delay scrubbing cannot leave the bus muted
                 float release=peak<.05f ? (1-std::exp(-1.f/float(sampleRate*.02))) : limiterRelease;
                 outputLimiter=target<outputLimiter?target:outputLimiter+release*(target-outputLimiter);
                 if(!std::isfinite(outputLimiter)||outputLimiter<.0001f)outputLimiter=peak>1.f?.0001f:1.f;
                 finalL*=outputLimiter;finalR*=outputLimiter;
             }else outputLimiter=1;
-            left[frame]=std::isfinite(finalL)?finalL:0;right[frame]=std::isfinite(finalR)?finalR:0;
+            // Panic gain is the LAST multiply on the audible bus (after EQ / tanh / limiter).
+            float pg=advancePanicGain();
+            finalL=std::isfinite(finalL)?finalL*pg:0;finalR=std::isfinite(finalR)?finalR*pg:0;
+            left[frame]=finalL;right[frame]=finalR;
             // A mono sum can cancel wide/phase-opposed stereo sounds and falsely look quiet.
             if((sampleCounter&3)==0)scopeSamples[(scopePosition++)%scopeSamples.size()].store(left[frame],std::memory_order_relaxed);
             maximum=std::max(maximum,std::max(std::abs(left[frame]),std::abs(right[frame])));
