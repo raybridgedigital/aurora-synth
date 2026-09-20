@@ -59,7 +59,7 @@ import SwiftUI
         precondition(SynthModel.restoredOutputGain(24,revision:3)==9) // untouched +24 migrates to +9
         precondition(SynthModel.restoredOutputGain(30,revision:3)==24) // clamped custom kept
         precondition(SynthModel.restoredOutputGain(12,revision:4)==12)
-        precondition(FactoryBank.all.count == 409)
+        precondition(FactoryBank.all.count == 438)
         let singlePresetData=try! JSONEncoder().encode(FactoryBank.all[0])
         let presetBankData=try! JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
         precondition(try! SynthModel.presets(in:singlePresetData).count==1)
@@ -96,10 +96,10 @@ import SwiftUI
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
-        precondition(model.collectionSounds.count == 300)
+        precondition(model.collectionSounds.count == 438)
         precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==409)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==409)
+        precondition(Set(FactoryBank.all.map(\.id)).count==438)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==438)
         precondition(FactoryBank.nova.count==100)
         model.search=""
         precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
@@ -229,7 +229,7 @@ import SwiftUI
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")
         print("PASS: 100% master, persistent global transpose, tap tempo, rename preserving edits, delete and undo.")
-        print("PASS: Aurora contains 300 distinct Spectrum sounds; all 300 load and all 99 parameters retain macro-center values. Motion, XY and save round trips pass.")
+        print("PASS: Aurora contains 438 factory sounds, including 300 Spectrum sounds; all factory sounds load and all 99 parameters retain macro-center values. Motion, XY and save round trips pass.")
         print("PASS: 20 stable polls and 1,200 meter changes caused ZERO main-interface publications.")
         print("PASS: 1,200 unchanged meter samples caused ZERO additional publications.")
         model.selectedLayer=0
