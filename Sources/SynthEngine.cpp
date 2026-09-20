@@ -274,7 +274,12 @@ struct SynthEngine::Impl {
     uint32_t panicFadeTotal{1};
     bool panicWipePending{false};
     bool panicFxStarved{false};
-    static constexpr float kPanicFadeOutMs=80.f;
+    // While true, setParameter/setGlobal write HERE so Cut-on applyPatch cannot
+    // retune shimmer mid-fade (Infinite Mirror / Fifth Cascade). Flushed at silence.
+    std::atomic<bool> panicDeferParams{false};
+    std::array<std::array<std::atomic<float>,APParameterCount>,kLayers> pendingParameters{};
+    std::array<std::atomic<float>,AGGlobalCount> pendingGlobals{};
+    static constexpr float kPanicFadeOutMs=100.f;
     static constexpr float kPanicFadeInMs=25.f;
     static constexpr float kPanicHoldMs=80.f;
     static float smoothstep01(float t){t=std::clamp(t,0.f,1.f);return t*t*(3.f-2.f*t);}
@@ -378,7 +383,21 @@ struct SynthEngine::Impl {
         // Full reset (prepare / device change): performance + FX under known stop.
         clearPerformance();
         clearFxRingsAndFilters();
-        panicPhase=PanicPhase::Idle;panicGain=1.f;panicSamplesLeft=0;panicFadeTotal=1;panicWipePending=false;panicFxStarved=false;
+        panicPhase=PanicPhase::Idle;panicGain=1.f;panicSamplesLeft=0;panicFadeTotal=1;panicWipePending=false;panicFxStarved=false;panicDeferParams.store(false,std::memory_order_release);
+    }
+    void capturePendingFromLive() {
+        for(int l=0;l<kLayers;l++)
+            for(int p=0;p<APParameterCount;p++)
+                pendingParameters[l][p].store(parameters[l][p].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        for(int g=0;g<AGGlobalCount;g++)
+            pendingGlobals[g].store(globals[g].load(std::memory_order_relaxed),std::memory_order_relaxed);
+    }
+    void flushPendingToLive() {
+        for(int l=0;l<kLayers;l++)
+            for(int p=0;p<APParameterCount;p++)
+                parameters[l][p].store(pendingParameters[l][p].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        for(int g=0;g<AGGlobalCount;g++)
+            globals[g].store(pendingGlobals[g].load(std::memory_order_relaxed),std::memory_order_relaxed);
     }
     void beginPanicMute() {
         // Fade the FINAL bus first. Clearing voices/wet state here clicks while gain is still ~1
@@ -392,7 +411,13 @@ struct SynthEngine::Impl {
         }
         float start=std::clamp(panicGain,0.f,1.f);
         panicPhase=PanicPhase::FadingOut;
-        panicFadeTotal=std::max(1u,uint32_t(sampleRate*kPanicFadeOutMs*.001));
+        // Hot shimmer pads (Infinite Mirror / Fifth Cascade) need a longer bus fade.
+        float mix=globals[AGShimmerMix].load(std::memory_order_relaxed);
+        float amt=globals[AGShimmerAmount].load(std::memory_order_relaxed);
+        float dly=globals[AGDelayMix].load(std::memory_order_relaxed)*globals[AGDelayFeedback].load(std::memory_order_relaxed);
+        float energy=std::clamp(mix*amt+0.5f*dly,0.f,1.f);
+        float fadeMs=kPanicFadeOutMs+energy*100.f; // ~100–200 ms
+        panicFadeTotal=std::max(1u,uint32_t(sampleRate*fadeMs*.001));
         panicSamplesLeft=std::max(1u,uint32_t(float(panicFadeTotal)*std::max(0.05f,start)));
         panicFadeTotal=panicSamplesLeft;
         // First audible sample must already be into the fade (gain 1 → click if wet/voices jump).
@@ -426,6 +451,11 @@ struct SynthEngine::Impl {
             if(panicWipePending){
                 clearPerformance();
                 clearFxRingsAndFilters();
+                // New patch params (deferred from Cut-on applyPatch) take effect only now.
+                if(panicDeferParams.load(std::memory_order_acquire)){
+                    flushPendingToLive();
+                    panicDeferParams.store(false,std::memory_order_release);
+                }
                 panicWipePending=false;
             }
             if(panicSamplesLeft>0) --panicSamplesLeft;
@@ -472,6 +502,10 @@ struct SynthEngine::Impl {
     void requestPanic() {
         // Generation tagging also rejects a producer that reserved a queue slot
         // before panic, then published the stale note only after recovery.
+        // Capture live params then defer writes so loadPreset's applyPatch cannot
+        // change shimmer/FX while the old tail is still fading.
+        capturePendingFromLive();
+        panicDeferParams.store(true,std::memory_order_release);
         eventGeneration.fetch_add(1,std::memory_order_acq_rel);
         panicRequested.store(true,std::memory_order_release);
     }
@@ -1316,8 +1350,13 @@ SynthEngine::SynthEngine():impl(std::make_unique<Impl>()){}
 SynthEngine::~SynthEngine()=default;
 void SynthEngine::prepare(double sampleRate){impl->prepare(sampleRate);}
 void SynthEngine::setParameter(int layer,int parameter,float value) {
-    if(layer>=0&&layer<kLayers&&parameter>=0&&parameter<APParameterCount)
-        impl->parameters[layer][parameter].store(parameterValue(parameter,value),std::memory_order_relaxed);
+    if(layer>=0&&layer<kLayers&&parameter>=0&&parameter<APParameterCount){
+        float v=parameterValue(parameter,value);
+        if(impl->panicDeferParams.load(std::memory_order_acquire))
+            impl->pendingParameters[layer][parameter].store(v,std::memory_order_relaxed);
+        else
+            impl->parameters[layer][parameter].store(v,std::memory_order_relaxed);
+    }
 }
 float SynthEngine::getParameter(int layer,int parameter)const {
     return layer>=0&&layer<kLayers&&parameter>=0&&parameter<APParameterCount?
@@ -1325,7 +1364,13 @@ float SynthEngine::getParameter(int layer,int parameter)const {
 }
 void SynthEngine::setTranspose(int semitones) { impl->transpose.store(std::clamp(semitones,-24,24),std::memory_order_relaxed); }
 void SynthEngine::setGlobal(int parameter,float value) {
-    if(parameter>=0&&parameter<AGGlobalCount)impl->globals[parameter].store(globalValue(parameter,value),std::memory_order_relaxed);
+    if(parameter>=0&&parameter<AGGlobalCount){
+        float v=globalValue(parameter,value);
+        if(impl->panicDeferParams.load(std::memory_order_acquire))
+            impl->pendingGlobals[parameter].store(v,std::memory_order_relaxed);
+        else
+            impl->globals[parameter].store(v,std::memory_order_relaxed);
+    }
 }
 float SynthEngine::getGlobal(int parameter)const {
     return parameter>=0&&parameter<AGGlobalCount?impl->globals[parameter].load(std::memory_order_relaxed):0;
