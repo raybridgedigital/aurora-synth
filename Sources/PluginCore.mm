@@ -55,7 +55,6 @@ Core::Core():storage(std::make_unique<Storage>()){
     @autoreleasepool {
         storage->patch=[NSMutableDictionary dictionary];
         storage->mappings=@{@"mappings":@[],@"directMappings":@[]};for(auto& target:learnedTargets)target=-1;
-        engine.route(0,15,0);engine.route(1,15,0);
         values[routeMaskID]=15;
         setActual(outputGainID,9);
         for(int ch=0;ch<16;ch++){values[midiBase+ch*130+7]=1;values[midiBase+ch*130+11]=1;values[midiBase+ch*130+129]=.5;}
@@ -64,6 +63,9 @@ Core::Core():storage(std::make_unique<Storage>()){
         NSArray* bank=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
         if(bank.count){NSData* patch=[NSJSONSerialization dataWithJSONObject:bank[0] options:0 error:nil];NSString* json=[[NSString alloc] initWithData:patch encoding:NSUTF8StringEncoding];setPatchJSON(json.UTF8String,true);}
         else {for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)setActual(layerID(l,p),p==0?(l==0):defaults[p]);for(int p=0;p<15;p++)setActual(globalBase+p,engine.getGlobal(p));}
+        // Initial patch load advances the Panic event generation. Queue the
+        // default MIDI routes afterwards so they cannot be discarded as stale.
+        engine.route(0,15,0);engine.route(1,15,0);
     }
 }
 Core::~Core()=default;
