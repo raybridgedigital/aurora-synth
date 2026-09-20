@@ -1,0 +1,86 @@
+name: Product Smoke Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    name: Standalone + Interface
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build standalone app
+        shell: bash
+        run: |
+          rm -rf build
+          scripts/build.sh
+
+      - name: Run interface regression checks
+        shell: bash
+        run: |
+          bash check-interface.sh
+
+  plugins:
+    name: AU + VST3
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bootstrap pinned plugin dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/deps
+
+          python3 -m pip install --disable-pip-version-check --target build/deps/cmake-package "cmake==4.4.3"
+          test -x build/deps/cmake-package/cmake/data/bin/cmake
+
+          git clone https://github.com/steinbergmedia/vst3sdk.git build/deps/vst3sdk
+          git -C build/deps/vst3sdk checkout 3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96
+          git -C build/deps/vst3sdk submodule update --init --recursive
+
+          git clone https://github.com/apple/AudioUnitSDK.git build/deps/AudioUnitSDK
+          git -C build/deps/AudioUnitSDK checkout bd98b31feff57a15989fcfab4cd86dc63382b1ac
+
+          test "$(git -C build/deps/vst3sdk rev-parse HEAD)" = "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96"
+          test "$(git -C build/deps/AudioUnitSDK rev-parse HEAD)" = "bd98b31feff57a15989fcfab4cd86dc63382b1ac"
+
+      - name: Build AU and VST3
+        shell: bash
+        env:
+          AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
+        run: |
+          scripts/build_plugins.sh
+
+      - name: Install CI plugin copies
+        shell: bash
+        env:
+          AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
+        run: |
+          scripts/install_plugins.sh
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+
+      - name: Run plugin validation
+        shell: bash
+        env:
+          AURORA_PLUGIN_BUILD_DIR: ${{ runner.temp }}/aurora-plugins
+        run: |
+          scripts/check_plugins.sh

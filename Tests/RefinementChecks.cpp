@@ -6,7 +6,7 @@
 #include <vector>
 using aurora::SynthEngine;
 void setup(SynthEngine& e){e.prepare(48000);e.setGlobal(AGMaster,.8);for(int p:{AGDelayMix,AGReverbMix,AGChorusMix,AGPhaserMix})e.setGlobal(p,0);for(int p:{APLFODepth,APLFO2Depth,APFilterEnvelope,APNoise,APDrive})e.setParameter(0,p,0);e.setParameter(0,APCutoff,1400);e.setParameter(0,APSustain,1);e.setParameter(0,APAttack,.001);}
-std::vector<float> render(SynthEngine& e,int frames){std::vector<float> l(frames),r(frames);e.render(l.data(),r.data(),frames);for(int i=0;i<frames;i++)assert(std::isfinite(l[i])&&std::isfinite(r[i])&&std::abs(l[i])<=1&&std::abs(r[i])<=1);return l;}
+std::vector<float> render(SynthEngine& e,int frames){std::vector<float> l(frames),r(frames);e.render(l.data(),r.data(),frames);for(int i=0;i<frames;i++)assert(std::isfinite(l[i])&&std::isfinite(r[i])&&std::abs(l[i])<=1&&std::abs(r[i])<=1);return l;}\nvoid drainPanic(SynthEngine& e){e.panic();render(e,int(48000*.45));}
 float feedback(SynthEngine& e){float f[30];e.copyModulation(f,30);return f[0];}
 double energy(const std::vector<float>& a){double v=0;for(auto x:a)v+=x*x;return v/a.size();}
 int main(){
@@ -15,9 +15,9 @@ int main(){
   render(e,6001);assert(feedback(e)>.99f); // 1/4 cycle at 120 BPM / quarter note
   e.midi(0,0x90,64,100);render(e,1);assert(std::abs(feedback(e))<.002f);
   render(e,6000);assert(feedback(e)>.99f); // new note retriggered
-  e.panic();render(e,21600); // mute-bus fade + wipe before next notes/params
+  drainPanic(e); // mute-bus fade + wipe before next notes/params
   e.setParameter(0,base+4,.2);e.setParameter(0,base+5,.4);e.setParameter(0,base+3,.25);e.midi(0,0x90,60,100);render(e,9000);assert(std::abs(feedback(e))<.001f);render(e,1200);assert(std::abs(feedback(e))<.04f);
-  e.panic();render(e,21600); // mute-bus fade + wipe before free-run check
+  drainPanic(e); // mute-bus fade + wipe before free-run check
   e.setParameter(0,base+4,0);e.setParameter(0,base+5,0);e.setParameter(0,base+2,0);e.setParameter(0,base+3,0);render(e,2345);e.midi(0,0x90,60,100);render(e,1);float before=feedback(e);e.midi(0,0x90,67,100);render(e,1);assert(std::abs(feedback(e)-before)<.002f);
  }
  for(int source:{4,5}){
