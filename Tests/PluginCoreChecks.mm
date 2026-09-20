@@ -32,7 +32,18 @@ int main(){@autoreleasepool {
                 a.engine.render(l,r,256);b.engine.render(bl,br,256);
                 for(int i=0;i<256;i++){assert(std::isfinite(l[i])&&std::isfinite(r[i]));energy+=l[i]*l[i]+r[i]*r[i];}
             }
-            if(!(energy>0)){std::cerr<<"No rendered audio for patch: "<<[patch[@"name"] UTF8String]<<" · id "<<[patch[@"id"] UTF8String]<<std::endl;return 2;}
+            if(!(energy>0)){
+                std::cerr<<"No rendered audio for patch: "<<[patch[@"name"] UTF8String]<<" · id "<<[patch[@"id"] UTF8String]
+                         <<" · voices "<<a.engine.activeVoices()<<std::endl;
+                for(int layer=0;layer<4;layer++)
+                    std::cerr<<"  layer "<<layer
+                             <<" enabled="<<a.engine.getParameter(layer,APEnabled)
+                             <<" level="<<a.engine.getParameter(layer,APLevel)
+                             <<" key="<<a.engine.getParameter(layer,APKeyLow)<<".."<<a.engine.getParameter(layer,APKeyHigh)
+                             <<" wt="<<a.engine.getParameter(layer,APWT1Table)<<"/"<<a.engine.getParameter(layer,APWT2Table)
+                             <<std::endl;
+                return 2;
+            }
             panicAndDrain(a);panicAndDrain(b);
             float previous=b.values[7];a.setActual(7,4321);assert(b.values[7]==previous);
             auto unchanged=b.saveState();assert(!b.restoreState("{}"));assert(b.saveState()==unchanged);
