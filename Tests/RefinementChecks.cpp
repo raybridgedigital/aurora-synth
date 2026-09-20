@@ -6,7 +6,8 @@
 #include <vector>
 using aurora::SynthEngine;
 void setup(SynthEngine& e){e.prepare(48000);e.setGlobal(AGMaster,.8);for(int p:{AGDelayMix,AGReverbMix,AGChorusMix,AGPhaserMix})e.setGlobal(p,0);for(int p:{APLFODepth,APLFO2Depth,APFilterEnvelope,APNoise,APDrive})e.setParameter(0,p,0);e.setParameter(0,APCutoff,1400);e.setParameter(0,APSustain,1);e.setParameter(0,APAttack,.001);}
-std::vector<float> render(SynthEngine& e,int frames){std::vector<float> l(frames),r(frames);e.render(l.data(),r.data(),frames);for(int i=0;i<frames;i++)assert(std::isfinite(l[i])&&std::isfinite(r[i])&&std::abs(l[i])<=1&&std::abs(r[i])<=1);return l;}\nvoid drainPanic(SynthEngine& e){e.panic();render(e,int(48000*.45));}
+std::vector<float> render(SynthEngine& e,int frames){std::vector<float> l(frames),r(frames);e.render(l.data(),r.data(),frames);for(int i=0;i<frames;i++)assert(std::isfinite(l[i])&&std::isfinite(r[i])&&std::abs(l[i])<=1&&std::abs(r[i])<=1);return l;}
+void drainPanic(SynthEngine& e){e.panic();render(e,int(48000*.45));}
 float feedback(SynthEngine& e){float f[30];e.copyModulation(f,30);return f[0];}
 double energy(const std::vector<float>& a){double v=0;for(auto x:a)v+=x*x;return v/a.size();}
 int main(){
