@@ -167,6 +167,8 @@ struct CCMapping: Codable {
 struct SetSlot: Codable, Equatable {
     var patchId: String? = nil
     var name: String? = nil
+    /// Optional pad BPM override (30…240). nil = use the patch tempo on recall.
+    var tempo: Double? = nil
     var isEmpty: Bool { patchId == nil || patchId?.isEmpty == true }
 }
 
@@ -980,7 +982,11 @@ struct VoiceStatus:View {
                 let slot = raw[p][s]
                 let id = slot.patchId?.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let id, !id.isEmpty {
-                    pages[p][s] = SetSlot(patchId: String(id.prefix(80)), name: slot.name.map { String($0.prefix(120)) })
+                    let tempo: Double? = {
+                        guard let t = slot.tempo, t.isFinite else { return nil }
+                        return max(30, min(240, t.rounded()))
+                    }()
+                    pages[p][s] = SetSlot(patchId: String(id.prefix(80)), name: slot.name.map { String($0.prefix(120)) }, tempo: tempo)
                 }
             }
         }
@@ -1002,6 +1008,12 @@ struct VoiceStatus:View {
         guard let id = slot.patchId, !id.isEmpty else { return nil }
         return setLibrary.first { $0.id == id }
     }
+    func applySetSlotTempo(_ slot: SetSlot) {
+        guard let t = slot.tempo, t.isFinite else { return }
+        let bpm = max(30, min(240, t.rounded()))
+        guard abs(patch.globals[1] - bpm) > 0.05 else { return }
+        global(1, bpm)
+    }
     func recallSetSlot(_ index: Int) {
         guard (0..<16).contains(index) else { return }
         let slot = setSlots[setPage][index]
@@ -1010,14 +1022,57 @@ struct VoiceStatus:View {
             notice = "Set pad \(index + 1) points to a missing patch (\(slot.name ?? "unknown")). Clear or reassign it."
             return
         }
-        if patch.id == preset.id { notice = "Already on \(preset.name)."; return }
+        if patch.id == preset.id {
+            if let t = slot.tempo {
+                let bpm = max(30, min(240, t.rounded()))
+                if abs(patch.globals[1] - bpm) > 0.05 {
+                    applySetSlotTempo(slot)
+                    persist()
+                    notice = "Pad \(index + 1) tempo \(Int(bpm)) BPM."
+                } else {
+                    notice = "Already on \(preset.name)."
+                }
+            } else {
+                notice = "Already on \(preset.name)."
+            }
+            return
+        }
         loadPreset(preset, panic: setCutOnSwitch)
+        applySetSlotTempo(slot)
+        if slot.tempo != nil { persist() }
+        if let t = slot.tempo {
+            notice = "Loaded \(preset.name) · pad tempo \(Int(max(30, min(240, t.rounded())))) BPM."
+        }
     }
-    func assignSetSlot(_ index: Int) {
+    func assignSetSlot(_ index: Int, withTempo: Bool = false) {
         guard (0..<16).contains(index) else { return }
-        setSlots[setPage][index] = SetSlot(patchId: patch.id, name: patch.name)
+        let tempo: Double? = withTempo ? max(30, min(240, patch.globals[1].rounded())) : nil
+        setSlots[setPage][index] = SetSlot(patchId: patch.id, name: patch.name, tempo: tempo)
         persist()
-        notice = "Assigned \(patch.name) to page \(setPage + 1) · pad \(index + 1)."
+        if let tempo {
+            notice = "Assigned \(patch.name) @ \(Int(tempo)) BPM to page \(setPage + 1) · pad \(index + 1)."
+        } else {
+            notice = "Assigned \(patch.name) to page \(setPage + 1) · pad \(index + 1) (patch tempo)."
+        }
+    }
+    func setSetSlotTempo(_ index: Int) {
+        guard (0..<16).contains(index) else { return }
+        var slot = setSlots[setPage][index]
+        guard !slot.isEmpty else { notice = "Pad \(index + 1) is empty — assign a patch first."; return }
+        let bpm = max(30, min(240, patch.globals[1].rounded()))
+        slot.tempo = bpm
+        setSlots[setPage][index] = slot
+        persist()
+        notice = "Pad \(index + 1) tempo set to \(Int(bpm)) BPM (overrides patch)."
+    }
+    func clearSetSlotTempo(_ index: Int) {
+        guard (0..<16).contains(index) else { return }
+        var slot = setSlots[setPage][index]
+        guard !slot.isEmpty, slot.tempo != nil else { return }
+        slot.tempo = nil
+        setSlots[setPage][index] = slot
+        persist()
+        notice = "Pad \(index + 1) uses patch tempo again."
     }
     func clearSetSlot(_ index: Int) {
         guard (0..<16).contains(index) else { return }
@@ -1713,7 +1768,11 @@ struct SetPadButton: View {
     let index: Int
     private var slot: SetSlot { m.setSlots[m.setPage][index] }
     private var filled: Bool { !slot.isEmpty }
-    private var active: Bool { filled && slot.patchId == m.patch.id }
+    private var active: Bool {
+        guard filled, slot.patchId == m.patch.id else { return false }
+        if let t = slot.tempo { return abs(m.patch.globals[1] - t) < 0.51 }
+        return true
+    }
     private var missing: Bool { filled && m.presetForSetSlot(slot) == nil }
     var body: some View {
         SetChromeButton(
@@ -1727,17 +1786,26 @@ struct SetPadButton: View {
         .accessibilityLabel(accessibility)
         .contextMenu {
             Button("Assign current patch") { m.assignSetSlot(index) }
+            Button("Assign current patch + tempo") { m.assignSetSlot(index, withTempo: true) }
+            Divider()
+            Button("Set pad tempo to current") { m.setSetSlotTempo(index) }.disabled(!filled)
+            Button("Clear pad tempo") { m.clearSetSlotTempo(index) }.disabled(!filled || slot.tempo == nil)
+            Divider()
             Button("Clear", role: .destructive) { m.clearSetSlot(index) }.disabled(!filled)
         }
     }
     private var helpText: String {
         if !filled { return "Pad \(index + 1) empty · right-click to assign \(m.patch.name)" }
         if missing { return "Pad \(index + 1): missing patch \(slot.name ?? "")" }
-        return "Pad \(index + 1): \(slot.name ?? "")"
+        if let t = slot.tempo {
+            return "Pad \(index + 1): \(slot.name ?? "") · \(Int(t)) BPM (pad overrides patch)"
+        }
+        return "Pad \(index + 1): \(slot.name ?? "") · patch tempo"
     }
     private var accessibility: String {
         if !filled { return "Empty set pad \(index + 1)" }
-        return "Set pad \(index + 1), \(slot.name ?? "patch")\(active ? ", selected" : "")"
+        let tempoBit = slot.tempo.map { ", \(Int($0)) BPM override" } ?? ""
+        return "Set pad \(index + 1), \(slot.name ?? "patch")\(tempoBit)\(active ? ", selected" : "")"
     }
 }
 
@@ -1816,12 +1884,17 @@ struct PatchBrowser:View {
     let close:()->Void
     @StateObject private var state=PatchBrowserState()
     var category:String?{get{state.category} nonmutating set{state.category=newValue}}
-    var sounds:[SoundPreset]{(state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
-        (category==nil || $0.category==category) && (!m.favoritesOnly || m.favorites.contains($0.id))
-    }.sorted{
-        let order=$0.name.localizedStandardCompare($1.name)
-        return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
-    }}
+    var sounds:[SoundPreset]{
+        let query=m.search.trimmingCharacters(in:.whitespacesAndNewlines)
+        return (state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
+            (category==nil || $0.category==category) &&
+            (!m.favoritesOnly || m.favorites.contains($0.id)) &&
+            (query.isEmpty || ($0.name+" "+$0.category+" "+$0.detail).localizedCaseInsensitiveContains(query))
+        }.sorted{
+            let order=$0.name.localizedStandardCompare($1.name)
+            return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
+        }
+    }
     func step(_ delta:Int){
         let list=sounds;guard !list.isEmpty else{return}
         let next=list.firstIndex{$0.id==m.patch.id}.map{($0+delta+list.count)%list.count} ?? (delta>0 ? 0:list.count-1)
@@ -1830,7 +1903,7 @@ struct PatchBrowser:View {
     var body:some View{
         let patches=sounds
         VStack(alignment:.leading,spacing:18){
-            HStack(alignment:.center,spacing:16){
+            HStack(alignment:.center,spacing:12){
                 HStack(alignment:.center,spacing:12){
                     VStack(alignment:.leading,spacing:4){
                         Text(state.userSavedOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)))
@@ -1848,15 +1921,28 @@ struct PatchBrowser:View {
                     .accessibilityLabel(m.favoritesOnly ? "Show all patches":"Show favorites only")
                     .accessibilityAddTraits(m.favoritesOnly ? .isSelected:[])
                 }
-                Spacer()
-                if state.userSavedOnly{
-                    Button("Import…"){m.importPresets()}.buttonStyle(AuroraButtonStyle())
-                    Button("Export all"){m.exportUserPresets()}.buttonStyle(AuroraButtonStyle()).disabled(m.userPresets.isEmpty)
+                Spacer(minLength:0)
+                HStack(spacing:10){
+                    if state.userSavedOnly{
+                        Button("Import…"){m.importPresets()}.buttonStyle(AuroraButtonStyle())
+                        Button("Export all"){m.exportUserPresets()}.buttonStyle(AuroraButtonStyle()).disabled(m.userPresets.isEmpty)
+                    }
+                    Button{step(-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.leftArrow,modifiers:[]).accessibilityLabel("Previous patch in this category")
+                    Button{step(1)}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.rightArrow,modifiers:[]).accessibilityLabel("Next patch in this category")
+                    Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
+                    Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:palette.weight(.semibold))).frame(width:36,height:36).background(palette.buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
                 }
-                Button{step(-1)}label:{Image(systemName:"chevron.left").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.leftArrow,modifiers:[]).accessibilityLabel("Previous patch in this category")
-                Button{step(1)}label:{Image(systemName:"chevron.right").frame(width:28,height:28)}.buttonStyle(AuroraButtonStyle()).keyboardShortcut(.rightArrow,modifiers:[]).accessibilityLabel("Next patch in this category")
-                Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
-                Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:palette.weight(.semibold))).frame(width:36,height:36).background(palette.buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
+            }
+            .overlay(alignment:.center){
+                TextField("Search patches",text:$m.search)
+                    .textFieldStyle(.plain)
+                    .font(.system(size:15,weight:palette.weight(.regular)))
+                    .padding(.horizontal,12)
+                    .frame(width:320,height:36)
+                    .background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:7))
+                    .overlay(RoundedRectangle(cornerRadius:7).stroke(palette.graphCyan.opacity(0.35),lineWidth:1))
+                    .accessibilityLabel("Search patches")
+                    .help("Type part of a name — e.g. -GB for Grok Bot patches")
             }
             CategoryWrap{
                 categoryButton("All",nil)
@@ -1878,10 +1964,11 @@ struct PatchBrowser:View {
                                 }
                             }
                         }
-                        if patches.isEmpty{Text("No user-saved patches yet. Save or import a sound to add it here.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
+                        if patches.isEmpty{Text(m.search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? (state.userSavedOnly ? "No user-saved patches yet. Save or import a sound to add it here.":"No patches in this view.") : "No patches match this search.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
                     }.padding(2)
                 }.onChange(of:category){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
                 .onChange(of:state.userSavedOnly){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.search){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
                 .onChange(of:m.patch.id){_,id in withAnimation(.easeOut(duration:0.18)){proxy.scrollTo(id,anchor:.center)}}
             }
             HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
