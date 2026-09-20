@@ -1,5 +1,62 @@
 # Aurora
 
+## Arps factory revamp · 0.21.5
+
+All **30** factory Arps were rewritten (same count, all new names) across Aurora / Prism / Nova and the Spectrum mirror. Patches use the richer arpeggiator (musical pattern library, note division, swing, velocity shape) plus varied delay, shimmer, character, unison, and multi-layer writing. Prior Arps remain recoverable from git tag `v0.21.4` if needed.
+
+## Shimmer factory bank · 0.21.4
+
+Adds a dedicated **Shimmer** factory category (**29** sounds) built for the multi-voice shimmer engine. Wired into the factory bank list and Spectrum mirror where applicable.
+
+## Panic / Cut-on · 0.21.1–0.21.3
+
+Pad **Cut on switch** and **Panic** share a mute-bus fade before voices and FX rings are cleared. Cut-on patch apply is deferred until the bus is at silence (`panicDeferParams`), so hot shimmer patches no longer click when switching pads. Tags: `v0.21.1` (severity reduced), `v0.21.2` (bus-fade checkpoint), `v0.21.3` (defer apply until silence).
+
+## Effects panels · 0.21
+
+Play/Edit FX layout splits **Delay / Chorus / Phaser / Reverb / EQ / Shimmer** into separate panels. Delay gains Sync/Free, ping-pong and tone. Session **EQ** lives on the Play tab (sticky across patches, like Output boost). Shimmer sits beside the arpeggiator with multi-voice / reverse / early–late controls. Factory banks no longer store flat unused EQ params.
+
+## Signal path · layer vs shared
+
+Aurora is **one patch → up to four layers → shared voice pool → stereo mix + per-layer sends → shared bus FX**.
+
+### Owned by each layer (per voice)
+
+Processing order for one unison lane:
+
+**oscillators → drive → filter(s) → character → amp / pan / unison**
+
+Also per layer:
+
+- Arpeggiator (pattern, rate, octaves, gate, swing, velocity shape) — tempo clock is shared
+- Level, enable, solo
+- Delay send and Reverb send (how much that layer feeds those returns)
+- Oscillators, filters, envelopes, LFOs, motion envelope, character, unison, key range / voice mode / glide
+
+### Shared after all layers mix
+
+Bus order:
+
+**chorus → phaser → delay return → reverb return → shimmer → EQ → master → output boost / limiter**
+
+- Chorus and phaser hear the **full dry mix** of all layers (no per-layer send).
+- Delay and reverb hear only what each layer sends; Mix knobs control the returns.
+- Shimmer is shared (fed from reverb sends plus a slice of the post-FX bus).
+- EQ on Play is session-sticky (like Output boost). Master is patch/global. Output boost is session, not stored in the patch FX block.
+
+### How layers meet the bus
+
+1. Each voice belongs to one layer and adds into the stereo dry bus.
+2. The same voice sample is scaled into delay/reverb send accumulators by that layer’s send amounts.
+3. Solo zeros other layers’ gain without changing their enable switches; shared FX tails can still ring.
+
+### Mental model
+
+**Tone and articulation** (osc, drive, filter, character, amp, arp) = per layer.  
+**Space and post-mix movement** (chorus, phaser, delay/reverb returns, shimmer, EQ, master, output boost) = shared.
+
+That is why loading two full patches at once is not a small Play-tab toggle: both would share one FX chain unless a second bus is added.
+
 ## MainStage AU · 0.20.4
 
 Documents MainStage 4.3.1 verification of the 0.20.3/0.20.4 Audio Unit (load, editor, audio). Logic Pro remains untested in-app; see [DAW integration](DAW-INTEGRATION.md).
