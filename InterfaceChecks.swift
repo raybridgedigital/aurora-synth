@@ -88,7 +88,7 @@ import SwiftUI
         }
         model.checkpoint();let oldPhase=model.patch.layers[0][84];model.set(0,84,0.9);model.undo();precondition(model.patch.layers[0][84]==oldPhase);model.redo();precondition(model.patch.layers[0][84]==0.9)
         precondition(MatrixAssignment(enabled:true,source:5,destination:12).valid(performance:false))
-        model.loadPreset(legacy);precondition(aurora_get_parameter(0,79)==0 && aurora_get_parameter(0,82)==4 && aurora_get_parameter(0,93)==0)
+        model.loadPreset(legacy, panic: false);precondition(aurora_get_parameter(0,79)==0 && aurora_get_parameter(0,82)==4 && aurora_get_parameter(0,93)==0)
         let upgradeOriginal=model.patch
         model.checkpoint();model.set(0,58,1);model.set(0,60,1900);model.set(0,64,2);model.set(0,68,0.7);model.set(0,70,2);model.set(0,71,0.4);model.set(0,73,3)
         let upgraded=model.patch
@@ -97,8 +97,8 @@ import SwiftUI
         precondition(MatrixAssignment(enabled:true,source:3,destination:20).valid(performance:false))
         precondition(ControlTarget(layer:3,parameter:78).valid)
         model.undo();precondition(model.patch.layers[0]==upgradeOriginal.layers[0]);model.redo();precondition(model.patch.layers[0]==upgraded.layers[0])
-        model.loadPreset(upgradeOriginal);precondition(aurora_get_parameter(0,58)==0 && aurora_get_parameter(0,60)==3200 && aurora_get_parameter(0,73)==0)
-        model.setOutputGain(9);model.loadPreset(upgradeOriginal);precondition(model.outputGain==9 && aurora_get_global(15)==9)
+        model.loadPreset(upgradeOriginal, panic: false);precondition(aurora_get_parameter(0,58)==0 && aurora_get_parameter(0,60)==3200 && aurora_get_parameter(0,73)==0)
+        model.setOutputGain(9);model.loadPreset(upgradeOriginal, panic: false);precondition(model.outputGain==9 && aurora_get_global(15)==9)
         model.setOutputGain(24);precondition(model.outputGain==24 && aurora_get_global(15)==24)
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
         model.selectTheme(.copperOrange)
