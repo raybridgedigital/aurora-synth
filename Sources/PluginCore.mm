@@ -135,7 +135,7 @@ void Core::setActual(int id,double v,bool ui){
     else if(id==holdID)engine.hold(v>.5);
     else if(id==routeMaskID||id==routeChannelID)engine.route(1,int(values[routeMaskID]),int(values[routeChannelID]));
     else if(id==velocityID)engine.velocityCurve(1,int(v));
-    else if(id>=sendBase&&id<sendBase+12){int l=(id-sendBase)/3;engine.setLayerSends(l,values[sendBase+l*3],values[sendBase+l*3+1],values[sendBase+l*3+2]);}
+    else if(isSendID(id)){int l=sendLayerForID(id);engine.setLayerSends(l,values[sendID(l,0)],values[sendID(l,1)],values[sendID(l,2)]);}
     else if(id>=midiBase&&id<midiBase+16*130){int ch=(id-midiBase)/130,cc=(id-midiBase)%130;
         if(cc==129){int bend=int(std::round(v*16383));midi(0xe0|ch,bend&127,bend>>7);}
         else if(cc==128)midi(0xd0|ch,int(v*127+.5),0);
@@ -202,11 +202,11 @@ bool Core::setPatchJSON(const char* json,bool apply){
             configureMetadata();
             for(int l=0;l<4;l++){
                 NSArray* sends=p[@"sends"];
-                setActual(sendBase+l*3,sends.count==4?[sends[l][@"delay"] floatValue]:1);
+                setActual(sendID(l,0),sends.count==4?[sends[l][@"delay"] floatValue]:1);
                 float rev=sends.count==4?[sends[l][@"reverb"] floatValue]:1;
-                setActual(sendBase+l*3+1,rev);
+                setActual(sendID(l,1),rev);
                 id shObj=sends.count==4?sends[l][@"shimmer"]:nil;
-                setActual(sendBase+l*3+2,shObj?[shObj floatValue]:rev);
+                setActual(sendID(l,2),shObj?[shObj floatValue]:rev);
                 NSArray* motions=p[@"motion"];NSDictionary* m=motions.count==4?motions[l]:nil;
                 float packet[85]{};packet[2]=4;packet[3]=2;packet[7]=1;packet[8]=1;
                 if(m){NSArray* points=m[@"points"],*routes=m[@"routes"];if(points.count<2||points.count>16||routes.count!=8)return false;
@@ -240,7 +240,7 @@ std::string Core::patchJSON(){
         p[@"phaserMix"]=@(values[1006].load());if(!p[@"fx"])p[@"fx"]=[NSMutableDictionary dictionary];
         for(int i=7;i<15;i++)p[@"fx"][key(i)]=@(values[globalBase+i].load());
         for(int i=0;i<8;i++)p[@"macros"][i]=@(values[macroBase+i].load());
-        NSMutableArray* sends=[NSMutableArray array];for(int l=0;l<4;l++)[sends addObject:@{@"delay":@(values[sendBase+l*3].load()),@"reverb":@(values[sendBase+l*3+1].load()),@"shimmer":@(values[sendBase+l*3+2].load())}];p[@"sends"]=sends;
+        NSMutableArray* sends=[NSMutableArray array];for(int l=0;l<4;l++)[sends addObject:@{@"delay":@(values[sendID(l,0)].load()),@"reverb":@(values[sendID(l,1)].load()),@"shimmer":@(values[sendID(l,2)].load())}];p[@"sends"]=sends;
         NSData* data=[NSJSONSerialization dataWithJSONObject:p options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)data.bytes,data.length);
     }
 }
