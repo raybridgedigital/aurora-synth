@@ -25,7 +25,7 @@ float aurora_plugin_get_global(void* p,int parameter){return core(p).engine.getG
 void aurora_plugin_set_matrix(void* p,int b,int slot,int enabled,int source,int destination,int target,int cc,float amount){core(p).engine.setMatrix(b,slot,enabled,source,destination,target,cc,amount);}
 int aurora_plugin_set_motion(void* p,int l,const float* data,int count){return core(p).engine.setMotion(l,data,count);}
 float aurora_plugin_motion_phase(void* p,int l){return core(p).engine.motionPhase(l);}
-void aurora_plugin_layer_sends(void* p,int l,float delay,float reverb){core(p).setActual(2020+l*2,delay,true);core(p).setActual(2021+l*2,reverb,true);}
+void aurora_plugin_layer_sends(void* p,int l,float delay,float reverb,float shimmer){core(p).setActual(2020+l*3,delay,true);core(p).setActual(2020+l*3+1,reverb,true);core(p).setActual(2020+l*3+2,shimmer,true);}
 void aurora_plugin_solo_layer(void* p,int l){core(p).engine.soloLayer(l);}
 void aurora_plugin_set_transpose(void* p,int semitones){core(p).setActual(2012,semitones,true);}
 void aurora_plugin_route_source(void* p,int32_t source,int mask,int channel){if(source==1){core(p).setActual(2030,mask,true);core(p).setActual(2031,channel,true);}}

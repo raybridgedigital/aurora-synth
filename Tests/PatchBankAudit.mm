@@ -182,7 +182,7 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
             if([m[@"beats"] isKindOfClass:[NSNumber class]])packet[84]=[m[@"beats"] floatValue];
             if(!engine.setMotion(layer,packet.data(),packet.size()))[errors addObject:@"DSP rejected motion settings"];
         }
-        if(sends.count==4)engine.setLayerSends(layer,[sends[layer][@"delay"] floatValue],[sends[layer][@"reverb"] floatValue]);
+        if(sends.count==4){float rev=[sends[layer][@"reverb"] floatValue];id sh=sends[layer][@"shimmer"];engine.setLayerSends(layer,[sends[layer][@"delay"] floatValue],rev,sh?[sh floatValue]:rev);}
     }
     id macros = patch[@"macros"];
     if (![macros isKindOfClass:[NSArray class]] || [macros count] != 8)

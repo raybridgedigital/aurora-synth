@@ -99,7 +99,17 @@ struct LayerPatch: Codable, Equatable {
 struct LayerSends:Codable,Equatable {
     var delay=1.0
     var reverb=1.0
-    var valid:Bool{delay.isFinite && reverb.isFinite && (0...1).contains(delay) && (0...1).contains(reverb)}
+    var shimmer=1.0
+    var valid:Bool{delay.isFinite && reverb.isFinite && shimmer.isFinite && (0...1).contains(delay) && (0...1).contains(reverb) && (0...1).contains(shimmer)}
+    enum CodingKeys:String,CodingKey{case delay,reverb,shimmer}
+    init(delay:Double=1,reverb:Double=1,shimmer:Double=1){self.delay=delay;self.reverb=reverb;self.shimmer=shimmer}
+    init(from decoder:Decoder) throws {
+        let c=try decoder.container(keyedBy:CodingKeys.self)
+        delay=try c.decodeIfPresent(Double.self,forKey:.delay) ?? 1
+        reverb=try c.decodeIfPresent(Double.self,forKey:.reverb) ?? 1
+        // Migration: missing shimmer key → copy reverb
+        shimmer=try c.decodeIfPresent(Double.self,forKey:.shimmer) ?? reverb
+    }
 }
 struct LayerClipboard {
     var layer:LayerPatch
@@ -564,12 +574,15 @@ struct VoiceStatus:View {
         var waves=patch.importedWavetables ?? [:];for o in 0..<2{waves[layer*2+o]=copied.waves[o]};patch.importedWavetables=waves.isEmpty ? nil:waves
         selectedLayer=layer;applyPatch();dirty=true;notice="Pasted into layer \(layerLetters[layer]). Undo restores the previous layer."
     }
-    func sendBinding(_ delay:Bool)->Binding<Double>{Binding(get:{let sends=self.patch.sends?[self.selectedLayer] ?? LayerSends();return delay ? sends.delay:sends.reverb},set:{value in
+    enum SendBus{case delay,reverb,shimmer}
+    func sendBinding(_ bus:SendBus)->Binding<Double>{Binding(get:{let sends=self.patch.sends?[self.selectedLayer] ?? LayerSends();switch bus{case .delay:return sends.delay;case .reverb:return sends.reverb;case .shimmer:return sends.shimmer}},set:{value in
         self.finishComparison();var sends=self.patch.sends ?? Array(repeating:LayerSends(),count:4)
-        if delay{sends[self.selectedLayer].delay=value}else{sends[self.selectedLayer].reverb=value}
+        switch bus{case .delay:sends[self.selectedLayer].delay=value;case .reverb:sends[self.selectedLayer].reverb=value;case .shimmer:sends[self.selectedLayer].shimmer=value}
         self.patch.sends=sends;self.applySends();self.dirty=true
     })}
-    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();backend.aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb))}}
+    /// Compatibility for older call sites / InterfaceChecks
+    func sendBinding(_ delay:Bool)->Binding<Double>{sendBinding(delay ? .delay:.reverb)}
+    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();backend.aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb),Float(sends.shimmer))}}
     @Published var wavetableMessage=""
     private var appliedWavetables:[Int:ImportedWavetable]=[:]
     func hasCustomWavetable(oscillator:Int)->Bool{patch.importedWavetables?[selectedLayer*2+oscillator] != nil}
@@ -1699,6 +1712,9 @@ struct ArpEffectsView:View {
                             control("Late level",35)
                             control("Late decay",36,0.2...12,{String(format:"%.1f s",$0)})
                         }
+                        ParameterSlider(title:"Shimmer send",value:m.sendBinding(.shimmer),onBegin:{m.checkpoint()})
+                        Text("Layer send into shared shimmer return.")
+                            .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                         Text("Pitch-shifted multi-voice diffusion · +5 / +7 / +12 relative to Pitch.")
                             .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     }
@@ -1720,7 +1736,7 @@ struct ArpEffectsView:View {
                     ParameterSlider(title:"Feedback",value:m.globalBinding(3),range:0...0.75)
                     control("Ping-pong",18)
                     control("Tone",19)
-                    ParameterSlider(title:"Delay send",value:m.sendBinding(true),onBegin:{m.checkpoint()})
+                    ParameterSlider(title:"Delay send",value:m.sendBinding(.delay),onBegin:{m.checkpoint()})
                     Text("Layer send into shared delay return.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
                 Panel(title:"Chorus"){
@@ -1738,7 +1754,7 @@ struct ArpEffectsView:View {
                     ParameterSlider(title:"Mix",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
                     control("Size",12)
                     control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
-                    ParameterSlider(title:"Reverb send",value:m.sendBinding(false),onBegin:{m.checkpoint()})
+                    ParameterSlider(title:"Reverb send",value:m.sendBinding(.reverb),onBegin:{m.checkpoint()})
                     Text("Layer send into shared room.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }

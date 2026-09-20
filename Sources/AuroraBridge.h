@@ -66,7 +66,7 @@ float aurora_get_parameter(int layer,int parameter);
 void aurora_set_matrix(int bank,int slot,int enabled,int source,int destination,int target,int cc,float amount);
 int aurora_set_motion(int layer,const float* data,int count);
 float aurora_motion_phase(int layer); // -1 while idle; most recently started note
-void aurora_layer_sends(int layer,float delay,float reverb);
+void aurora_layer_sends(int layer,float delay,float reverb,float shimmer);
 void aurora_solo_layer(int layer);
 void aurora_set_transpose(int semitones);
 void aurora_set_global(int parameter,float value);

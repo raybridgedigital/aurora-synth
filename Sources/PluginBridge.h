@@ -20,7 +20,7 @@ float aurora_plugin_get_parameter(void *context, int layer, int parameter);
 void aurora_plugin_set_matrix(void *context, int bank, int slot, int enabled, int source, int destination, int target, int cc, float amount);
 int aurora_plugin_set_motion(void *context, int layer, const float *data, int count);
 float aurora_plugin_motion_phase(void *context, int layer);
-void aurora_plugin_layer_sends(void *context, int layer, float delay, float reverb);
+void aurora_plugin_layer_sends(void *context, int layer, float delay, float reverb, float shimmer);
 void aurora_plugin_solo_layer(void *context, int layer);
 void aurora_plugin_set_transpose(void *context, int semitones);
 void aurora_plugin_set_global(void *context, int parameter, float value);

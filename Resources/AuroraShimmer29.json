@@ -884,20 +884,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.18,
+        "reverb": 0.24,
+        "shimmer": 0.48
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.32,
+        "reverb": 0.32,
+        "shimmer": 0.58
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.4,
+        "reverb": 0.4,
+        "shimmer": 0.7
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.22,
+        "reverb": 0.36,
+        "shimmer": 0.64
       }
     ],
     "soundMatrix": [
@@ -2025,20 +2029,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.18,
+        "reverb": 0.24,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.32,
+        "reverb": 0.32,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.4,
+        "reverb": 0.4,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.22,
+        "reverb": 0.36,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -3141,20 +3149,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.24,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.32,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.4,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.36,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -4282,20 +4294,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.24,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.32,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.4,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.36,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -5423,20 +5439,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.18,
+        "reverb": 0.38,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.32,
+        "reverb": 0.48,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.4,
+        "reverb": 0.58,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.22,
+        "reverb": 0.52,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -6564,20 +6584,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.18,
+        "shimmer": 0.28
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.24,
+        "shimmer": 0.36
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.3,
+        "shimmer": 0.42
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.26,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -7705,20 +7729,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.12,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.16,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.2,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.18,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -8846,20 +8874,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.18,
+        "shimmer": 0.42
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.24,
+        "shimmer": 0.52
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.3,
+        "shimmer": 0.6
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.26,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -9987,20 +10019,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.12,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.16,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.2,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.18,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -11123,20 +11159,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.24,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.32,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.4,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.36,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -12264,20 +12304,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.18,
+        "reverb": 0.12,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.32,
+        "reverb": 0.16,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.4,
+        "reverb": 0.2,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.22,
+        "reverb": 0.18,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -13405,20 +13449,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.12,
+        "shimmer": 0.65
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.16,
+        "shimmer": 0.78
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.2,
+        "shimmer": 0.92
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.18,
+        "shimmer": 0.88
       }
     ],
     "soundMatrix": [
@@ -14546,20 +14594,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.24,
+        "shimmer": 0.28
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.32,
+        "shimmer": 0.36
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.4,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.36,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -15687,20 +15739,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.2,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.28,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.34,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.3,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -16828,20 +16884,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.18,
+        "shimmer": 0.28
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.24,
+        "shimmer": 0.36
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.3,
+        "shimmer": 0.42
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.26,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -17969,20 +18029,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.2,
+        "shimmer": 0.28
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.26,
+        "shimmer": 0.36
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.32,
+        "shimmer": 0.42
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.28,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -19110,20 +19174,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.12,
+        "shimmer": 0.65
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.16,
+        "shimmer": 0.78
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.2,
+        "shimmer": 0.92
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.18,
+        "shimmer": 0.88
       }
     ],
     "soundMatrix": [
@@ -20251,20 +20319,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.1,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.12,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.14,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.12,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -21392,20 +21464,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.2,
+        "shimmer": 0.28
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.26,
+        "shimmer": 0.36
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.34,
+        "shimmer": 0.42
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.3,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -22533,20 +22609,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.16,
+        "shimmer": 0.28
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.22,
+        "shimmer": 0.36
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.28,
+        "shimmer": 0.42
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.24,
+        "shimmer": 0.38
       }
     ],
     "soundMatrix": [
@@ -23674,20 +23754,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.2,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.26,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.32,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.28,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -24815,20 +24899,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.24,
+        "shimmer": 0.42
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.32,
+        "shimmer": 0.52
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.4,
+        "shimmer": 0.6
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.36,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -25956,20 +26044,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.14,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.18,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.22,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.2,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -27097,20 +27189,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.18,
+        "reverb": 0.38,
+        "shimmer": 0.65
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.32,
+        "reverb": 0.48,
+        "shimmer": 0.78
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.4,
+        "reverb": 0.58,
+        "shimmer": 0.92
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.22,
+        "reverb": 0.52,
+        "shimmer": 0.88
       }
     ],
     "soundMatrix": [
@@ -28238,20 +28334,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.18,
+        "shimmer": 0.42
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.24,
+        "shimmer": 0.52
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.3,
+        "shimmer": 0.6
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.26,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -29379,20 +29479,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
+        "delay": 0.08,
+        "reverb": 0.18,
+        "shimmer": 0.42
+      },
+      {
+        "delay": 0.14,
+        "reverb": 0.24,
+        "shimmer": 0.52
+      },
+      {
+        "delay": 0.18,
+        "reverb": 0.3,
+        "shimmer": 0.6
+      },
+      {
         "delay": 0.1,
-        "reverb": 0.45
-      },
-      {
-        "delay": 0.2,
-        "reverb": 0.55
-      },
-      {
-        "delay": 0.25,
-        "reverb": 0.65
-      },
-      {
-        "delay": 0.15,
-        "reverb": 0.75
+        "reverb": 0.26,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -30520,20 +30624,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.18,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.24,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.3,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.28,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [
@@ -31636,20 +31744,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.16,
+        "shimmer": 0.55
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.2,
+        "shimmer": 0.68
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.26,
+        "shimmer": 0.8
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.22,
+        "shimmer": 0.74
       }
     ],
     "soundMatrix": [
@@ -32777,20 +32889,24 @@
     "phaserMix": 0.06,
     "sends": [
       {
-        "delay": 0.1,
-        "reverb": 0.45
+        "delay": 0.12,
+        "reverb": 0.24,
+        "shimmer": 0.42
       },
       {
-        "delay": 0.2,
-        "reverb": 0.55
+        "delay": 0.22,
+        "reverb": 0.32,
+        "shimmer": 0.52
       },
       {
-        "delay": 0.25,
-        "reverb": 0.65
+        "delay": 0.28,
+        "reverb": 0.4,
+        "shimmer": 0.6
       },
       {
-        "delay": 0.15,
-        "reverb": 0.75
+        "delay": 0.16,
+        "reverb": 0.36,
+        "shimmer": 0.55
       }
     ],
     "soundMatrix": [

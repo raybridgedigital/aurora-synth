@@ -29,7 +29,7 @@ public:
     int copyModulation(float* values,int capacity) const;
     bool setMotion(int layer,const float* data,int count);
     float motionPhase(int layer)const;
-    void setLayerSends(int layer,float delay,float reverb);
+    void setLayerSends(int layer,float delay,float reverb,float shimmer);
     void soloLayer(int layer); // -1 clears solo; does not alter patch enable flags
     // Main-thread preparation and preview. Immutable banks are published at render boundaries.
     bool setCustomWavetable(int layer,int oscillator,const float* samples,int frames,int frameSize);

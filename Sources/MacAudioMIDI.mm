@@ -489,7 +489,7 @@ float aurora_get_parameter(int layer, int parameter) { return state().engine.get
 void aurora_set_matrix(int bank,int slot,int enabled,int source,int destination,int target,int cc,float amount) { state().engine.setMatrix(bank,slot,enabled,source,destination,target,cc,amount); }
 int aurora_set_motion(int layer,const float* data,int count){return state().engine.setMotion(layer,data,count)?1:0;}
 float aurora_motion_phase(int layer){return state().engine.motionPhase(layer);}
-void aurora_layer_sends(int layer,float delay,float reverb){state().engine.setLayerSends(layer,delay,reverb);}
+void aurora_layer_sends(int layer,float delay,float reverb,float shimmer){state().engine.setLayerSends(layer,delay,reverb,shimmer);}
 void aurora_solo_layer(int layer){state().engine.soloLayer(layer);}
 void aurora_set_transpose(int semitones) { state().engine.setTranspose(semitones); }
 void aurora_set_global(int parameter, float value) { state().engine.setGlobal(parameter, value); }

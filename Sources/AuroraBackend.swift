@@ -123,11 +123,11 @@ final class AuroraBackend {
         return aurora_motion_phaseStandalone(layer)
 #endif
     }
-    func aurora_layer_sends(_ layer: Int32, _ delay: Float, _ reverb: Float) -> Void {
+    func aurora_layer_sends(_ layer: Int32, _ delay: Float, _ reverb: Float, _ shimmer: Float) -> Void {
 #if AURORA_PLUGIN
-        return aurora_plugin_layer_sends(context, layer, delay, reverb)
+        return aurora_plugin_layer_sends(context, layer, delay, reverb, shimmer)
 #else
-        return aurora_layer_sendsStandalone(layer, delay, reverb)
+        return aurora_layer_sendsStandalone(layer, delay, reverb, shimmer)
 #endif
     }
     func aurora_solo_layer(_ layer: Int32) -> Void {

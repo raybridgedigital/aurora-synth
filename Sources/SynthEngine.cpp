@@ -183,7 +183,7 @@ struct Source {
     Source() { bend.fill(0); expression.fill(1); }
 };
 struct Layer {
-    float delaySend=1,reverbSend=1,delayTarget=1,reverbTarget=1;
+    float delaySend=1,reverbSend=1,shimmerSend=1,delayTarget=1,reverbTarget=1,shimmerTarget=1;
     MotionEnvelope motion;
     std::array<const wt::Bank*,2> banks{};
     std::array<float,2> wtPosition{},wtAmount{};
@@ -219,7 +219,7 @@ struct Allpass {
 };
 }
 struct SynthEngine::Impl {
-    std::array<std::atomic<float>,4> delaySends{},reverbSends{};
+    std::array<std::atomic<float>,4> delaySends{},reverbSends{},shimmerSends{};
     std::atomic<int> solo{-1};int activeSolo=-1;
     struct MotionPacket {std::atomic<unsigned> version{0};std::array<std::atomic<float>,motionSize> values{};};
     std::array<MotionPacket,4> motionPackets{};
@@ -304,7 +304,7 @@ struct SynthEngine::Impl {
     double lastClock=0,clockInterval=0;
     std::atomic<float> clockBPM{0};
     Impl() {
-        for(int i=0;i<4;i++){delaySends[i]=1;reverbSends[i]=1;}
+        for(int i=0;i<4;i++){delaySends[i]=1;reverbSends[i]=1;shimmerSends[i]=1;}
         for(auto& p:motionPlayheads)p.store(-1);
         (void)wt::factory();
         retiredBanks.reserve(16);
@@ -489,7 +489,7 @@ struct SynthEngine::Impl {
         for(size_t n=0;n<queueSize&&queue.pop(event);n++)if(event.kind!=Event::MIDI)processEvent(event);
         panicRequested.store(false,std::memory_order_release);
         clearSound(); snapshot();
-        for(auto& layer:layers){layer.delaySend=layer.delayTarget;layer.reverbSend=layer.reverbTarget;}
+        for(auto& layer:layers){layer.delaySend=layer.delayTarget;layer.reverbSend=layer.reverbTarget;layer.shimmerSend=layer.shimmerTarget;}
         constexpr float times[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
         for(int i=0;i<8;i++)combs[i].length=std::clamp(int(sampleRate*times[i]),1,16384);
         for(int i=0;i<4;i++)allpasses[i].length=std::clamp(int(sampleRate*(.0047f+.0013f*i)),1,4096);
@@ -624,7 +624,7 @@ struct SynthEngine::Impl {
         }
         for(int l=0;l<kLayers;l++) {
             auto& layer=layers[l];auto& p=layer.p;
-            layer.delayTarget=delaySends[l].load(std::memory_order_relaxed);layer.reverbTarget=reverbSends[l].load(std::memory_order_relaxed);
+            layer.delayTarget=delaySends[l].load(std::memory_order_relaxed);layer.reverbTarget=reverbSends[l].load(std::memory_order_relaxed);layer.shimmerTarget=shimmerSends[l].load(std::memory_order_relaxed);
             auto& packet=motionPackets[l];unsigned before=packet.version.load();
             if(!(before&1)){
                 MotionEnvelope next;for(int i=0;i<motionSize;i++)next.data[i]=packet.values[i].load();
@@ -949,7 +949,7 @@ struct SynthEngine::Impl {
             for(int l=0;l<kLayers;l++) {
                 auto& layer=layers[l];auto& p=layer.p;
                 layer.gain+=smooth*(p[APLevel]*p[APEnabled]*(activeSolo<0||activeSolo==l?1.f:0.f)-layer.gain);
-                layer.delaySend+=smooth*(layer.delayTarget-layer.delaySend);layer.reverbSend+=smooth*(layer.reverbTarget-layer.reverbSend);
+                layer.delaySend+=smooth*(layer.delayTarget-layer.delaySend);layer.reverbSend+=smooth*(layer.reverbTarget-layer.reverbSend);layer.shimmerSend+=smooth*(layer.shimmerTarget-layer.shimmerSend);
                 layer.cutoff+=smooth*(p[APCutoff]-layer.cutoff);
                 for(int o=0;o<2;o++){
                     layer.wtPosition[o]+=smooth*(p[APWT1Position+o*7]-layer.wtPosition[o]);
@@ -963,7 +963,7 @@ struct SynthEngine::Impl {
                     if(!externalClock&&!layer.arpWaiting){if(layer.arpCountdown<=0)arpStep(l);else --layer.arpCountdown;}
                 }
             }
-            float outL=0,outR=0,sendDL=0,sendDR=0,sendRL=0,sendRR=0;
+            float outL=0,outR=0,sendDL=0,sendDR=0,sendRL=0,sendRR=0,sendSL=0,sendSR=0;
             for(auto& v:voices)if(v.active) {
                 auto& layer=layers[v.layer];const auto& p=layer.p;auto& source=sources[v.source];
                 if(v.stage==0){v.envelope+=layer.attack;if(v.envelope>=1){v.envelope=1;v.stage=1;}}
@@ -1118,9 +1118,10 @@ struct SynthEngine::Impl {
                 outL+=v.lastL;outR+=v.lastR;
                 sendDL+=v.lastL*layer.delaySend;sendDR+=v.lastR*layer.delaySend;
                 sendRL+=v.lastL*layer.reverbSend;sendRR+=v.lastR*layer.reverbSend;
+                sendSL+=v.lastL*layer.shimmerSend;sendSR+=v.lastR*layer.shimmerSend;
             }
             float tailLength=float(std::max(1,int(sampleRate*.005)));
-            for(auto& t:tails)if(t.remaining>0){float fade=t.remaining/tailLength;if(activeSolo<0||activeSolo==t.layer){outL+=t.left*fade;outR+=t.right*fade;sendDL+=t.left*fade*layers[t.layer].delaySend;sendDR+=t.right*fade*layers[t.layer].delaySend;sendRL+=t.left*fade*layers[t.layer].reverbSend;sendRR+=t.right*fade*layers[t.layer].reverbSend;}--t.remaining;}
+            for(auto& t:tails)if(t.remaining>0){float fade=t.remaining/tailLength;if(activeSolo<0||activeSolo==t.layer){outL+=t.left*fade;outR+=t.right*fade;sendDL+=t.left*fade*layers[t.layer].delaySend;sendDR+=t.right*fade*layers[t.layer].delaySend;sendRL+=t.left*fade*layers[t.layer].reverbSend;sendRR+=t.right*fade*layers[t.layer].reverbSend;sendSL+=t.left*fade*layers[t.layer].shimmerSend;sendSR+=t.right*fade*layers[t.layer].shimmerSend;}--t.remaining;}
             // The chorus, delay and Schroeder room are shared stereo sends.
             chorusL[chorusPosition]=outL;chorusR[chorusPosition]=outR;
             float chorusDelayL=float(sampleRate)*(.009f+.0028f*global[AGChorusDepth]*std::sin(tau*chorusPhase));
@@ -1188,14 +1189,14 @@ struct SynthEngine::Impl {
             outR+=dr*global[AGDelayMix]+rr*global[AGReverbMix]*.25f;
 
             // ---- Full Shimmer (pitch-shifted multi-voice diffusion) ----
-            // Input is reverb-send only — never the wet bus — so Mix/Amount cannot form an outer feedback loop.
+            // Input is shimmer-send only — never the wet bus — so Mix/Amount cannot form an outer feedback loop.
             {
-                float shimmerSend=std::tanh((sendRL+sendRR)*.10f);
+                float shimmerIn=std::tanh((sendSL+sendSR)*.10f);
                 // Soft-clip predelay write (send + internal fb)
                 float fbLIn=panicFxStarved?0.f:shimmerFbL;
                 float fbRIn=panicFxStarved?0.f:shimmerFbR;
-                float preWriteL=std::tanh(shimmerSend+fbLIn);
-                float preWriteR=std::tanh(shimmerSend+fbRIn);
+                float preWriteL=std::tanh(shimmerIn+fbLIn);
+                float preWriteR=std::tanh(shimmerIn+fbRIn);
                 if(!std::isfinite(preWriteL))preWriteL=0; if(!std::isfinite(preWriteR))preWriteR=0;
                 shimmerPreL[shimmerPreWrite]=preWriteL;
                 shimmerPreR[shimmerPreWrite]=preWriteR;
@@ -1458,5 +1459,5 @@ bool aurora::SynthEngine::setMotion(int layer,const float* data,int count){
     packet.version.fetch_add(1);return true;
 }
 float aurora::SynthEngine::motionPhase(int layer)const{return layer>=0&&layer<4?impl->motionPlayheads[layer].load():-1;}
-void aurora::SynthEngine::setLayerSends(int layer,float delay,float reverb){if(layer<0||layer>=4)return;impl->delaySends[layer].store(bounded(delay,0,1));impl->reverbSends[layer].store(bounded(reverb,0,1));}
+void aurora::SynthEngine::setLayerSends(int layer,float delay,float reverb,float shimmer){if(layer<0||layer>=4)return;impl->delaySends[layer].store(bounded(delay,0,1));impl->reverbSends[layer].store(bounded(reverb,0,1));impl->shimmerSends[layer].store(bounded(shimmer,0,1));}
 void aurora::SynthEngine::soloLayer(int layer){impl->solo.store(layer>=0&&layer<4?layer:-1);}

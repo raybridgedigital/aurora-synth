@@ -30,7 +30,7 @@ Also per layer:
 
 - Arpeggiator (pattern, rate, octaves, gate, swing, velocity shape) — tempo clock is shared
 - Level, enable, solo
-- Delay send and Reverb send (how much that layer feeds those returns)
+- Delay, Reverb, and Shimmer sends (how much that layer feeds those returns)
 - Oscillators, filters, envelopes, LFOs, motion envelope, character, unison, key range / voice mode / glide
 
 ### Shared after all layers mix
@@ -41,13 +41,13 @@ Bus order:
 
 - Chorus and phaser hear the **full dry mix** of all layers (no per-layer send).
 - Delay and reverb hear only what each layer sends; Mix knobs control the returns.
-- Shimmer is shared (fed from reverb sends plus a slice of the post-FX bus).
+- Shimmer is shared (fed from per-layer shimmer sends; never the wet bus).
 - EQ on Play is session-sticky (like Output boost). Master is patch/global. Output boost is session, not stored in the patch FX block.
 
 ### How layers meet the bus
 
 1. Each voice belongs to one layer and adds into the stereo dry bus.
-2. The same voice sample is scaled into delay/reverb send accumulators by that layer’s send amounts.
+2. The same voice sample is scaled into delay/reverb/shimmer send accumulators by that layer’s send amounts.
 3. Solo zeros other layers’ gain without changing their enable switches; shared FX tails can still ring.
 
 ### Mental model
@@ -91,7 +91,7 @@ Aurora now builds as a native Apple Silicon VST3 instrument for Ableton Live/Cub
 
 ## Spectrum — rebuilt 300-sound factory bank
 
-Aurora includes **300 Spectrum factory sounds**, with 30 in each of ten categories. The rebuilt library uses the full synthesis engine: dual filters, independent modulation envelopes, oscillator interaction, per-layer Character, LFO timing and articulation, Mirror/Quant warp, Formant/Tone shaping, and per-note modulation. There are 240 four-layer performances and 60 three-layer sounds. Each has eight custom macros, an XY pad, keyboard-expression routes and separate layer Delay/Reverb sends. No external samples are required.
+Aurora includes **300 Spectrum factory sounds**, with 30 in each of ten categories. The rebuilt library uses the full synthesis engine: dual filters, independent modulation envelopes, oscillator interaction, per-layer Character, LFO timing and articulation, Mirror/Quant warp, Formant/Tone shaping, and per-note modulation. There are 240 four-layer performances and 60 three-layer sounds. Each has eight custom macros, an XY pad, keyboard-expression routes and separate layer Delay/Reverb/Shimmer sends. No external samples are required.
 
 X transforms timbre; Y shifts the layer balance. The six remaining macros control Motion, Space, Contour, Release, Width and Echo. Centered macro positions preserve each patch's authored settings. Drawable motion uses free or tempo-synced curves for filter, pan and wavetable movement, with destinations chosen per sound. Macro routes avoid base controls replaced by motion. Layer count and unison are restrained for the MacBook Air.
 
@@ -121,9 +121,9 @@ In **Motion envelope**, Tempo Sync offers quarter-beat through 32-beat lengths (
 
 Each layer card now has **S** for Solo and an **…** menu for Copy/Paste. Solo temporarily fades other layers out without changing their enable switches or discarding held notes. Clear Solo restores them; loading another patch clears Solo. Existing shared FX tails can ring out. Solo is an audition state and is not saved into a patch.
 
-Copy/Paste transfers the layer's oscillator/filter/envelope/arp settings, Sound Matrix, motion envelope, Delay/Reverb sends and embedded imported wavetables. Paste supports Undo/Redo, and the clipboard remains available across patch changes. Global FX, keyboard routing and the patch-wide Performance Matrix stay with the destination patch.
+Copy/Paste transfers the layer's oscillator/filter/envelope/arp settings, Sound Matrix, motion envelope, Delay/Reverb/Shimmer sends and embedded imported wavetables. Paste supports Undo/Redo, and the clipboard remains available across patch changes. Global FX, keyboard routing and the patch-wide Performance Matrix stay with the destination patch.
 
-The **Delay send / Reverb send** sliders below the layer cards affect the selected layer. They feed separate buses before the shared Chorus/Phaser stage; the existing Delay/Reverb Mix knobs control the returns. Thus a layer with both sends at zero adds no new echo/room energy while another layer remains wet. Old patches default to 100% sends. Delay/Reverb receive the direct layer signal now, so their tails no longer inherit the shared Chorus/Phaser coloration.
+Each layer has independent **Delay / Reverb / Shimmer** sends (0…1) in the Delay, Reverb, and Shimmer panels. They feed separate buses from the dry layer signal (never the wet FX bus). Delay/Reverb/Shimmer Mix knobs control the shared returns. A layer with a send at zero contributes no energy into that effect while other layers remain wet. Old patches default all three sends to 100%; if a patch JSON omits `shimmer`, it migrates to the layer’s `reverb` value. Shimmer is **not** fed from the reverb send.
 
 Beside the previous/next controls, **B · Edited — compare A** auditions the last saved factory/user patch; **A · Saved — return to B** restores the edited sound. The visible controls and session data retain your edits throughout. Changing a sound control automatically returns to B. Master volume is preserved. Previous/next browse the current sidebar filters alphabetically and wrap at the ends; patch changes remain undoable.
 
