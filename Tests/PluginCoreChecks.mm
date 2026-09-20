@@ -24,7 +24,7 @@ int main(){@autoreleasepool {
             a.setActual(transposeID,3);a.setActual(2000,.71);a.setActual(xyX,.23);a.setActual(xyY,.82);
             auto state=a.saveState();assert(b.restoreState(state.c_str()));
             assert(a.patchJSON()==b.patchJSON());assert(b.values[transposeID]==3);
-            a.engine.prepare(48000);b.engine.prepare(48000);
+            a.prepare(48000);b.prepare(48000);
             finishPanic(a);finishPanic(b);
             a.midi(0x90,60,100);b.midi(0x90,60,100);
             float l[256],r[256],bl[256],br[256];double energy=0;
