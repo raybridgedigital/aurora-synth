@@ -7,7 +7,7 @@ SDK_DIR="$(xcrun --sdk macosx --show-sdk-path)"
 CLANGXX="$(xcrun --find clang++)"
 TARGET="${AURORA_TEST_TARGET:-arm64-apple-macosx14.0}"
 OPTIMIZATION="-O2"
-SANITIZER_FLAGS=()
+SANITIZER_FLAGS=(-Wno-unused-command-line-argument)
 
 case "${AURORA_SANITIZER:-none}" in
     none|"") ;;
