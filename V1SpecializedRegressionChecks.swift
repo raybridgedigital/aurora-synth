@@ -151,6 +151,7 @@ import SwiftUI
             precondition(abs(model.patch.macros[settings.y.macro] - settings.y.value(0)) < 0.000001)
             precondition(SynthModel.sanitized(model.patch) != nil)
         }
+        print("V1 REGRESSION CHECKPOINT: current factory contract passed")
         model.search="Prism"
         precondition(!model.library.isEmpty)
         model.search=""
@@ -158,6 +159,7 @@ import SwiftUI
             model.loadPreset(sound, panic: false)
             precondition(model.patch.id==sound.id && aurora_get_parameter(0,44)==Float(sound.layers[0][44]))
         }
+        print("V1 REGRESSION CHECKPOINT: Prism recall passed")
         model.category="Pads"
         precondition(model.library.count == FactoryBank.all.filter{$0.category == "Pads"}.count)
         model.category="All categories"
@@ -168,6 +170,7 @@ import SwiftUI
         model.search="no-match-interface-test"
         precondition(model.library.isEmpty)
         model.search=""
+        print("V1 REGRESSION CHECKPOINT: library search/filter passed")
         // Initial status synchronization is allowed. Stable polls must be silent.
         model.poll()
         var rootPublications=0
@@ -187,6 +190,7 @@ import SwiftUI
         }
         precondition(meterPublications == 1200,"Repeated telemetry should not publish")
         withExtendedLifetime((rootObserver,meterObserver)) {}
+        print("V1 REGRESSION CHECKPOINT: telemetry publication isolation passed")
         model.global(0,1);precondition(model.patch.globals[0]==1)
         model.setTranspose(12);model.loadPreset(legacy, panic: false)
         precondition(model.transpose==12 && model.patch.globals[0]==1)
