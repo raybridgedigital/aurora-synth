@@ -15,6 +15,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  factory-audio:
+    name: Current Factory Audio Audit
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Compile v1 factory audio audit
+        shell: bash
+        run: |
+          mkdir -p build
+          xcrun clang++ -std=c++20 -O2 -fobjc-arc -I Sources Sources/SynthEngine.cpp Tests/V1FactoryAudioAudit.mm -framework Foundation -o build/V1FactoryAudioAudit
+      - name: Audit all current factory banks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for bank in Aurora100 AuroraPrism100 AuroraNova100 AuroraGB109 AuroraShimmer29; do
+            echo "=== $bank ==="
+            build/V1FactoryAudioAudit "Resources/$bank.json" "build/$bank-v1-audio-audit.json"
+          done
+
   ab-comparison:
     name: Isolated A-B Comparison
     runs-on: macos-14
