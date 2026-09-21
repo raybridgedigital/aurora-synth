@@ -3,7 +3,7 @@
 **Status:** documentation of the Aurora v1 regression reconstruction strategy  
 **Date:** 2026-09-21  
 **Scope:** tests, test architecture, regression authority, oracle quality, and maintenance rules  
-**Production-code impact:** none
+**Production-code impact:** none. No production/app/DSP/plugin code was changed as a result of the test reconstruction or reverse-engineering work.
 
 This document explains why Aurora's v1 regression suite was reconstructed, how expected behavior can be recovered safely from a working application and its current architecture, where that process is reliable, where it is not, and how future maintainers should interpret the resulting tests.
 
@@ -514,7 +514,23 @@ The intended clean v1 regression structure is:
 
 The historical `InterfaceChecks.swift` suite remains useful as regression archaeology, but its obsolete assertions must not override the current v1 contract.
 
-It should remain retained until explicit retirement is authorized.
+As of 2026-09-21, it is **retired from CI authority**. `InterfaceChecks.swift` and `check-interface.sh` are intentionally retained in the repository as historical reference and for future troubleshooting, but Product Smoke no longer invokes them and they are not Aurora v1 release blockers.
+
+## Legacy InterfaceChecks retirement decision
+
+On 2026-09-21, the legacy `InterfaceChecks.swift` gate was formally retired from Aurora v1 CI authority.
+
+The decision is intentionally narrow:
+
+- `InterfaceChecks.swift` remains in the repository;
+- `check-interface.sh` remains in the repository;
+- neither file is deleted or rewritten merely to make it match Aurora v1;
+- Product Smoke no longer runs the historical InterfaceChecks path;
+- the files remain available to show where the historical suite stopped tracking architectural change;
+- they may still be run manually for regression archaeology, comparison with older releases, or troubleshooting;
+- Aurora v1 release authority now comes from the v1 baseline, native sanitizers, reconstructed specialized regression, factory audio audit, and current standalone/plugin validation.
+
+No production code was changed to reach this decision or to make the new v1 test stack pass.
 
 ## Definition of a genuine production bug
 
@@ -538,7 +554,8 @@ A disagreement with a stale historical implementation assumption is not sufficie
 For Aurora v1:
 
 - production/app code is not changed merely to satisfy stale tests;
-- historical tests are preserved until explicitly retired;
+- historical tests are preserved as reference even after retirement from CI authority;
+- on 2026-09-21, the legacy `InterfaceChecks.swift` / `check-interface.sh` path was explicitly retired from CI authority while retained for regression archaeology and future troubleshooting;
 - current product behavior and intentional architecture are authoritative;
 - old tests are mined for risk areas and intent;
 - reconstructed tests prefer observable behavior over internal representation;
