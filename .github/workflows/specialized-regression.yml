@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ab-comparison:
+    name: Isolated A-B Comparison
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build standalone app
+        shell: bash
+        run: |
+          rm -rf build
+          bash scripts/build.sh
+      - name: Run isolated A-B regression
+        shell: bash
+        run: |
+          bash check-v1-ab-comparison.sh
+
   model-workflows:
     name: Reconstructed Model + UI Workflows
     runs-on: macos-14
