@@ -4,6 +4,8 @@ This document classifies the historical Aurora test suite against the current v1
 
 It does **not** delete or disable any historical test. The old suite remains available as regression archaeology until explicitly retired.
 
+For the reasoning behind the reconstruction, limits of code-derived expectations, oracle-quality assessment, and future maintenance rules, see [AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md](AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md).
+
 ## Authority
 
 For Aurora v1, test authority is:
