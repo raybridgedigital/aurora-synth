@@ -131,11 +131,19 @@ import SwiftUI
         for (soundIndex,sound) in FactoryBank.all.enumerated() {
             print("CHECKPOINT: factory audit \(soundIndex + 1)/\(FactoryBank.all.count) \(sound.id)")
             model.loadPreset(sound, panic: false)
-            precondition(model.patch.id==sound.id && sound.motion?.count==4 && sound.motion!.allSatisfy(\.valid))
+            print("CHECKPOINT: loaded \(sound.id) · motion \(sound.motion?.count ?? -1) · sends \(sound.sends?.count ?? -1) · customMacros \(sound.customMacros?.count ?? -1) · xy \(sound.xy != nil) · soundMatrix \(sound.soundMatrix?.count ?? -1) · performanceMatrix \(sound.performanceMatrix?.count ?? -1)")
+            precondition(model.patch.id==sound.id)
+            print("CHECKPOINT: id matches")
+            precondition(sound.motion?.count==4 && sound.motion!.allSatisfy(\.valid))
+            print("CHECKPOINT: motion valid")
             precondition(sound.sends?.count==4 && sound.sends!.allSatisfy(\.valid))
+            print("CHECKPOINT: sends valid")
             precondition(sound.customMacros?.count==8 && sound.customMacros!.values.allSatisfy(\.valid) && sound.xy!.valid)
-            precondition(sound.soundMatrix!.flatMap{$0}.allSatisfy{$0.valid(performance:false)})
-            precondition(sound.performanceMatrix!.allSatisfy{$0.valid(performance:true)})
+            print("CHECKPOINT: custom macros and XY valid")
+            precondition(sound.soundMatrix != nil && sound.soundMatrix!.flatMap{$0}.allSatisfy{$0.valid(performance:false)})
+            print("CHECKPOINT: sound matrix valid")
+            precondition(sound.performanceMatrix != nil && sound.performanceMatrix!.allSatisfy{$0.valid(performance:true)})
+            print("CHECKPOINT: performance matrix valid")
             for index in 0..<8{model.macro(index,sound.macros[index])}
             for l in 0..<4 {for p in 0..<99{
                 precondition(abs(model.patch.layers[l][p]-sound.layers[l][p])<0.00001,"Nova macro center changes the authored sound: \(sound.name) / \(l) / \(p)")
