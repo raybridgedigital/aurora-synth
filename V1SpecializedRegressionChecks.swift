@@ -334,11 +334,15 @@ import SwiftUI
         let toolsModel=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
         toolsModel.userPresets=[legacy]
         toolsModel.loadPreset(legacy, panic: false);let originalCutoff=toolsModel.patch.layers[0][7]
+        print("V1 A/B: loaded · patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7)) saved \(originalCutoff)")
         toolsModel.set(0,7,1234);toolsModel.toggleComparison()
+        print("V1 A/B: compare saved · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
         precondition(toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==1234 && aurora_get_parameter(0,7)==Float(originalCutoff))
         toolsModel.persist();toolsModel.toggleComparison()
+        print("V1 A/B: return edited · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
         precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==1234)
         toolsModel.toggleComparison();toolsModel.set(0,7,2345)
+        print("V1 A/B: edit while comparing · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
         precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==2345)
         print("V1 REGRESSION CHECKPOINT: A/B comparison passed")
         toolsModel.patch.importedWavetables=[0:imported];toolsModel.set(0,44,1);toolsModel.set(0,45,24)
