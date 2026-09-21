@@ -18,7 +18,7 @@
 			<key>type</key>
 			<string>aumu</string>
 			<key>version</key>
-			<integer>5382</integer>
+			<integer>5632</integer>
 		</dict>
 	</array>
 	<key>AudioUnit SupportedNumChannels</key>
@@ -39,8 +39,8 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.21.6</string>
+	<string>0.22.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.21.6</string>
+	<string>0.22.0</string>
 </dict>
 </plist>
