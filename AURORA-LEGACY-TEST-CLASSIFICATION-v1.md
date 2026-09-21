@@ -2,7 +2,7 @@
 
 This document classifies the historical Aurora test suite against the current v1 architecture.
 
-It does **not** delete or disable any historical test. The old suite remains available as regression archaeology until explicitly retired.
+It does **not** delete any historical test. The old suite remains available as regression archaeology and future troubleshooting reference. As of 2026-09-21, the legacy InterfaceChecks path has been retired from CI authority but intentionally retained in the repository.
 
 For the reasoning behind the reconstruction, limits of code-derived expectations, oracle-quality assessment, and future maintenance rules, see [AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md](AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md).
 
@@ -21,8 +21,8 @@ The current v1 baseline and reconstructed specialized regression suite were buil
 
 | Historical test | Status | v1 treatment | Reason |
 | --- | --- | --- | --- |
-| `InterfaceChecks.swift` | **REPLACE as CI authority / RETAIN as reference** | `V1SpecializedRegressionChecks.swift` + isolated A/B test | Contains useful model/UI regression history, but also obsolete macro-center equality, fixed-XY and old state-storage assumptions. Its useful workflows have been reconstructed against current behavior. |
-| `check-interface.sh` | **REPLACE as CI authority** | `check-v1-specialized-regression.sh` | The runner currently makes Product Smoke red because it executes the stale `InterfaceChecks.swift` contract. Retain until explicit retirement. |
+| `InterfaceChecks.swift` | **RETIRED from CI authority / RETAIN as historical reference** | `V1SpecializedRegressionChecks.swift` + isolated A/B test | Contains useful model/UI regression history, but also obsolete macro-center equality, fixed-XY and old state-storage assumptions. Retained so future maintainers can see where the suite stopped matching the architecture and use it for regression archaeology/troubleshooting. |
+| `check-interface.sh` | **RETIRED from CI authority / RETAIN as historical runner** | `check-v1-specialized-regression.sh` | No longer invoked by Product Smoke. Retained so the historical InterfaceChecks path can still be reproduced manually when investigating old regressions or architectural history. |
 | `Tests/SynthEngineTests.cpp` | **KEEP** | Continue running under native sanitizer workflow | Deep current DSP/MIDI coverage: routing, ownership, Panic, transpose, arp, matrices, FX, mono/legato/glide, queue recovery and concurrency. Green under ASan/UBSan and TSan. |
 | `Tests/RecordingChecks.cpp` | **KEEP** | Continue running | Valid behavioral coverage for WAV recording and normalization. |
 | `Tests/WavetableTests.cpp` | **KEEP** | Continue running | Valid DSP/import/warp/phase/custom-table/concurrency coverage. |
@@ -99,13 +99,15 @@ Total: **438 presets**.
 
 Each preset is loaded under current migration rules, rendered for useful signal, stressed at high velocity/master level, checked for finite/bounded output, released, and drained through the current Panic transition.
 
-## Recommended eventual CI shape
+## Current CI shape
 
-When the historical suite is explicitly retired, the clean v1 CI structure should be:
+The legacy InterfaceChecks gate was retired from CI authority on 2026-09-21. The historical files remain in the repository and are not release blockers.
+
+The clean v1 CI structure is:
 
 1. **Aurora v1 Baseline** for architectural contracts.
 2. **Native Sanitizers** for the retained native DSP/regression suite.
 3. **Aurora v1 Specialized Regression** for reconstructed model/UI, isolated A/B and current factory-bank audio audits.
 4. **Product/plugin smoke** for standalone build plus AU/VST3 build/host validation.
 
-The obsolete `InterfaceChecks.swift` gate should not remain a release blocker once explicit retirement is authorized.
+`InterfaceChecks.swift` and `check-interface.sh` are intentionally retained as historical reference/troubleshooting material, but they are no longer release blockers and are not part of Aurora v1 CI authority.
