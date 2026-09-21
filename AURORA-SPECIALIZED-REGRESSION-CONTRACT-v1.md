@@ -31,6 +31,24 @@ This suite reconstructs Aurora's specialized regression coverage from the curren
 - Themes do not mutate patch data.
 - Custom macros, saved motion shapes, MIDI learn/pickup and variation locks.
 
+## Factory audio audit
+
+The current factory banks are rendered through a dedicated DSP audit, independently from the model/UI harness. Every preset is loaded, auditioned, stress-rendered and drained through Panic while checking finite output, useful signal level, bounded peak, release behavior and voice cleanup.
+
+The audit follows the same migration rules as `SynthModel.sanitized`:
+- sparse/legacy layer dictionaries are accepted when all stored keys are valid;
+- missing extension parameters use current `LayerPatch.initial` defaults;
+- legacy presets without parameter 97 use the historical rate-division migration for parameter 23;
+- session EQ globals 20...22 are not treated as patch FX.
+
+This matters for `AuroraGB109`, whose 109 presets intentionally store parameters 0...96. Parameters 97 and 98 are supplied by current defaults when the bank is loaded. The other current factory banks store all 99 layer parameters.
+
+The five banks are audited independently in CI so one large bank cannot block the others.
+
+## Isolated A/B contract
+
+A/B comparison engine behavior is tested in a fresh process with one `SynthModel` and one standalone engine. The long model/UI regression tests model state and persistence only, avoiding false failures from multiple model instances sharing the standalone test engine.
+
 ## Native DSP areas currently validated
 
 The existing native suite is green under ASan/UBSan and TSan. Its behavior-level coverage remains valuable evidence for recording/WAV normalization, wavetable generation and import, motion envelopes, layer sends/solo, dual filters, oscillator modulation, character processing, LFO refinements, MIDI ownership/routing, transpose, arp, matrices, FX, mono/legato/glide and queue recovery.
@@ -50,7 +68,8 @@ Aurora v1 instead requires:
 - authored data round-trips;
 - each macro can reach 0 and 1 while leaving a valid patch;
 - XY follows each preset's effective XYSettings;
-- sparse custom macro definitions are valid.
+- sparse custom macro definitions are valid;
+- legacy factory layers may omit newer extension parameters and are migrated exactly as current production loading does.
 
 ## Maintenance
 
