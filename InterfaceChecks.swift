@@ -104,21 +104,32 @@ import SwiftUI
         model.setOutputGain(9);model.loadPreset(upgradeOriginal, panic: false);precondition(model.outputGain==9 && aurora_get_global(15)==9)
         model.setOutputGain(24);precondition(model.outputGain==24 && aurora_get_global(15)==24)
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
+        print("CHECKPOINT: beginning post-upgrade UI render section")
         model.selectTheme(.copperOrange)
+        print("CHECKPOINT: building upgrade editor view")
         let upgradeView=NSHostingView(rootView:EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         upgradeView.frame=NSRect(x:0,y:0,width:1100,height:3400);upgradeView.layoutSubtreeIfNeeded()
+        print("CHECKPOINT: upgrade editor layout complete")
         if let bitmap=upgradeView.bitmapImageRepForCachingDisplay(in:upgradeView.bounds){upgradeView.cacheDisplay(in:upgradeView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-editor.png"))}
+        print("CHECKPOINT: upgrade editor snapshot complete")
+        print("CHECKPOINT: building patch browser view")
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
+        print("CHECKPOINT: patch browser layout complete")
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
+        print("CHECKPOINT: patch browser snapshot complete")
+        print("CHECKPOINT: factory metadata assertions")
         precondition(model.collectionSounds.count == 438)
         precondition(FactoryBank.prism.count == 100)
         precondition(Set(FactoryBank.all.map(\.id)).count==438)
         precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==438)
         precondition(FactoryBank.nova.count==100)
+        print("CHECKPOINT: factory metadata assertions passed")
         model.search=""
         precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
-        for sound in FactoryBank.all {
+        print("CHECKPOINT: beginning 438-preset factory audit")
+        for (soundIndex,sound) in FactoryBank.all.enumerated() {
+            print("CHECKPOINT: factory audit \(soundIndex + 1)/\(FactoryBank.all.count) \(sound.id)")
             model.loadPreset(sound, panic: false)
             precondition(model.patch.id==sound.id && sound.motion?.count==4 && sound.motion!.allSatisfy(\.valid))
             precondition(sound.sends?.count==4 && sound.sends!.allSatisfy(\.valid))
