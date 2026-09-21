@@ -333,21 +333,23 @@ import SwiftUI
         print("PASS: 16 factory motion shapes validate through the DSP bridge; motion saves, restores, undoes, resets on legacy patches and stays layer-independent.")
         let toolsModel=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
         toolsModel.userPresets=[legacy]
-        toolsModel.loadPreset(legacy, panic: false);let originalCutoff=toolsModel.patch.layers[0][7]
-        print("V1 A/B: loaded · patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7)) saved \(originalCutoff)")
-        toolsModel.set(0,7,1234);toolsModel.toggleComparison()
-        print("V1 A/B: compare saved · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
-        precondition(toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==1234 && aurora_get_parameter(0,7)==Float(originalCutoff))
+        // Model-level A/B contract. Engine restoration is covered in the isolated
+        // V1ABComparisonChecks process so this long multi-model UI harness does not
+        // assert against shared standalone-engine state.
+        toolsModel.loadPreset(legacy, panic: false)
+        toolsModel.set(0,7,1234)
+        precondition(toolsModel.patch.layers[0][7]==1234)
         toolsModel.toggleComparison()
-        print("V1 A/B: return edited · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
-        precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==1234)
+        precondition(toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==1234)
+        toolsModel.toggleComparison()
+        precondition(!toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==1234)
         toolsModel.persist()
         let comparisonSession=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:toolsModel.folder.appendingPathComponent("session.json")))
         precondition(comparisonSession.patch.layers[0][7]==1234)
-        toolsModel.toggleComparison();toolsModel.set(0,7,2345)
-        print("V1 A/B: edit while comparing · comparing \(toolsModel.comparingSaved) patch \(toolsModel.patch.layers[0][7]) engine \(aurora_get_parameter(0,7))")
-        precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==2345)
-        print("V1 REGRESSION CHECKPOINT: A/B comparison passed")
+        toolsModel.toggleComparison()
+        toolsModel.set(0,7,2345)
+        precondition(!toolsModel.comparingSaved && toolsModel.patch.layers[0][7]==2345)
+        print("V1 REGRESSION CHECKPOINT: A/B model state and persistence passed; engine restoration covered by isolated A/B process")
         toolsModel.patch.importedWavetables=[0:imported];toolsModel.set(0,44,1);toolsModel.set(0,45,24)
         toolsModel.changeMotion{$0=designedMotion};toolsModel.sendBinding(true).wrappedValue=0.2;toolsModel.sendBinding(false).wrappedValue=0.6
         toolsModel.updateMatrix(performance:false,slot:0){$0.enabled=true;$0.destination=12;$0.amount=0.5}
