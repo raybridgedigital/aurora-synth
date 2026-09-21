@@ -1,5 +1,15 @@
 # Aurora
 
+## Aurora 0.22 · release hardening and v1 regression baseline
+
+Aurora 0.22 consolidates the current v1 architecture after the 0.21.6 Shimmer-send release. Production fixes since 0.21.6 include safer plug-in parameter IDs for Layer D sends, routing/MIDI state preservation across prepare, revision-3 output-gain migration, and deferred patch-state preservation.
+
+The release also completes the v1 test reconstruction: a current-architecture baseline, native sanitizers, isolated A/B regression, reconstructed model/UI workflows, and full audio/Panic/stress auditing of all **438 factory presets**. The historical `InterfaceChecks.swift` path is intentionally retained for regression archaeology and troubleshooting but is no longer CI/release authority.
+
+No production/app/DSP/plugin code was changed *as a consequence of the test reconstruction itself*. The reconstructed suite was made to match the working product and documented v1 contracts rather than changing production to satisfy stale historical assertions.
+
+Release notes are also tracked in [CHANGELOG.md](CHANGELOG.md).
+
 ## Dual-patch live (spec only)
 
 Design for stacking two full patches with dual FX buses is locked but **not implemented**. Spec: [Dual-Patch-Specification.md](Dual-Patch-Specification.md).
