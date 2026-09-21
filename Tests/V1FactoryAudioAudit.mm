@@ -119,17 +119,58 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     for (int layer = 0; layer < 4; ++layer) {
         id entry = layers[layer];
         id values = [entry isKindOfClass:[NSDictionary class]] ? entry[@"values"] : nil;
-        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 58 && [values count] != 33)) {
-            [errors addObject:[NSString stringWithFormat:@"Layer %d must contain all %d parameter values", layer, APParameterCount]];
+        if (![values isKindOfClass:[NSDictionary class]]) {
+            [errors addObject:[NSString stringWithFormat:@"Layer %d values must be an object", layer]];
             continue;
+        }
+        // Match SynthModel.sanitized: sparse/older layer dictionaries are valid as long as
+        // every stored key is within the current range. Missing extension parameters use
+        // LayerPatch.initial defaults. GB109 is a 0...96 bank, so 97/98 default to zero.
+        bool legacyRate = values[@"97"] == nil;
+        for (NSString *storedKey in values) {
+            NSInteger storedParameter = storedKey.integerValue;
+            double storedValue;
+            if (storedParameter < 0 || storedParameter >= APParameterCount || !number(values[storedKey], storedValue)) {
+                [errors addObject:[NSString stringWithFormat:@"Layer %d has invalid parameter %@", layer, storedKey]];
+            }
         }
         for (int parameter = 0; parameter < APParameterCount; ++parameter) {
             NSString *key = [NSString stringWithFormat:@"%d", parameter];
-            if(parameter>=33 && !values[key])continue; // Original bank uses legacy defaults.
-            double value;
-            if (!number(values[key], value)) {
+            id raw = values[key];
+            double value = 0;
+            if (!raw) {
+                // Current LayerPatch.initial defaults for extension fields that can be absent.
+                switch (parameter) {
+                    case 34: value = 0.5; break;
+                    case 36: value = 1; break;
+                    case 37: value = 8; break;
+                    case 38: value = 0.6; break;
+                    case 43: value = 2; break;
+                    case 60: value = 3200; break;
+                    case 63: value = 0.5; break;
+                    case 64: value = 0.01; break;
+                    case 65: value = 0.35; break;
+                    case 67: value = 0.35; break;
+                    case 72: value = 1; break;
+                    case 74: value = 0.25; break;
+                    case 75: value = 1; break;
+                    case 76: value = 0.5; break;
+                    case 77: value = 12; break;
+                    case 78: value = 1; break;
+                    case 82: value = 4; break;
+                    case 88: value = 4; break;
+                    default: value = 0; break;
+                }
+            } else if (!number(raw, value)) {
                 [errors addObject:[NSString stringWithFormat:@"Layer %d parameter %d must be a finite number", layer, parameter]];
                 continue;
+            }
+            if (legacyRate && parameter == 23) {
+                // Same migration as SynthModel.sanitized:
+                // old 0,1,2,3 divisions -> current 0,1,3,5.
+                static const double map[4] = {0,1,3,5};
+                int index = int(std::llround(value));
+                if (index >= 0 && index < 4) value = map[index];
             }
             engine.setParameter(layer, parameter, float(value));
             if (!closeEnough(value, engine.getParameter(layer, parameter)))
