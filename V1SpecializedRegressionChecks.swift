@@ -340,6 +340,7 @@ import SwiftUI
         precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==1234)
         toolsModel.toggleComparison();toolsModel.set(0,7,2345)
         precondition(!toolsModel.comparingSaved && aurora_get_parameter(0,7)==2345)
+        print("V1 REGRESSION CHECKPOINT: A/B comparison passed")
         toolsModel.patch.importedWavetables=[0:imported];toolsModel.set(0,44,1);toolsModel.set(0,45,24)
         toolsModel.changeMotion{$0=designedMotion};toolsModel.sendBinding(true).wrappedValue=0.2;toolsModel.sendBinding(false).wrappedValue=0.6
         toolsModel.updateMatrix(performance:false,slot:0){$0.enabled=true;$0.destination=12;$0.amount=0.5}
@@ -348,15 +349,18 @@ import SwiftUI
         precondition(toolsModel.patch.motion?[1]==designedMotion && toolsModel.patch.sends?[1].delay==0.2 && toolsModel.patch.soundMatrix?[1][0].destination==12)
         toolsModel.undo();precondition(toolsModel.patch.layers[1]==beforePaste && toolsModel.patch.importedWavetables?[2]==nil)
         toolsModel.redo();precondition(toolsModel.patch.importedWavetables?[2]==imported)
+        print("V1 REGRESSION CHECKPOINT: layer payload copy paste undo redo passed")
         toolsModel.toggleSolo(1);precondition(toolsModel.soloLayer==1)
         toolsModel.saveName="Layer tools";toolsModel.saveUserPreset();let savedTools=toolsModel.patch
         toolsModel.loadPreset(legacy, panic: false);precondition(toolsModel.soloLayer == -1 && toolsModel.patch.sends==nil)
         toolsModel.loadPreset(savedTools, panic: false);precondition(toolsModel.patch.sends?[1].reverb==0.6)
         toolsModel.collection="Aurora";toolsModel.category="Bass";toolsModel.search="";toolsModel.browsePatch(1, panic: false)
         precondition(toolsModel.patch.category=="Bass");let browsedID=toolsModel.patch.id;toolsModel.browsePatch(1, panic: false);precondition(toolsModel.patch.id != browsedID)
+        print("V1 REGRESSION CHECKPOINT: solo load reset and filtered browsing passed")
         let toolsHost=NSHostingView(rootView:ContentView(m:toolsModel))
         toolsHost.frame=NSRect(x:0,y:0,width:1440,height:900);toolsHost.layoutSubtreeIfNeeded()
         if let bitmap=toolsHost.bitmapImageRepForCachingDisplay(in:toolsHost.bounds){toolsHost.cacheDisplay(in:toolsHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-layer-tools.png"))}
+        print("V1 REGRESSION CHECKPOINT: layer tools UI smoke passed")
         toolsModel.selectedLayer=0;toolsModel.loadPreset(legacy, panic: false)
         toolsModel.changeMotion{$0.beats=8;$0.grid=16;$0.points=MotionShapes.points("Heartbeat")}
         precondition(toolsModel.motionSettings.snapped(0.17)==0.1875)
@@ -368,6 +372,7 @@ import SwiftUI
         toolsModel.macro(0,1);precondition(toolsModel.patch.layers[0][7]>dark && toolsModel.patch.globals[4]<wet)
         toolsModel.undo();precondition(toolsModel.patch.customMacros==nil)
         toolsModel.redo();precondition(toolsModel.macroNames[0]=="Intensity")
+        print("V1 REGRESSION CHECKPOINT: motion-shape CRUD and custom macro undo redo passed")
         let target=ControlTarget(layer:0,parameter:7)
         toolsModel.setControl(target,0.5);toolsModel.beginDirectLearn(target)
         toolsModel.handleDirectCC(source:123,channel:1,controller:64,value:1);precondition(toolsModel.learningControl != nil)
@@ -379,6 +384,7 @@ import SwiftUI
         toolsModel.handleDirectCC(source:123,channel:1,controller:74,value:0.6);precondition(toolsModel.patch.layers[0][7]>initialCutoff)
         toolsModel.setControl(target,0.8);let manuallySet=toolsModel.patch.layers[0][7]
         toolsModel.handleDirectCC(source:123,channel:1,controller:74,value:0.1);precondition(toolsModel.patch.layers[0][7]==manuallySet)
+        print("V1 REGRESSION CHECKPOINT: source-specific direct MIDI learn and pickup passed")
         let lockedLayers=toolsModel.patch.layers,lockedGlobals=toolsModel.patch.globals
         toolsModel.makeVariation(amount:1,locked:Set(VariationGroup.allCases),allLayers:true,random:{1})
         precondition(toolsModel.patch.layers==lockedLayers && toolsModel.patch.globals==lockedGlobals)
@@ -387,6 +393,7 @@ import SwiftUI
         for p in [4,9,10,11,12,13,15,27,28,37]{precondition(toolsModel.patch.layers[0][p]==lockedLayers[0][p])}
         precondition(toolsModel.patch.layers[1]==lockedLayers[1] && toolsModel.patch.globals==lockedGlobals)
         toolsModel.undo();precondition(toolsModel.patch.layers==lockedLayers)
+        print("V1 REGRESSION CHECKPOINT: locked variation behavior passed")
         let beforeXY=toolsModel.patch.layers
         toolsModel.checkpoint();toolsModel.changeXY{$0.x=XYAxis(macro:0,start:0.2,end:0.8);$0.y=XYAxis(macro:3,start:0.9,end:0.1)}
         toolsModel.checkpoint();toolsModel.moveXY(x:1,y:1)
@@ -399,9 +406,11 @@ import SwiftUI
         let savedXY=toolsModel.xySettings
         toolsModel.changeXY{$0.y.macro=$0.x.macro}
         precondition(toolsModel.xySettings==savedXY)
+        print("V1 REGRESSION CHECKPOINT: configurable XY edit undo redo passed")
         let xyHost=NSHostingView(rootView:XYPadPanel(m:toolsModel).padding(16).background(Color.black).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         xyHost.frame=NSRect(x:0,y:0,width:1120,height:470);xyHost.layoutSubtreeIfNeeded()
         if let bitmap=xyHost.bitmapImageRepForCachingDisplay(in:xyHost.bounds){xyHost.cacheDisplay(in:xyHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-xy-pad.png"))}
+        print("V1 REGRESSION CHECKPOINT: XY UI smoke passed")
         toolsModel.saveName="Creative tools saved";toolsModel.saveUserPreset()
         let themeEncoder=JSONEncoder();themeEncoder.outputFormatting=[.sortedKeys]
         let patchBeforeTheme=try! themeEncoder.encode(toolsModel.patch)
@@ -414,12 +423,14 @@ import SwiftUI
             themeHost.frame=NSRect(x:0,y:0,width:1440,height:900);themeHost.layoutSubtreeIfNeeded()
             if let bitmap=themeHost.bitmapImageRepForCachingDisplay(in:themeHost.bounds){themeHost.cacheDisplay(in:themeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-theme-\(theme.rawValue).png"))}
         }
+        print("V1 REGRESSION CHECKPOINT: theme iteration leaves patch untouched")
         toolsModel.loadPreset(legacy, panic: false);precondition(toolsModel.theme == .graphiteOrange)
         toolsModel.undo()
         let creativeID=toolsModel.patch.id
         let creativeHost=NSHostingView(rootView:CreativeToolsView(m:toolsModel))
         creativeHost.frame=NSRect(x:0,y:0,width:1008,height:748);creativeHost.layoutSubtreeIfNeeded()
         if let bitmap=creativeHost.bitmapImageRepForCachingDisplay(in:creativeHost.bounds){creativeHost.cacheDisplay(in:creativeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-creative-tools.png"))}
+        print("V1 REGRESSION CHECKPOINT: creative tools UI smoke passed")
         toolsModel.shutdown()
         let creativeRestored=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
         precondition(creativeRestored.theme == .graphiteOrange)
