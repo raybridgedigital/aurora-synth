@@ -1,0 +1,35 @@
+name: Aurora v1 Specialized Regression
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurora-v1-specialized-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model-workflows:
+    name: Reconstructed Model + UI Workflows
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build standalone app
+        shell: bash
+        run: |
+          rm -rf build
+          bash scripts/build.sh
+      - name: Run reconstructed specialized regression
+        shell: bash
+        env:
+          NSUnbufferedIO: "YES"
+        run: |
+          bash check-v1-specialized-regression.sh
