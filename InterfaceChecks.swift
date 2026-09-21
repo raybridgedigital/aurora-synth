@@ -119,18 +119,38 @@ import SwiftUI
         model.search=""
         precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
         for sound in FactoryBank.all {
+            print("FACTORY AUDIT: \(sound.id)")
             model.loadPreset(sound, panic: false)
-            precondition(model.patch.id==sound.id && SynthModel.sanitized(sound) != nil)
+            guard model.patch.id==sound.id && SynthModel.sanitized(sound) != nil else {
+                print("FACTORY FAIL: load/sanitize \(sound.id)")
+                preconditionFailure()
+            }
             for index in 0..<8{model.macro(index,sound.macros[index])}
             for l in 0..<4 {for p in 0..<99{
-                precondition(abs(model.patch.layers[l][p]-sound.layers[l][p])<0.00001,"Nova macro center changes the authored sound: \(sound.name) / \(l) / \(p)")
+                let actual=model.patch.layers[l][p], expected=sound.layers[l][p]
+                if abs(actual-expected)>=0.00001 {
+                    print("FACTORY FAIL: macro-center layer \(l) param \(p) · \(sound.id) · actual \(actual) expected \(expected)")
+                    preconditionFailure()
+                }
             }}
-            for p in 1..<15{precondition(abs(model.patch.globalValue(p)-sound.globalValue(p))<0.00001)}
+            for p in 1..<15{
+                let actual=model.patch.globalValue(p),expected=sound.globalValue(p)
+                if abs(actual-expected)>=0.00001 {
+                    print("FACTORY FAIL: macro-center global \(p) · \(sound.id) · actual \(actual) expected \(expected)")
+                    preconditionFailure()
+                }
+            }
             model.moveXY(x:1,y:0)
-            precondition(model.patch.macros[0]==1 && model.patch.macros[1]==0)
+            if !(model.patch.macros[0]==1 && model.patch.macros[1]==0) {
+                print("FACTORY FAIL: XY endpoint \(sound.id) · macro0 \(model.patch.macros[0]) macro1 \(model.patch.macros[1])")
+                preconditionFailure()
+            }
             let data=try! JSONEncoder().encode(model.patch)
             let decoded=try! JSONDecoder().decode(SoundPreset.self,from:data)
-            precondition(decoded.customMacros==sound.customMacros && decoded.motion==sound.motion && decoded.xy==sound.xy && decoded.sends==sound.sends)
+            if !(decoded.customMacros==sound.customMacros && decoded.motion==sound.motion && decoded.xy==sound.xy && decoded.sends==sound.sends) {
+                print("FACTORY FAIL: round-trip optional data \(sound.id)")
+                preconditionFailure()
+            }
         }
         model.search="Prism"
         precondition(!model.library.isEmpty)
