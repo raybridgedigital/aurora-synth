@@ -59,6 +59,24 @@ void ownership() {
     assert(drainPanic(e)<1e-7f);assert(e.activeVoices()==0);
     std::puts("PASS: notes, release, source/channel/sustain ownership, transpose, disconnect, panic");
 }
+void deferredPanicCommit() {
+    SynthEngine e;dry(e);
+    e.setParameter(0,APRelease,.02f);e.setGlobal(AGMaster,.8f);
+    e.panic();
+    e.setParameter(0,APRelease,.31f);e.setGlobal(AGMaster,.31f);
+    // Panic captures the live patch, then defers subsequent patch writes.
+    assert(std::abs(e.getParameter(0,APRelease)-.02f)<.0001f);
+    assert(std::abs(e.getGlobal(AGMaster)-.8f)<.0001f);
+    render(e,int(rate*.05)); // minimum fade-out is ~100 ms, so values must still be live-old here
+    assert(std::abs(e.getParameter(0,APRelease)-.02f)<.0001f);
+    assert(std::abs(e.getGlobal(AGMaster)-.8f)<.0001f);
+    render(e,int(rate*.25)); // by 300 ms total, even the longest fade has crossed the silent commit boundary
+    assert(std::abs(e.getParameter(0,APRelease)-.31f)<.0001f);
+    assert(std::abs(e.getGlobal(AGMaster)-.31f)<.0001f);
+    render(e,int(rate*.20)); // finish fade-in so following tests start from Idle
+    std::puts("PASS: Panic defers patch writes during fade-out and commits them at the silent boundary");
+}
+
 void routingAndPrepare() {
     SynthEngine e;dry(e);e.setParameter(1,APEnabled,1);e.setParameter(1,APRelease,.02f);
     e.route(808,2,2);e.panic();
@@ -326,4 +344,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();scopeCapture();phaserEffect();globalTranspose();ownership();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
