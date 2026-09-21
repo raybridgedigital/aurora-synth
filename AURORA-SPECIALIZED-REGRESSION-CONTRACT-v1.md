@@ -2,6 +2,8 @@
 
 This suite reconstructs Aurora's specialized regression coverage from the current working product, current production architecture, and the intent of the historical tests.
 
+For the methodology behind that reconstruction, the limits of code-derived expectations, oracle-provenance categories, and guidance for distinguishing production bugs from stale tests, see [AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md](AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md).
+
 ## Rules
 
 1. Production behavior and current public/model/DSP contracts are authoritative.
