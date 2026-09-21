@@ -198,6 +198,7 @@ import SwiftUI
         precondition(model.patch.globals[1]==120)
         model.tapTempo(at:110);model.tapTempo(at:110.75)
         precondition(model.patch.globals[1]==80)
+        print("V1 REGRESSION CHECKPOINT: master transpose and tap-tempo passed")
         model.selectedLayer=2
         model.checkpoint();model.updateMatrix(performance:false,slot:5){$0.enabled=true;$0.source=2;$0.destination=4;$0.amount = -0.5}
         precondition(model.matrixRows(performance:false)[5].enabled)
@@ -206,6 +207,7 @@ import SwiftUI
         precondition(model.matrixRows(performance:true)[0].target==4)
         model.undo();precondition(!model.matrixRows(performance:true)[0].enabled)
         model.redo();precondition(model.matrixRows(performance:true)[0].enabled)
+        print("V1 REGRESSION CHECKPOINT: matrix layer and undo-redo passed")
         model.set(0,33,4);precondition(model.patch.layers[0][33]==4)
         model.global(6,0.7);precondition(model.patch.phaserMix==0.7)
         model.saveName="Test sound";model.saveUserPreset();let id=model.patch.id
@@ -214,6 +216,7 @@ import SwiftUI
         precondition(model.userPresets[0].name=="Renamed")
         model.deleteSound(id);precondition(model.userPresets.isEmpty)
         model.undoDelete();precondition(model.userPresets.count==1)
+        print("V1 REGRESSION CHECKPOINT: first save rename delete restore passed")
         let saved=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:folder.appendingPathComponent("session.json")))
         precondition(saved.transpose==12 && saved.patch.globals[0]==1 && saved.patch.phaserMix==0.7 && saved.patch.layers[0][33]==4)
         precondition(saved.patch.soundMatrix?[2][5].amount == -0.5 && saved.patch.performanceMatrix?[0].cc==74)
@@ -236,6 +239,7 @@ import SwiftUI
         precondition(trash.deletedPresets?.count==2 && trash.deletedPresets?.first?.layers[0][36]==4)
         model.restoreDeleted(characterID);precondition(model.deletedPresets.count==1 && model.deletedPresets[0].id==copyID)
         precondition(model.userPresets.first{$0.id==characterID}!.category=="Experimental")
+        print("V1 REGRESSION CHECKPOINT: save update save-as and multi-delete passed")
         model.collection="Deleted sounds";precondition(model.collectionSounds.count==1)
         model.restoreDeleted(copyID);precondition(model.deletedPresets.isEmpty)
         model.checkpoint();model.global(7,2.5);model.global(9,-0.6);model.global(13,4.2);model.global(14,5)
@@ -244,10 +248,12 @@ import SwiftUI
         model.saveCurrent();model.persist()
         let expressive=try! JSONDecoder().decode(SavedSession.self,from:Data(contentsOf:folder.appendingPathComponent("session.json")))
         precondition(expressive.patch.globalValue(7)==2.5 && expressive.patch.globalValue(14)==5 && expressive.patch.layers[0][43]==12 && expressive.routes[12345]?.velocityCurve==2)
+        print("V1 REGRESSION CHECKPOINT: expressive route persistence passed")
         model.undo();precondition(model.patch.globalValue(7)==0.22 && model.patch.layers[0][41]==0)
         model.redo();precondition(model.patch.globalValue(13)==4.2 && model.patch.layers[0][41]==2)
         model.loadPreset(legacy, panic: false);precondition(model.patch.globalValue(14)==0 && model.patch.layers[0][43]==2)
         precondition(aurora_get_global(7)==Float(0.22) && aurora_get_parameter(0,43)==2)
+        print("V1 REGRESSION CHECKPOINT: expressive undo-redo and legacy reset passed")
         // 0.20.8: delay sync/free, EQ, shimmer globals persist in fx map and round-trip
         model.checkpoint();model.global(16,0);model.global(17,500);model.global(18,0.25);model.global(19,0.4)
         model.global(20,-3);model.global(21,1.5);model.global(22,2)
@@ -258,6 +264,7 @@ import SwiftUI
         precondition(fx208.patch.globalValue(23)==0.35 && fx208.patch.globalValue(24)==7 && fx208.patch.globalValue(32)==1)
         precondition(SynthModel.globalRanges.count==37 && ControlTarget.globalNames.count==37)
         model.undo();precondition(model.patch.globalValue(23)==0)
+        print("V1 REGRESSION CHECKPOINT: extended FX persistence and undo passed")
         print("PASS: 0.20.8 delay sync/free, EQ and shimmer globals save/undo; globalRanges/globalNames length 37.")
         print("PASS: extended FX and expressive settings save, undo/redo, reset on old patch load; per-source velocity curve persists.")
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
