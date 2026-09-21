@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   standalone:
-    name: Standalone + Interface
+    name: Standalone
     runs-on: macos-14
     timeout-minutes: 30
 
@@ -30,12 +30,10 @@ jobs:
           rm -rf build
           bash scripts/build.sh
 
-      - name: Run interface regression checks
-        shell: bash
-        env:
-          NSUnbufferedIO: "YES"
-        run: |
-          bash check-interface.sh
+      # Historical InterfaceChecks.swift and check-interface.sh are intentionally retained
+      # in the repository for regression archaeology and future troubleshooting.
+      # They are no longer CI authority for Aurora v1 because they contain obsolete
+      # implementation assumptions that were replaced by the v1 baseline and specialized suite.
 
   plugins:
     name: AU + VST3
