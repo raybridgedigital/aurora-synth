@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.23.1 — 2026-09-22
+
+### Fixes
+
+- Completed the 0.23 five-LFO upgrade in the factory-bank pipeline and plug-in layer: `PluginParameters.hpp` layer defaults now cover all 126 parameters (was 99), so AU/VST3 no longer read past the defaults array when loading 99-parameter factory patches.
+- Plug-in patch validation and apply paths accept 6- or 10-slot Sound Matrices (performance stays 6); legacy 6-slot patches have slots 6–9 cleared on load.
+- `rebuild_factory_bank.py` targets the 126-parameter engine: per-layer LFO 3–5 voices and 10-slot Sound Matrix routes (pulse width, wavetable formant/tone/position, character, filter envelope). Factory banks themselves are unchanged in this release.
+- Patch-bank audit accepts 6- or 10-slot matrices.
+
+### Version metadata
+
+- Git tag: `v0.23.1`
+- Standalone marketing version: `0.23.1`
+- Standalone build: `30`
+- AU/VST3 marketing version: `0.23.1`
+
 ## 0.23.0 — 2026-09-22
 
 ### Modulation

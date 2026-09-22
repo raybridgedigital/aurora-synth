@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Aurora Spectrum: 300 layered performances for the 99-parameter engine.
+"""Aurora Spectrum: 300 layered performances for the 126-parameter engine.
 
 No old presets are used as input. Reproducible recipes, explicit voice roles,
 center-preserving macros, and measured per-patch trims live alongside the bank.
-"""
+LFO 3-5 are Matrix-only voices on a ten-slot Sound Matrix."""
 import collections
 import hashlib
 import json
@@ -82,7 +82,7 @@ def schema():
     values=re.search(r'defaults\[\] = \{([^}]+)',source)[1]
     defaults=[float(x) for x in values.split(',')]
     specs=re.findall(r'\{"[^"]+",([^,]+),([^,]+),(true|false),(true|false)\}',source.split('inline constexpr Spec globals')[0])
-    assert len(defaults)==len(specs)==99
+    assert len(defaults)==len(specs)==126
     return defaults,[(float(a),float(b),c=='true',d=='true') for a,b,c,d in specs]
 DEFAULTS,SPECS=schema()
 FXSPEC=[(0,1,False,False),(30,240,False,False),(0,.6,False,False),(0,.75,False,False),(0,.75,False,False),(0,.6,False,False),(0,1,False,False),(.03,5,False,False),(0,1,False,False),(-.85,.85,False,False),(.03,5,False,False),(0,1,False,False),(0,1,False,False),(.2,8,False,False),(0,7,False,True)]
@@ -139,6 +139,16 @@ def make_layer(c,i,l,role):
     sync=c=='Arps' or variant==1
     v.update({81:int(sync),82:[4,5,6,8,9][(family+l)%5],83:int(c not in ('Pads','Textures','Organs')),84:((family+2*l)%8)/8,85:.12 if c=='Leads' else .0,86:.6 if c in ('Leads','Pads','Brass & Strings') else .1,
               87:int(c=='Arps' or (variant==2 and l%2==1)),88:[3,4,5,8,9][(family+2*l)%5],89:int(c in ('Keys','Plucks','Bass')),90:((family+3*l)%7)/7,91:.2 if l==0 else .08,92:1.1 if c in ('Pads','Textures','Brass & Strings') else .3})
+    # LFO 3-5 are Matrix-only voices: shape/rate/division vary per family while
+    # depth stays full and the Sound Matrix amounts scale the musical result.
+    lfo_sync=c=='Arps' or variant==1
+    v.update({99:(family+l)%5,100:[.07,.13,.21,.35,.5,.9,1.7,3.1,5.2,7.6][(family*2+l)%10],101:1,
+              102:int(lfo_sync),103:[2,3,4,5,8][(family+l)%5],104:int(c=='Arps' and l==0),105:((family+l)%8)/8,106:0,107:0,
+              108:(family+2*l)%5,109:[.05,.09,.16,.3,.6,1.1,2.2,4.0,6.3,8.8][(family*3+l)%10],110:1,
+              111:int(lfo_sync),112:[1,2,3,4,6][(family+2*l)%5],113:0,114:((family+3*l)%8)/8,115:0,116:0,
+              117:(family+3*l)%5,118:[.04,.08,.12,.2,.4,.8,1.5,2.8,4.6,7.2][(family+l*3)%10],119:1,
+              120:int(lfo_sync),121:[0,2,4,5,8][(family+l)%5],122:0,123:((family+4*l)%8)/8,124:0,125:0})
+    if c=='Bass':v.update({101:.6,110:.6,119:.6})
     v[19]=[0,1,2,0,4][(family+l)%5];v[33]=[1,0,2,4,0][(family+2*l)%5]
     if c=='Leads':v.update({29:4.5+.2*family,31:1,30:.035,91:.2,92:.65})
     if v[44] and i%2:v.update({54:5 if v[51] else 0,55:.22 if v[51] else 0,95:.08,96:.12})
@@ -202,7 +212,12 @@ def make_patch(c,i,name):
       sends=[dict(delay=(.0 if bass and l<2 else [.2,.45,.6,.4][l]),reverb=(.02 if bass and l<2 else [.3,.55,.65,.9][l])) for l in range(4)],
       soundMatrix=[],performanceMatrix=[],xy=dict(x=dict(macro=0,start=0,end=1),y=dict(macro=1,start=0,end=1)))
     for l,v in enumerate(layers):
-        p['soundMatrix'].append([route(0,12 if v[44] else 0,.07 if v[44] else .025),route(1,13 if v[51] else 2,.06),route(4,0,.15 if c in ('Keys','Organs') else .08),route(5,2,0 if bass else .08),route(3,18 if v[70] else 16,.12),route(2,14 if v[44] and v[47] else 0,.06)])
+        # Ten-slot Sound Matrix: six legacy routes plus four Matrix-only LFO 3-5
+        # routes to pulse width, wavetable formant/tone/position, character, and
+        # filter envelope. Small amounts keep factory sounds musical; a zero
+        # amount disables the slot for that layer.
+        p['soundMatrix'].append([route(0,12 if v[44] else 0,.07 if v[44] else .025),route(1,13 if v[51] else 2,.06),route(4,0,.15 if c in ('Keys','Organs') else .08),route(5,2,0 if bass else .08),route(3,18 if v[70] else 16,.12),route(2,14 if v[44] and v[47] else 0,.06),
+            route(6,22,0 if bass else .05),route(7,29 if v[44] else 36,.05),route(8,13 if v[51] else (12 if v[44] else 34),.06),route(6,30 if v[44] else 35,.04 if l%2==0 else 0)])
     p['performanceMatrix']=[route(0,0,.18),route(1,0,.07),route(2,18 if layers[0][70] else 0,.12,0),route(3,3,.1),route(0,14 if layers[1][44] else 0,.13,1),route(2,13 if layers[3][51] else 2,.06,3)]
     p['customMacros']=macros(p)
     return p
@@ -222,8 +237,9 @@ def assemble():
         signature=hashlib.sha256(json.dumps([p['layers'],p['motion']],sort_keys=True).encode()).hexdigest()
         assert signature not in signatures;signatures.add(signature)
         assert len(p['detail'])<=500
+        assert all(len(m)==10 for m in p['soundMatrix'])
         for l in p['layers']:
-            assert len(l['values'])==99
+            assert len(l['values'])==126
             for k,v in l['values'].items():
                 lo,hi,_,integer=SPECS[int(k)];assert math.isfinite(v) and lo<=v<=hi,(p['name'],k,v,lo,hi)
                 assert not integer or v==int(v)

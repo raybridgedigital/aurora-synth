@@ -1,12 +1,13 @@
-# FUTURE PROPOSAL — Modulation Expansion
+# FUTURE PROPOSAL — Modulation Expansion (SHIPPED in v0.23)
 
-> **STATUS: PROPOSAL ONLY — DO NOT IMPLEMENT YET**
+> **STATUS: SHIPPED in Aurora v0.23 — 2026-09-22**
 >
-> This document records a possible future Aurora modulation upgrade. The design is intentionally parked for later evaluation.
+> This document is now design history. LFO 3/4/5 (Matrix-only), the 10-slot
+> Sound Matrix, and the expanded continuous destinations shipped in v0.23.
+> See `CHANGELOG.md` § 0.23.0 as the source of truth for what shipped.
 >
-> **Decision gate:** revisit only after Aurora v0.22 has been used extensively in real-world standalone/DAW/live-performance conditions and the existing engine's overall performance, usability, and sound-design limits are better understood.
->
-> This is **not** an active roadmap commitment and should not trigger production-code changes by itself.
+> The compatibility rules, test expectations, and architecture notes below
+> remain valid as the contract the shipped implementation follows.
 
 ## Why this proposal exists
 
@@ -921,4 +922,5 @@ The mental model remains:
 
 **Matrix = flexible routing**
 
-The proposal should only move to implementation after real-world use of the current software demonstrates that the additional modulation depth is worth the UI, compatibility, testing, and performance complexity.
+> Shipped in v0.23 (2026-09-22): LFO 3/4/5 Matrix-only, 10-slot Sound Matrix,
+> expanded continuous destinations, LFO 1/2 backward-compatible.

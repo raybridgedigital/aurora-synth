@@ -39,7 +39,7 @@ static bool validPatch(NSDictionary* p){
     if(p[@"sends"]){if(!arraySize(p[@"sends"],4))return false;for(id s in p[@"sends"])if(!numericFields(s,@[@"delay",@"reverb"]))return false;}
     if(p[@"motion"]){if(!arraySize(p[@"motion"],4))return false;for(id m in p[@"motion"]){float packet[85];if(!motionPacket(m,packet))return false;}}
     if(p[@"soundMatrix"]&&!arraySize(p[@"soundMatrix"],4))return false;
-    for(int b=0;b<5;b++){id rows=b==4?p[@"performanceMatrix"]:p[@"soundMatrix"]?p[@"soundMatrix"][b]:nil;if(rows){if(!arraySize(rows,6))return false;for(id row in rows)if(!numericFields(row,@[@"enabled",@"source",@"destination",@"target",@"cc",@"amount"]))return false;}}
+    for(int b=0;b<5;b++){id rows=b==4?p[@"performanceMatrix"]:p[@"soundMatrix"]?p[@"soundMatrix"][b]:nil;if(rows){if(b==4?!arraySize(rows,6):(!arraySize(rows,6)&&!arraySize(rows,10)))return false;for(id row in rows)if(!numericFields(row,@[@"enabled",@"source",@"destination",@"target",@"cc",@"amount"]))return false;}}
     if(p[@"xy"]){if(!dictionary(p[@"xy"]))return false;for(NSString* axis in @[@"x",@"y"])if(!numericFields(p[@"xy"][axis],@[@"macro",@"start",@"end"]))return false;}
     if(p[@"customMacros"]){if(!dictionary(p[@"customMacros"]))return false;for(id k in p[@"customMacros"]){id m=p[@"customMacros"][k];if(!dictionary(m)||![m[@"routes"] isKindOfClass:NSArray.class]||[m[@"routes"] count]>16)return false;for(id row in m[@"routes"])if(!numericFields(row,@[@"from",@"to"])||!numericFields(row[@"target"],@[@"layer",@"parameter"]))return false;}}
     if(p[@"importedWavetables"]){if(!dictionary(p[@"importedWavetables"]))return false;for(id k in p[@"importedWavetables"]){id w=p[@"importedWavetables"][k];if(!dictionary(w)||!number(w[@"frameSize"])||![w[@"data"] isKindOfClass:NSString.class])return false;int size=[w[@"frameSize"] intValue];if(!(size==256||size==512||size==1024||size==2048))return false;NSData* bytes=[[NSData alloc] initWithBase64EncodedString:w[@"data"] options:0];if(!bytes||bytes.length<size*4||bytes.length>64*size*4||bytes.length%(size*4))return false;const float* samples=(const float*)bytes.bytes;for(NSUInteger i=0;i<bytes.length/4;i++)if(!std::isfinite(samples[i]))return false;}}
@@ -224,8 +224,8 @@ bool Core::setPatchJSON(const char* json,bool apply){
                     }else engine.clearCustomWavetable(l,o);
                 }
             }
-            for(int b=0;b<5;b++)for(int s=0;s<6;s++){
-                NSArray* banks=p[@"soundMatrix"];NSArray* rows=b==4?p[@"performanceMatrix"]:(banks.count==4?banks[b]:nil);NSDictionary* r=rows.count==6?rows[s]:nil;
+            for(int b=0;b<5;b++)for(int s=0;s<(b==4?6:10);s++){
+                NSArray* banks=p[@"soundMatrix"];NSArray* rows=b==4?p[@"performanceMatrix"]:(banks.count==4?banks[b]:nil);NSDictionary* r=(NSUInteger)s<rows.count?rows[s]:nil;
                 engine.setMatrix(b,s,[r[@"enabled"] boolValue],[r[@"source"] intValue],[r[@"destination"] intValue],r?[r[@"target"] intValue]:4,[r[@"cc"] intValue],[r[@"amount"] floatValue]);
             }
         }
