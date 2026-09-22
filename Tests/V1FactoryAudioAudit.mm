@@ -216,8 +216,8 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     for(int bank=0;bank<5;bank++){
         NSArray *rows=bank==4?patch[@"performanceMatrix"]:(patch[@"soundMatrix"]?patch[@"soundMatrix"][bank]:nil);
         if(!rows)continue;
-        if(rows.count!=6){[errors addObject:@"Matrix must contain six slots"];continue;}
-        for(int slot=0;slot<6;slot++){
+        if(rows.count!=6 && rows.count!=10){[errors addObject:@"Matrix must contain six or ten slots"];continue;}
+        for(NSUInteger slot=0;slot<rows.count;slot++){
             NSDictionary *r=rows[slot];
             engine.setMatrix(bank,slot,[r[@"enabled"] boolValue],[r[@"source"] intValue],[r[@"destination"] intValue],[r[@"target"] intValue],[r[@"cc"] intValue],[r[@"amount"] floatValue]);
         }

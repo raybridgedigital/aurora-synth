@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.23.2 — 2026-09-22
+
+### Fixes
+
+- Plug-in global handling now covers the full 37-parameter range (was 15): delay-sync, EQ, and the complete shimmer return block recall through patch load, state restore, MIDI Learn, and automation. Output gain stays managed via its dedicated revision path.
+- `restoreState` reads the saved output boost even when the revision field is missing; only rev-3 +24 dB reference sessions migrate to +9 dB.
+- `V1FactoryAudioAudit` accepts 6- or 10-slot Sound Matrices, matching `PatchBankAudit` and the engine.
+
+### Version metadata
+
+- Git tag: `v0.23.2`
+- Standalone marketing version: `0.23.2`
+- Standalone build: `31`
+- AU/VST3 marketing version: `0.23.2`
+
 ## 0.23.1 — 2026-09-22
 
 ### Fixes

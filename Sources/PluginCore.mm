@@ -62,7 +62,7 @@ Core::Core():storage(std::make_unique<Storage>()){
         NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"Aurora100.json"]];
         NSArray* bank=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
         if(bank.count){NSData* patch=[NSJSONSerialization dataWithJSONObject:bank[0] options:0 error:nil];NSString* json=[[NSString alloc] initWithData:patch encoding:NSUTF8StringEncoding];setPatchJSON(json.UTF8String,true);}
-        else {for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)setActual(layerID(l,p),p==0?(l==0):defaults[p]);for(int p=0;p<15;p++)setActual(globalBase+p,engine.getGlobal(p));}
+        else {for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)setActual(layerID(l,p),p==0?(l==0):defaults[p]);for(int p=0;p<AGGlobalCount;p++){if(p==AGOutputGain)continue;setActual(globalBase+p,engine.getGlobal(p));}}
         // Initial patch load advances the Panic event generation. Queue the
         // default MIDI routes afterwards so they cannot be discarded as stale.
         engine.route(0,15,0);engine.route(1,15,0);
@@ -71,7 +71,7 @@ Core::Core():storage(std::make_unique<Storage>()){
 Core::~Core()=default;
 Spec Core::spec(int id){
     if(parameterForID(id)>=0)return layers[parameterForID(id)];
-    if(id>=globalBase&&id<globalBase+15)return globals[id-globalBase];
+    if(id>=globalBase&&id<globalBase+AGGlobalCount)return globals[id-globalBase];
     if(id==transposeID)return {"Transpose",-24,24,false,true};
     if(id==outputGainID)return {"Output boost",0,24,false,false};
     if(id==holdID)return {"Hold",0,1,false,true};
@@ -114,7 +114,7 @@ bool Core::setMappingsJSON(const char* json,bool apply){@autoreleasepool{
             int source=[row[@"source"] intValue],ch=[row[@"channel"] intValue],cc=[row[@"controller"] intValue],target=-1;
             if(source!=1||ch<1||ch>16||cc<0||cc>=120||cc==64)return false;
             if([name isEqualToString:@"mappings"]){if(!number(row[@"macro"]))return false;int m=[row[@"macro"] intValue];if(m<0||m>7)return false;target=macroBase+m;}
-            else {if(!numericFields(row[@"target"],@[@"layer",@"parameter"]))return false;int l=[row[@"target"][@"layer"] intValue],p=[row[@"target"][@"parameter"] intValue];if(l < -1||l>3||p<0||p>=(l<0?15:APParameterCount))return false;target=l<0?globalBase+p:layerID(l,p);}
+            else {if(!numericFields(row[@"target"],@[@"layer",@"parameter"]))return false;int l=[row[@"target"][@"layer"] intValue],p=[row[@"target"][@"parameter"] intValue];if(l < -1||l>3||p<0||p>=(l<0?int(AGGlobalCount):int(APParameterCount)))return false;target=l<0?globalBase+p:layerID(l,p);}
             targets[(ch-1)*128+cc]=target;
         }
     }
@@ -127,7 +127,7 @@ void Core::setActual(int id,double v,bool ui){
     auto s=spec(id);v=std::clamp(v,s.low,s.high);if(s.integer)v=std::round(v);
     values[id]=float(v);
     if(parameterForID(id)>=0)engine.setParameter(layerForID(id),parameterForID(id),float(v));
-    else if(id>=globalBase&&id<globalBase+15){if(id!=globalBase+1||!active)engine.setGlobal(id-globalBase,float(v));}
+    else if(id>=globalBase&&id<globalBase+AGGlobalCount){if(id!=globalBase+1||!active)engine.setGlobal(id-globalBase,float(v));}
     else if(id>=macroBase&&id<macroBase+8)macro(id-macroBase,v);
     else if(id==xyX||id==xyY){int axis=id-xyX;int m=xyMacros[axis];setActual(macroBase+m,xyStarts[axis]+(xyEnds[axis]-xyStarts[axis])*v);}
     else if(id==transposeID)engine.setTranspose(int(v));
@@ -167,7 +167,7 @@ void Core::configureMetadata(){
         for(NSUInteger r=0;r<std::min(NSUInteger(16),rows.count);r++){
             NSDictionary* item=rows[r];int l=[item[@"target"][@"layer"] intValue],par=[item[@"target"][@"parameter"] intValue];
             int target=l<0?globalBase+par:layerID(l,par);
-            if(l < -1 || l>3 || par<0 || par>=(l<0?15:APParameterCount))target=-1;
+            if(l < -1 || l>3 || par<0 || par>=(l<0?int(AGGlobalCount):int(APParameterCount)))target=-1;
             macroRoutes[i][r].target=target;macroRoutes[i][r].from=[item[@"from"] floatValue];macroRoutes[i][r].to=[item[@"to"] floatValue];
         }
         macroCounts[i]=def?int(std::min(NSUInteger(16),rows.count)):-1;
@@ -193,8 +193,9 @@ bool Core::setPatchJSON(const char* json,bool apply){
         if(apply){
             engine.panic();
             for(int l=0;l<4;l++)for(int i=0;i<APParameterCount;i++){id v=p[@"layers"][l][@"values"][key(i)];setActual(layerID(l,i),[v isKindOfClass:NSNumber.class]?[v doubleValue]:defaults[i]);}
-            for(int i=0;i<15;i++){
-                double fallback[]={.25,110,0,.3,0,0,0,.22,1,0,.23,1,.5,1,0};
+            for(int i=0;i<AGGlobalCount;i++){
+                if(i==AGOutputGain)continue; // managed via outputGainID / saveState revision
+                double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4};
                 id v=i<6?p[@"globals"][i]:i==6?p[@"phaserMix"]:p[@"fx"][key(i)];
                 setActual(globalBase+i,[v isKindOfClass:NSNumber.class]?[v doubleValue]:fallback[i]);
             }
@@ -238,7 +239,7 @@ std::string Core::patchJSON(){
         for(int l=0;l<4;l++)for(int i=0;i<APParameterCount;i++)p[@"layers"][l][@"values"][key(i)]=@(values[layerID(l,i)].load());
         for(int i=0;i<6;i++)p[@"globals"][i]=@(values[globalBase+i].load());
         p[@"phaserMix"]=@(values[1006].load());if(!p[@"fx"])p[@"fx"]=[NSMutableDictionary dictionary];
-        for(int i=7;i<15;i++)p[@"fx"][key(i)]=@(values[globalBase+i].load());
+        for(int i=7;i<AGGlobalCount;i++){if(i==AGOutputGain)continue;p[@"fx"][key(i)]=@(values[globalBase+i].load());}
         for(int i=0;i<8;i++)p[@"macros"][i]=@(values[macroBase+i].load());
         NSMutableArray* sends=[NSMutableArray array];for(int l=0;l<4;l++)[sends addObject:@{@"delay":@(values[sendID(l,0)].load()),@"reverb":@(values[sendID(l,1)].load()),@"shimmer":@(values[sendID(l,2)].load())}];p[@"sends"]=sends;
         NSData* data=[NSJSONSerialization dataWithJSONObject:p options:NSJSONWritingSortedKeys error:nil];return std::string((const char*)data.bytes,data.length);
@@ -264,12 +265,10 @@ bool Core::restoreState(const char* json){@autoreleasepool{
     setMappingsJSON(mappingString.UTF8String);
     {
         const int revision=[state[@"outputGainRevision"] intValue];
-        double gain=9;
-        if(revision==4 && state[@"outputGain"]) gain=[state[@"outputGain"] doubleValue];
-        else if(revision==3 && state[@"outputGain"]) {
-            gain=[state[@"outputGain"] doubleValue];
-            if(std::fabs(gain-24)<0.01) gain=9; // CK88 dual-layer migration from +24 reference
-        }
+        // Read-then-clamp: a state without a revision still restores its saved boost.
+        // Only rev-3 +24 reference sessions migrate once to the +9 house level.
+        double gain=state[@"outputGain"]?[state[@"outputGain"] doubleValue]:9;
+        if(revision==3 && std::fabs(gain-24)<0.01) gain=9; // CK88 dual-layer migration from +24 reference
         setActual(outputGainID,gain);
     } // Rev 4: CK88 dual-layer house calibration (~+9 dB).
     setActual(transposeID,[state[@"transpose"] doubleValue]);setActual(routeMaskID,state[@"routeMask"]?[state[@"routeMask"] doubleValue]:15);
