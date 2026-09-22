@@ -2,6 +2,20 @@ import AppKit
 import Combine
 import SwiftUI
 
+// Renders a SwiftUI view to a PNG offscreen and releases the hosting view
+// before returning. Live NSHostingViews must not outlive the render: the next
+// model mutation publishes into the hosted SwiftUI graph, which traps on
+// headless CI runners (Trace/BPT trap 5) with no window server.
+@MainActor private func renderUIToPNG<V: View>(_ root: V, width: CGFloat, height: CGFloat, to path: String) {
+    let host = NSHostingView(rootView: root)
+    host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+    host.layoutSubtreeIfNeeded()
+    if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+    }
+}
+
 @main struct AuroraV1SpecializedRegressionChecks {
     @MainActor static func main() {
         // Unbuffered stdout so CI logs keep every checkpoint up to a trap.
@@ -110,13 +124,9 @@ import SwiftUI
         model.setOutputGain(24);precondition(model.outputGain==24 && aurora_get_global(15)==24)
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
         model.selectTheme(.copperOrange)
-        let upgradeView=NSHostingView(rootView:EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
-        upgradeView.frame=NSRect(x:0,y:0,width:1100,height:3400);upgradeView.layoutSubtreeIfNeeded()
-        if let bitmap=upgradeView.bitmapImageRepForCachingDisplay(in:upgradeView.bounds){upgradeView.cacheDisplay(in:upgradeView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-editor.png"))}
+        renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:"/private/tmp/aurora-upgrade-editor.png")
         print("CHECKPOINT: upgrade editor view rendered")
-        let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
-        browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
-        if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
+        renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:"/private/tmp/aurora-upgrade-browser.png")
         print("CHECKPOINT: patch browser view rendered")
         precondition(model.collectionSounds.count == 438)
         precondition(FactoryBank.prism.count == 100)
@@ -323,12 +333,8 @@ import SwiftUI
         model.undo();precondition(!model.motionSettings.enabled)
         model.redo();precondition(model.motionSettings==designedMotion)
         model.selectedLayer=1;precondition(!model.motionSettings.enabled);model.selectedLayer=0
-        let motionHost=NSHostingView(rootView:MotionEnvelopePanel(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark))
-        motionHost.frame=NSRect(x:0,y:0,width:1120,height:900);motionHost.layoutSubtreeIfNeeded()
-        if let bitmap=motionHost.bitmapImageRepForCachingDisplay(in:motionHost.bounds){motionHost.cacheDisplay(in:motionHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-motion-panel.png"))}
-        let host=NSHostingView(rootView:WavetableSection(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark))
-        host.frame=NSRect(x:0,y:0,width:1120,height:430);host.layoutSubtreeIfNeeded()
-        if let bitmap=host.bitmapImageRepForCachingDisplay(in:host.bounds){host.cacheDisplay(in:host.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-wavetable-panels.png"))}
+        renderUIToPNG(MotionEnvelopePanel(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:900,to:"/private/tmp/aurora-motion-panel.png")
+        renderUIToPNG(WavetableSection(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:430,to:"/private/tmp/aurora-wavetable-panels.png")
         print("PASS: embedded wavetable persistence, legacy reset, undo/redo, classic switch, and layer-specific wavetable matrix targets.")
         model.persist();model.shutdown()
         let restored=SynthModel(storageDirectory:folder)
@@ -381,9 +387,7 @@ import SwiftUI
         toolsModel.collection="Aurora";toolsModel.category="Bass";toolsModel.search="";toolsModel.browsePatch(1, panic: false)
         precondition(toolsModel.patch.category=="Bass");let browsedID=toolsModel.patch.id;toolsModel.browsePatch(1, panic: false);precondition(toolsModel.patch.id != browsedID)
         print("V1 REGRESSION CHECKPOINT: solo load reset and filtered browsing passed")
-        let toolsHost=NSHostingView(rootView:ContentView(m:toolsModel))
-        toolsHost.frame=NSRect(x:0,y:0,width:1440,height:900);toolsHost.layoutSubtreeIfNeeded()
-        if let bitmap=toolsHost.bitmapImageRepForCachingDisplay(in:toolsHost.bounds){toolsHost.cacheDisplay(in:toolsHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-layer-tools.png"))}
+        renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:"/private/tmp/aurora-layer-tools.png")
         print("V1 REGRESSION CHECKPOINT: layer tools UI smoke passed")
         toolsModel.selectedLayer=0;toolsModel.loadPreset(legacy, panic: false)
         toolsModel.changeMotion{$0.beats=8;$0.grid=16;$0.points=MotionShapes.points("Heartbeat")}
@@ -431,9 +435,7 @@ import SwiftUI
         toolsModel.changeXY{$0.y.macro=$0.x.macro}
         precondition(toolsModel.xySettings==savedXY)
         print("V1 REGRESSION CHECKPOINT: configurable XY edit undo redo passed")
-        let xyHost=NSHostingView(rootView:XYPadPanel(m:toolsModel).padding(16).background(Color.black).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
-        xyHost.frame=NSRect(x:0,y:0,width:1120,height:470);xyHost.layoutSubtreeIfNeeded()
-        if let bitmap=xyHost.bitmapImageRepForCachingDisplay(in:xyHost.bounds){xyHost.cacheDisplay(in:xyHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-xy-pad.png"))}
+        renderUIToPNG(XYPadPanel(m:toolsModel).padding(16).background(Color.black).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1120,height:470,to:"/private/tmp/aurora-xy-pad.png")
         print("V1 REGRESSION CHECKPOINT: XY UI smoke passed")
         toolsModel.saveName="Creative tools saved";toolsModel.saveUserPreset()
         let themeEncoder=JSONEncoder();themeEncoder.outputFormatting=[.sortedKeys]
@@ -443,17 +445,13 @@ import SwiftUI
             toolsModel.selectTheme(theme)
             precondition(try! themeEncoder.encode(toolsModel.patch)==patchBeforeTheme)
             precondition(toolsModel.dirty==dirtyBeforeTheme)
-            let themeHost=NSHostingView(rootView:ContentView(m:toolsModel))
-            themeHost.frame=NSRect(x:0,y:0,width:1440,height:900);themeHost.layoutSubtreeIfNeeded()
-            if let bitmap=themeHost.bitmapImageRepForCachingDisplay(in:themeHost.bounds){themeHost.cacheDisplay(in:themeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-theme-\(theme.rawValue).png"))}
+            renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:"/private/tmp/aurora-theme-\(theme.rawValue).png")
         }
         print("V1 REGRESSION CHECKPOINT: theme iteration leaves patch untouched")
         toolsModel.loadPreset(legacy, panic: false);precondition(toolsModel.theme == .graphiteOrange)
         toolsModel.undo()
         let creativeID=toolsModel.patch.id
-        let creativeHost=NSHostingView(rootView:CreativeToolsView(m:toolsModel))
-        creativeHost.frame=NSRect(x:0,y:0,width:1008,height:748);creativeHost.layoutSubtreeIfNeeded()
-        if let bitmap=creativeHost.bitmapImageRepForCachingDisplay(in:creativeHost.bounds){creativeHost.cacheDisplay(in:creativeHost.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-creative-tools.png"))}
+        renderUIToPNG(CreativeToolsView(m:toolsModel),width:1008,height:748,to:"/private/tmp/aurora-creative-tools.png")
         print("V1 REGRESSION CHECKPOINT: creative tools UI smoke passed")
         toolsModel.shutdown()
         let creativeRestored=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
