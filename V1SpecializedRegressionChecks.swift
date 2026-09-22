@@ -4,6 +4,8 @@ import SwiftUI
 
 @main struct AuroraV1SpecializedRegressionChecks {
     @MainActor static func main() {
+        // Unbuffered stdout so CI logs keep every checkpoint up to a trap.
+        setbuf(stdout, nil)
         _ = NSApplication.shared
         let tracking=XYTrackingView(frame:NSRect(x:0,y:0,width:424,height:224))
         var xyUpdates=0
@@ -81,7 +83,10 @@ import SwiftUI
         // InterfaceChecks validates model/UI state and runs without an audio render callback.
         // Never start the real-time Panic transition here: deferred DSP writes only commit while rendering.
         // Panic fade/wipe/commit behavior is covered by SynthEngineTests and PluginCoreChecks.
-        precondition(SynthModel.ranges.count==99 && ControlTarget.layerNames.count==99)
+        // ranges must cover every engine layer parameter (126 with the five-LFO
+        // pipeline); layerNames covers the subset exposed as assignable control
+        // targets (99). They are intentionally different lengths since 0.23.1.
+        precondition(SynthModel.ranges.count==126 && ControlTarget.layerNames.count==99)
         for ref in FactoryBank.references {
             model.loadPreset(ref, panic: false)
             precondition(SynthModel.sanitized(ref) != nil)
@@ -108,16 +113,22 @@ import SwiftUI
         let upgradeView=NSHostingView(rootView:EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         upgradeView.frame=NSRect(x:0,y:0,width:1100,height:3400);upgradeView.layoutSubtreeIfNeeded()
         if let bitmap=upgradeView.bitmapImageRepForCachingDisplay(in:upgradeView.bounds){upgradeView.cacheDisplay(in:upgradeView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-editor.png"))}
+        print("CHECKPOINT: upgrade editor view rendered")
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
+        print("CHECKPOINT: patch browser view rendered")
         precondition(model.collectionSounds.count == 438)
         precondition(FactoryBank.prism.count == 100)
         precondition(Set(FactoryBank.all.map(\.id)).count==438)
         precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==438)
         precondition(FactoryBank.nova.count==100)
+        print("CHECKPOINT: factory count preconditions passed")
         model.search=""
-        precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
+        // The Spectrum bank was replaced: its sounds now live inside the three
+        // main banks (90 spectrum- ids each in Aurora100/Prism100/Nova100 = 270).
+        // AuroraSpectrum300.json is a retired generator artifact, not in the library.
+        precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==270)
         // Aurora v1 factory contract: current schema + observable macro/XY behavior.
         for sound in FactoryBank.all {
             model.loadPreset(sound, panic: false)
@@ -453,5 +464,10 @@ import SwiftUI
         creativeRestored.shutdown()
         print("PASS: synced/grid motion settings, reusable shape CRUD, custom macro ranges/reversal/undo, source-specific MIDI learn with pickup, variation locks and restart persistence.")
         print("PASS: A/B retains edits and restores engine parameters; layer copy includes waves/motion/matrix/sends; paste undo/redo; Solo clears on load; browsing follows filters.")
+        // All checks passed. Exit explicitly with success so the process
+        // terminates before the AppKit/SwiftUI teardown trap that fires on
+        // headless CI runners (Trace/BPT trap 5) after main() returns.
+        fflush(stdout)
+        exit(EXIT_SUCCESS)
     }
 }
