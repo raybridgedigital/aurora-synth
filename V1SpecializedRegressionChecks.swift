@@ -129,8 +129,12 @@ import SwiftUI
         // main banks (90 spectrum- ids each in Aurora100/Prism100/Nova100 = 270).
         // AuroraSpectrum300.json is a retired generator artifact, not in the library.
         precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==270)
+        print("CHECKPOINT: spectrum library count passed")
         // Aurora v1 factory contract: current schema + observable macro/XY behavior.
+        var contractIndex=0
         for sound in FactoryBank.all {
+            if contractIndex%50==0 { print("CHECKPOINT: factory contract \(contractIndex)/438 [\(sound.id)]") }
+            contractIndex+=1
             model.loadPreset(sound, panic: false)
             precondition(model.patch.id == sound.id)
             precondition(SynthModel.sanitized(sound) != nil)
