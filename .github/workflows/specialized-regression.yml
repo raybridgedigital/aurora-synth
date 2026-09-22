@@ -79,3 +79,23 @@ jobs:
           NSUnbufferedIO: "YES"
         run: |
           bash check-v1-specialized-regression.sh
+      - name: Dump crash report on failure
+        if: failure()
+        shell: bash
+        run: |
+          LATEST=$(ls -t "$HOME/Library/Logs/DiagnosticReports/"V1SpecializedRegression-*.ips 2>/dev/null | head -1)
+          if [ -z "$LATEST" ]; then echo "no crash report found"; exit 0; fi
+          echo "=== $LATEST ==="
+          tail -n +2 "$LATEST" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          ft=d.get('faultingThread',0)
+          imgs=d.get('usedImages',[])
+          def name(f):
+              i=f.get('imageIndex',0)
+              n=imgs[i].get('name','?') if i<len(imgs) else '?'
+              return f\"{n} {f.get('symbol','')} +{f.get('symbolLocation', f.get('imageOffset',0))}\"
+          frames=d['threads'][ft].get('frames',[])
+          print('faultingThread:',ft)
+          for f in frames[:25]: print(name(f))
+          "
