@@ -62,7 +62,19 @@ float parameterValue(int p,float v) {
         case APArpOctaves: return std::round(bounded(v,1,4,1));
         case APArpGate: return bounded(v,.05f,.95f,.65f);
         case APKeyLow: case APKeyHigh: return std::round(bounded(v,0,127));
-        default: return bounded(v,0,1);
+        default:
+            if(p>=APLFO3Shape && p<APParameterCount){
+                switch((p-APLFO3Shape)%9){
+                    case 0: return std::round(bounded(v,0,4));
+                    case 1: return bounded(v,.01f,30,1);
+                    case 2: return bounded(v,0,1,1);
+                    case 3: case 5: return std::round(bounded(v,0,1));
+                    case 4: return std::round(bounded(v,0,9,4));
+                    case 6: return bounded(v,0,1);
+                    default: return bounded(v,0,8);
+                }
+            }
+            return bounded(v,0,1);
     }
 }
 float globalValue(int p,float v) {
@@ -166,7 +178,8 @@ struct Voice {
     float envelope=0,velocity=1,ic1=0,ic2=0,filterG=.2f,filterK=1,lastL=0,lastR=0;
     float modEnvelope=0,filter2G=.2f,filter2K=1;int modStage=0;
     std::array<OscillatorLane,8> lanes{};
-    std::array<float,2> lfoPhase{},lfoRandom{};
+    std::array<float,5> lfoPhase{},lfoRandom{};
+    uint32_t extraLFOSeed=0xA5A5A5A5u;
     double age=0;float noteRandom=0;
 };
 struct Tail { float left=0,right=0;int remaining=0;int layer=0; };
@@ -194,8 +207,9 @@ struct Layer {
     float syncRatio=1,syncDecay=0;
     float attack=.01f,decay=.99f,release=.99f,detune=1;
     float modAttack=.01f,modDecay=.99f,modRelease=.99f,characterTone=1,characterSteps=2048;
-    float gain=0,cutoff=1500,lfoPhase=0,lfo2Phase=0,heldRandom=0,heldRandom2=0;
-    uint32_t random2=0x71b48a95;
+    float gain=0,cutoff=1500;
+    std::array<float,5> lfoPhase{},heldRandom{};
+    std::array<uint32_t,5> lfoSeed{0,0x71b48a95u,0x51c3a91eu,0x8a2e17b4u,0x3d6f90c1u};
     double arpCountdown=0,gateCountdown=0;
     uint64_t arpStep=0; bool previousEnabled=false,previousArp=false,arpWaiting=true;
 };
@@ -233,11 +247,13 @@ struct SynthEngine::Impl {
     std::array<std::atomic<float>,8> previewPosition{},previewAmount{};
     std::atomic<unsigned> previewActiveLayers{0};
     uint32_t phaseRandom=0x17253819,modulationRandom=0x936a8d21;
-    std::array<std::atomic<float>,30> modulationFeedback{};
-    std::array<float,30> frameFeedback{};
-    std::array<std::array<std::atomic<uint64_t>,6>,5> matrix{};
-    std::array<std::array<MatrixRoute,6>,5> activeMatrix{};
+    static constexpr int kMatrixSlots=10, kFeedbackCount=46;
+    std::array<std::atomic<float>,kFeedbackCount> modulationFeedback{};
+    std::array<float,kFeedbackCount> frameFeedback{};
+    std::array<std::array<std::atomic<uint64_t>,kMatrixSlots>,5> matrix{};
+    std::array<std::array<MatrixRoute,kMatrixSlots>,5> activeMatrix{};
     std::array<int,5> matrixCount{};
+    std::array<uint8_t,4> extraLFO{};
     std::array<float,128> latestCC{};
     float latestVelocity=0,latestPressure=0;
     static float performanceValue(const MatrixRoute& r,float velocity,float pressure,const std::array<float,128>& cc) {
@@ -319,6 +335,7 @@ struct SynthEngine::Impl {
         defaults[APPulseWidth]=.5f;defaults[APUnison]=1;defaults[APUnisonDetune]=8;defaults[APStereoSpread]=.6f;
         defaults[APBendRange]=2;
         defaults[APLFO1Division]=defaults[APLFO2Division]=4;
+        for(int i=0;i<3;i++){int base=APLFO3Shape+i*9;defaults[base]=0;defaults[base+1]=1;defaults[base+2]=1;defaults[base+4]=4;}
         defaults[APFilter2Cutoff]=3200;defaults[APFilterBalance]=.5f;
         defaults[APModAttack]=.01f;defaults[APModDecay]=.35f;defaults[APModRelease]=.35f;
         defaults[APOscModRatio]=1;defaults[APCharacterDrive]=.25f;defaults[APCharacterMix]=1;
@@ -553,10 +570,17 @@ struct SynthEngine::Impl {
             if(force){fadeStolen(v);v.active=false;}else v.stage=3;
         }
     }
+    struct LFOIndex {int shape,rate,depth,sync,division,retrigger,phase,delay,fade;};
+    static LFOIndex lfoIndex(int o){
+        if(o==0)return {APLFOShape,APLFORate,APLFODepth,APLFO1Sync,APLFO1Division,APLFO1Retrigger,APLFO1Phase,APLFO1Delay,APLFO1Fade};
+        if(o==1)return {APLFO2Shape,APLFO2Rate,APLFO2Depth,APLFO2Sync,APLFO2Division,APLFO2Retrigger,APLFO2Phase,APLFO2Delay,APLFO2Fade};
+        int base=APLFO3Shape+(o-2)*9;
+        return {base,base+1,base+2,base+3,base+4,base+5,base+6,base+7,base+8};
+    }
     float lfoRate(const std::array<float,APParameterCount>& p,int o) const {
         constexpr float beats[]={16,8,4,2,1,.5f,.25f,.125f,.75f,1.f/3};
-        int base=APLFO1Sync+o*6;
-        return p[base]>.5f?global[AGTempo]/(60.f*beats[int(p[base+1])]):p[o?APLFO2Rate:APLFORate];
+        LFOIndex ix=lfoIndex(o);
+        return p[ix.sync]>.5f?global[AGTempo]/(60.f*beats[std::clamp(int(p[ix.division]),0,9)]):p[ix.rate];
     }
     void startVoice(int si,int ch,int key,int pitch,float velocity,int layer,bool arp) {
         auto& settings=layers[layer].p;
@@ -565,7 +589,7 @@ struct SynthEngine::Impl {
             v.key=key;v.targetFrequency=targetHz;v.velocity=velocity;v.serial=++serial;
             v.untransposedPitch=pitch;
             if(settings[APGlide]<=0)v.frequency=targetHz;
-            if(settings[APVoiceMode]<1.5f){v.age=0;v.lfoPhase={};v.lfoRandom={randomUnit(modulationRandom),randomUnit(modulationRandom)};v.noteRandom=randomUnit(modulationRandom);v.stage=0;v.modStage=0;v.modEnvelope=0;v.motionTime=0;v.motionStarted=false;v.motionFade=0;v.motionRelease=1;}
+            if(settings[APVoiceMode]<1.5f){v.age=0;v.lfoPhase={};v.lfoRandom[0]=randomUnit(modulationRandom);v.lfoRandom[1]=randomUnit(modulationRandom);v.noteRandom=randomUnit(modulationRandom);v.extraLFOSeed=0xA5A5A5A5u^uint32_t(v.serial);for(int i=2;i<5;i++)v.lfoRandom[i]=randomUnit(v.extraLFOSeed);v.stage=0;v.modStage=0;v.modEnvelope=0;v.motionTime=0;v.motionStarted=false;v.motionFade=0;v.motionRelease=1;}
             return;
         }
         // Repeated note-ons from the same physical key retrigger without losing
@@ -584,7 +608,7 @@ struct SynthEngine::Impl {
         fadeStolen(*target);
         *target=Voice{};target->active=true;target->arp=arp;target->source=si;target->channel=ch;
         target->key=key;target->layer=layer;target->serial=++serial;target->velocity=velocity;
-        target->noteRandom=randomUnit(modulationRandom);target->lfoRandom={randomUnit(modulationRandom),randomUnit(modulationRandom)};
+        target->noteRandom=randomUnit(modulationRandom);target->lfoRandom[0]=randomUnit(modulationRandom);target->lfoRandom[1]=randomUnit(modulationRandom);target->extraLFOSeed=0xA5A5A5A5u^uint32_t(target->serial);for(int i=2;i<5;i++)target->lfoRandom[i]=randomUnit(target->extraLFOSeed);
         target->untransposedPitch=pitch;
         pitch=std::clamp(pitch+int(layers[layer].p[APTranspose]),0,127);
         target->frequency=440.f*std::exp2((pitch-69)/12.f);
@@ -612,13 +636,13 @@ struct SynthEngine::Impl {
     }
     void snapshot() {
         activeSolo=solo.load(std::memory_order_relaxed);
+        extraLFO.fill(0);
         for(int bank=0;bank<5;bank++){
             matrixCount[bank]=0;
-            int slotIndex=0;
-            for(auto& slot:matrix[bank]){
-                int routeSlot=slotIndex++;
-                uint64_t bits=slot.load(std::memory_order_relaxed);
-                if(bits&1){MatrixRoute r;r.slot=routeSlot;r.source=(bits>>1)&7;r.destination=(bits>>4)&31;r.target=(bits>>9)&7;r.cc=(bits>>12)&127;r.amount=float(int((bits>>19)&65535)-32768)/32767.f;activeMatrix[bank][matrixCount[bank]++]=r;}
+            int slotLimit=bank==4?6:kMatrixSlots;
+            for(int routeSlot=0;routeSlot<slotLimit;routeSlot++){
+                uint64_t bits=matrix[bank][routeSlot].load(std::memory_order_relaxed);
+                if(bits&1){MatrixRoute r;r.slot=routeSlot;r.source=int((bits>>1)&15);r.destination=int((bits>>5)&63);r.target=int((bits>>11)&7);r.cc=int((bits>>14)&127);r.amount=float(int((bits>>21)&65535)-32768)/32767.f;activeMatrix[bank][matrixCount[bank]++]=r;if(bank<4&&r.source>=6&&r.source<=8)extraLFO[bank]|=uint8_t(1u<<(r.source-6));}
             }
         }
 
@@ -933,7 +957,7 @@ struct SynthEngine::Impl {
         std::array<float,4> effectOffsets{};
         for(int i=0;i<matrixCount[4];i++){
             const auto& r=activeMatrix[4][i];
-            if(r.destination>=8&&r.destination<=11){float value=r.amount*performanceValue(r,latestVelocity,latestPressure,latestCC);effectOffsets[r.destination-8]+=value;frameFeedback[24+r.slot]=value;}
+            if(r.destination>=8&&r.destination<=11){float value=r.amount*performanceValue(r,latestVelocity,latestPressure,latestCC);effectOffsets[r.destination-8]+=value;frameFeedback[40+r.slot]=value;}
         }
         constexpr int effects[]={AGChorusMix,AGPhaserMix,AGReverbMix,AGDelayMix};
         for(int i=0;i<4;i++)global[effects[i]]=std::clamp(global[effects[i]]+effectOffsets[i],0.f,1.f);
@@ -962,9 +986,10 @@ struct SynthEngine::Impl {
                     layer.wtPosition[o]+=smooth*(p[APWT1Position+o*7]-layer.wtPosition[o]);
                     layer.wtAmount[o]+=smooth*(p[APWT1Warp+o*7]-layer.wtAmount[o]);
                 }
-                layer.lfoPhase+=lfoRate(p,0)/float(sampleRate);
-                if(layer.lfoPhase>=1){layer.lfoPhase-=1;layer.heldRandom=randomUnit(random);}
-                layer.lfo2Phase+=lfoRate(p,1)/float(sampleRate);if(layer.lfo2Phase>=1){layer.lfo2Phase-=1;layer.heldRandom2=randomUnit(layer.random2);}
+                for(int o=0;o<5;o++){
+                    layer.lfoPhase[o]+=lfoRate(p,o)/float(sampleRate);
+                    if(layer.lfoPhase[o]>=1){layer.lfoPhase[o]-=1;uint32_t& seed=o==0?random:layer.lfoSeed[o];layer.heldRandom[o]=randomUnit(seed);}
+                }
                 if(p[APEnabled]>.5f&&p[APArpEnabled]>.5f) {
                     if(layer.gateCountdown>0&&--layer.gateCountdown<=0)releaseLayerArp(l);
                     if(!externalClock&&!layer.arpWaiting){if(layer.arpCountdown<=0)arpStep(l);else --layer.arpCountdown;}
@@ -996,33 +1021,40 @@ struct SynthEngine::Impl {
                 else if(v.modStage==0){v.modEnvelope=std::min(1.f,v.modEnvelope+layer.modAttack);if(v.modEnvelope>=1)v.modStage=1;}
                 else {v.modEnvelope=p[APModSustain]+(v.modEnvelope-p[APModSustain])*layer.modDecay;}
                 // Retrigger is polyphonic: a new note never resets another held note.
-                float noteLFO[2];float noteCutoff=0,notePitch=0,notePan=0,noteAmp=1;
-                for(int o=0;o<2;o++){
-                    int base=APLFO1Sync+o*6;
-                    bool retrigger=p[base+2]>.5f;
-                    float phase=(retrigger?v.lfoPhase[o]:(o?layer.lfo2Phase:layer.lfoPhase))+p[base+3];phase-=std::floor(phase);
-                    float held=retrigger?v.lfoRandom[o]:(o?layer.heldRandom2:layer.heldRandom);
-                    float elapsed=float(v.age)-p[base+4];
-                    float fade=elapsed<0?0:(p[base+5]>0?std::min(1.f,elapsed/p[base+5]):1.f);
-                    noteLFO[o]=shapeLFO(phase,int(p[o?APLFO2Shape:APLFOShape]),held)*fade;
-                    if(elapsed>=0){v.lfoPhase[o]+=lfoRate(p,o)/float(sampleRate);if(v.lfoPhase[o]>=1){v.lfoPhase[o]-=std::floor(v.lfoPhase[o]);v.lfoRandom[o]=randomUnit(modulationRandom);}}
-                    float amount=noteLFO[o]*p[o?APLFO2Depth:APLFODepth];
-                    switch(int(p[o?APLFO2Destination:APLFODestination])){case 0:noteCutoff+=amount*3;break;case 1:notePitch+=amount*2;break;case 2:notePan+=amount;break;default:noteAmp+=amount*.5f;}
+                // LFO 3–5 are Matrix-only. Depth scales the signal the Matrix reads. An unrouted one is skipped.
+                float noteLFO[5]{};float noteCutoff=0,notePitch=0,notePan=0,noteAmp=1;
+                for(int o=0;o<5;o++){
+                    if(o>=2 && (extraLFO[v.layer]&uint8_t(1u<<(o-2)))==0)continue;
+                    LFOIndex ix=lfoIndex(o);
+                    bool retrigger=p[ix.retrigger]>.5f;
+                    float phase=(retrigger?v.lfoPhase[o]:layer.lfoPhase[o])+p[ix.phase];phase-=std::floor(phase);
+                    float held=retrigger?v.lfoRandom[o]:layer.heldRandom[o];
+                    float elapsed=float(v.age)-p[ix.delay];
+                    float fade=elapsed<0?0:(p[ix.fade]>0?std::min(1.f,elapsed/p[ix.fade]):1.f);
+                    float shaped=shapeLFO(phase,int(p[ix.shape]),held)*fade;
+                    if(elapsed>=0){v.lfoPhase[o]+=lfoRate(p,o)/float(sampleRate);if(v.lfoPhase[o]>=1){v.lfoPhase[o]-=std::floor(v.lfoPhase[o]);v.lfoRandom[o]=o<2?randomUnit(modulationRandom):randomUnit(v.extraLFOSeed);}}
+                    if(o<2){
+                        noteLFO[o]=shaped;
+                        float amount=shaped*p[ix.depth];
+                        switch(int(p[o?APLFO2Destination:APLFODestination])){case 0:noteCutoff+=amount*3;break;case 1:notePitch+=amount*2;break;case 2:notePan+=amount;break;default:noteAmp+=amount*.5f;}
+                    }else noteLFO[o]=shaped*p[ix.depth];
                 }
                 v.age+=1/sampleRate;notePitch=std::exp2(notePitch/12.f);noteAmp=std::clamp(noteAmp,0.f,2.f);
-                std::array<float,21> mod{};
+                std::array<float,37> mod{};
                 constexpr int modDestinations[]={0,16,1,18,19,12,13};
                 mod[modDestinations[int(p[APModDestination])]]+=v.modEnvelope*p[APModAmount];
                 for(int i=0;i<matrixCount[v.layer];i++){
                     const auto& r=activeMatrix[v.layer][i];
-                    float signals[]={noteLFO[0],noteLFO[1],v.envelope,v.modEnvelope,std::clamp((v.key-60)/60.f,-1.f,1.f),v.noteRandom};
+                    if(r.source<0||r.source>8||r.destination<0||r.destination>36)continue;
+                    float signals[]={noteLFO[0],noteLFO[1],v.envelope,v.modEnvelope,std::clamp((v.key-60)/60.f,-1.f,1.f),v.noteRandom,noteLFO[2],noteLFO[3],noteLFO[4]};
                     float signal=signals[r.source];
                     mod[r.destination]+=signal*r.amount;
-                    frameFeedback[v.layer*6+r.slot]=signal*r.amount;
+                    frameFeedback[v.layer*kMatrixSlots+r.slot]=signal*r.amount;
                 }
                 for(int i=0;i<matrixCount[4];i++){
                     const auto& r=activeMatrix[4][i];
-                    if((r.destination<8||r.destination>=12)&&(r.target==4||r.target==v.layer)){float value=r.amount*performanceValue(r,v.velocity,source.pressure[v.channel],source.controls[v.channel]);mod[r.destination]+=value;frameFeedback[24+r.slot]=value;}
+                    if(r.destination<0||r.destination>20)continue;
+                    if((r.destination<8||r.destination>=12)&&(r.target==4||r.target==v.layer)){float value=r.amount*performanceValue(r,v.velocity,source.pressure[v.channel],source.controls[v.channel]);mod[r.destination]+=value;frameFeedback[40+r.slot]=value;}
                 }
                 // Depth routes add modulation through each LFO's existing destination.
                 float extraCutoff=0,extraPitch=0,extraPan=0,extraAmp=0;
@@ -1032,14 +1064,14 @@ struct SynthEngine::Impl {
                     switch(int(p[i?APLFO2Destination:APLFODestination])){case 0:extraCutoff+=amount*3;break;case 1:extraPitch+=amount*2;break;case 2:extraPan+=amount;break;default:extraAmp+=amount*.5f;}
                 }
                 float blend=std::clamp(p[APBlend]+mod[4],0.f,1.f),drive=std::clamp(p[APDrive]+mod[5],0.f,1.f);
-                float wheelPitch=1+source.wheel[v.channel]*std::sin(tau*layer.lfo2Phase)*.0145f;
+                float wheelPitch=1+source.wheel[v.channel]*std::sin(tau*layer.lfoPhase[1])*.0145f;
                 v.frequency+=layer.glideStep*(v.targetFrequency-v.frequency);
                 float motionPitch=motion.routed(2)?motion.value(2,v.motionValue):0;
                 float frequency=v.frequency*transposeRatio*std::exp2(source.bend[v.channel]*p[APBendRange]/12.f)*notePitch*wheelPitch*std::exp2((std::clamp(mod[1],-2.f,2.f)*12+extraPitch+motionPitch)/12.f);
                 if((sampleCounter&15)==0||v.envelope<=layer.attack*1.1f) {
-                    float cutoff=(motion.routed(1)?motion.value(1,v.motionValue):layer.cutoff)*std::exp2(noteCutoff+p[APFilterEnvelope]*v.envelope*4+std::clamp(mod[0],-2.f,2.f)*4+extraCutoff);
+                    float cutoff=(motion.routed(1)?motion.value(1,v.motionValue):layer.cutoff)*std::exp2(noteCutoff+std::clamp(p[APFilterEnvelope]+mod[36],-1.f,1.f)*v.envelope*4+std::clamp(mod[0],-2.f,2.f)*4+extraCutoff);
                     cutoff=std::clamp(cutoff,20.f,std::min(20000.f,float(sampleRate)*.42f));
-                    v.filterG=std::tan(pi*cutoff/float(sampleRate));v.filterK=2-1.85f*p[APResonance];
+                    v.filterG=std::tan(pi*cutoff/float(sampleRate));v.filterK=2-1.85f*std::clamp(p[APResonance]+mod[21],0.f,.9f);
                     if(p[APFilter2Enabled]>.5f){
                         float cutoff2=std::clamp(p[APFilter2Cutoff]*std::exp2(std::clamp(mod[16],-2.f,2.f)*4),30.f,std::min(18000.f,float(sampleRate)*.42f));
                         v.filter2G=std::tan(pi*cutoff2/float(sampleRate));v.filter2K=2-1.85f*std::clamp(p[APFilter2Resonance]+mod[17],0.f,.9f);
@@ -1047,7 +1079,7 @@ struct SynthEngine::Impl {
                 }
                 float g=v.filterG,k=v.filterK,a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2;
                 int unison=std::clamp(int(p[APUnison]),1,8);
-                float width=std::clamp(p[APPulseWidth]+noteLFO[0]*p[APPWMDepth]*.45f,.05f,.95f);
+                float width=std::clamp(p[APPulseWidth]+noteLFO[0]*p[APPWMDepth]*.45f+mod[22],.05f,.95f);
                 v.lastL=v.lastR=0;
                 float positions[2],amounts[2];
                 for(int o=0;o<2;o++){
@@ -1055,16 +1087,22 @@ struct SynthEngine::Impl {
                     amounts[o]=std::clamp((motion.routed(6+o)?motion.value(6+o,v.motionValue):layer.wtAmount[o])+mod[14+o],0.f,1.f);
                     if(frame+1==frames){previewPosition[v.layer*2+o].store(positions[o]);previewAmount[v.layer*2+o].store(amounts[o]);}
                 }
+                float formantMod[2]={std::clamp(p[APWT1Formant]+mod[29],0.f,1.f),std::clamp(p[APWT2Formant]+mod[31],0.f,1.f)};
+                float toneMod[2]={std::clamp(p[APWT1Tone]+mod[30],0.f,1.f),std::clamp(p[APWT2Tone]+mod[32],0.f,1.f)};
                 auto wave=[&](int o,float phase,float step){
-                    return p[APWT1Enabled+o*7]>.5f&&layer.banks[o]?layer.banks[o]->shapedSample(phase,step,positions[o],int(p[APWT1WarpMode+o*7]),amounts[o],p[APWT1Formant+o*2],p[APWT1Tone+o*2]):oscillator(phase,step,int(p[o?APWave2:APWave1]),width);
+                    return p[APWT1Enabled+o*7]>.5f&&layer.banks[o]?layer.banks[o]->shapedSample(phase,step,positions[o],int(p[APWT1WarpMode+o*7]),amounts[o],formantMod[o],toneMod[o]):oscillator(phase,step,int(p[o?APWave2:APWave1]),width);
                 };
                 for(int laneIndex=0;laneIndex<unison;laneIndex++) {
                     auto& lane=v.lanes[laneIndex];
                     float position=unison==1?0.f:2.f*laneIndex/(unison-1)-1;
-                    float step=std::clamp(frequency*layer.unisonRatios[laneIndex]/float(sampleRate),.000001f,.45f);
+                    float uniExtra=std::exp2(position*std::clamp(mod[26],-1.f,1.f)*30.f/1200.f);
+                    float step=std::clamp(frequency*layer.unisonRatios[laneIndex]*uniExtra/float(sampleRate),.000001f,.45f);
                     int oscMode=int(p[APOscModMode]);
                     float oscAmount=std::clamp(p[APOscModAmount]+mod[18],0.f,1.f);
-                    float step2=std::clamp(step*layer.detune*layer.syncRatio*(oscMode?p[APOscModRatio]:1.f),.000001f,.45f);
+                    float detuneExtra=std::exp2(std::clamp(mod[23],-1.f,1.f)*30.f/1200.f);
+                    float syncExtra=std::exp2(std::clamp(mod[28],-1.f,1.f)*36.f/12.f);
+                    float ratio=std::clamp(p[APOscModRatio]*std::exp2(mod[33]),.25f,8.f);
+                    float step2=std::clamp(step*layer.detune*detuneExtra*layer.syncRatio*syncExtra*(oscMode?ratio:1.f),.000001f,.45f);
                     float second=wave(1,lane.phase2,step2)+lane.syncCorrection;
                     // Bound modulation at high notes; classic and wavetable carriers share the same path.
                     float depth=oscAmount*std::clamp((.45f-step)/.25f,0.f,1.f);
@@ -1072,8 +1110,10 @@ struct SynthEngine::Impl {
                     float first=wave(0,phase,std::min(.45f,step+(oscMode==1?step2*depth:0.f)));
                     if(oscMode==3)first=first*(1-depth)+first*second*depth;
                     float input=first*(1-blend)+second*blend;
-                    input+=std::sin(tau*lane.subphase)*p[APSub]*.6f;
-                    if(p[APNoise]>.0001f)input+=randomUnit(random)*p[APNoise]*.3f;
+                    float subLevel=std::clamp(p[APSub]+mod[24],0.f,1.f);
+                    input+=std::sin(tau*lane.subphase)*subLevel*.6f;
+                    float noiseLevel=std::clamp(p[APNoise]+mod[25],0.f,1.f);
+                    if(noiseLevel>.0001f)input+=randomUnit(random)*noiseLevel*.3f;
                     float carrierStep=oscMode==2?std::clamp(step*(1+second*depth*4),-.45f,.45f):step;
                     lane.phase1+=carrierStep;lane.phase2+=step2;if(lane.phase2>=1)lane.phase2-=1;
                     if(lane.phase1<0)lane.phase1+=1;
@@ -1113,12 +1153,15 @@ struct SynthEngine::Impl {
                         float wet=filtered;
                         if(character==4){lane.holdPhase+=p[APCharacterRate];if(lane.holdPhase>=1){lane.holdPhase-=std::floor(lane.holdPhase);float steps=layer.characterSteps;lane.held=std::round(std::clamp(filtered*gain,-1.f,1.f)*steps)/steps;}wet=lane.held;}
                         else {wet=.5f*(shape((lane.previousCharacter+filtered)*.5f)+shape(filtered));lane.previousCharacter=filtered;}
-                        lane.tone+=layer.characterTone*(wet-lane.tone);
-                        filtered+=(lane.tone-filtered)*p[APCharacterMix];
+                        float characterTone=layer.characterTone;
+                        if(mod[35]!=0.f){float t=std::clamp(p[APCharacterTone]+mod[35],0.f,1.f);characterTone=1-std::exp(-tau*std::min(300*std::exp2(t*5.9f),float(sampleRate)*.4f)/float(sampleRate));}
+                        lane.tone+=characterTone*(wet-lane.tone);
+                        filtered+=(lane.tone-filtered)*std::clamp(p[APCharacterMix]+mod[34],0.f,1.f);
                     }
                     float amplitude=motion.routed(0)?motion.value(0,v.motionValue)*v.motionRelease*v.motionFade:v.envelope;
                     float value=filtered*amplitude*v.velocity*source.expression[v.channel]*layer.gain*std::clamp(noteAmp+mod[3]+extraAmp,0.f,2.f)*.16f/unison;
-                    float pan=std::clamp((motion.routed(3)?motion.value(3,v.motionValue):p[APPan])+notePan+mod[2]+extraPan+position*p[APStereoSpread],-1.f,1.f);
+                    float spread=std::clamp(p[APStereoSpread]+mod[27],0.f,1.f);
+                    float pan=std::clamp((motion.routed(3)?motion.value(3,v.motionValue):p[APPan])+notePan+mod[2]+extraPan+position*spread,-1.f,1.f);
                     if(!std::isfinite(value)||!std::isfinite(lane.ic1)||!std::isfinite(lane.ic2)||!std::isfinite(lane.f2ic1)||!std::isfinite(lane.f2ic2)){lane=OscillatorLane{};continue;}
                     v.lastL+=value*std::sqrt(.5f*(1-pan));v.lastR+=value*std::sqrt(.5f*(1+pan));
                 }
@@ -1343,7 +1386,7 @@ struct SynthEngine::Impl {
             maximum=std::max(maximum,std::max(std::abs(left[frame]),std::abs(right[frame])));
         }
         scopePublished.store(scopePosition,std::memory_order_release);
-        for(int i=0;i<30;i++)modulationFeedback[i].store(frameFeedback[i],std::memory_order_relaxed);
+        for(int i=0;i<kFeedbackCount;i++)modulationFeedback[i].store(frameFeedback[i],std::memory_order_relaxed);
         int count=0;unsigned activeLayers=0;for(const auto& v:voices)if(v.active){++count;activeLayers|=1u<<v.layer;}
         previewActiveLayers.store(activeLayers);
         for(int l=0;l<4;l++){
@@ -1408,15 +1451,18 @@ int aurora::SynthEngine::copyScope(float* samples,int capacity) const {
 }
 
 void aurora::SynthEngine::setMatrix(int bank,int slot,bool enabled,int source,int destination,int target,int cc,float amount) {
-    if(bank<0||bank>4||slot<0||slot>=6)return;
-    if(source<0||source>5||destination<0||destination>20||(bank!=4&&destination>5&&destination<12)||target<0||target>4||cc<0||cc>127||!std::isfinite(amount))enabled=false;
+    int slotLimit=bank==4?6:10;
+    if(bank<0||bank>4||slot<0||slot>=slotLimit)return;
+    bool soundBlocked=bank!=4 && ((source<0||source>8) || destination<0 || destination>36 || (destination>7 && destination<12));
+    bool performanceBlocked=bank==4 && (source<0||source>5||destination<0||destination>20);
+    if(soundBlocked||performanceBlocked||target<0||target>4||cc<0||cc>127||!std::isfinite(amount))enabled=false;
     unsigned a=unsigned(int(std::round(std::clamp(std::isfinite(amount)?amount:0.f,-1.f,1.f)*32767))+32768);
-    uint64_t bits=enabled?(1ull|(uint64_t(source)<<1)|(uint64_t(destination)<<4)|(uint64_t(target)<<9)|(uint64_t(cc)<<12)|(uint64_t(a)<<19)):0;
+    uint64_t bits=enabled?(1ull|(uint64_t(source)<<1)|(uint64_t(destination)<<5)|(uint64_t(target)<<11)|(uint64_t(cc)<<14)|(uint64_t(a)<<21)):0;
     impl->matrix[bank][slot].store(bits,std::memory_order_relaxed);
 }
 int aurora::SynthEngine::copyModulation(float* values,int capacity) const {
     if(!values||capacity<=0)return 0;
-    int count=std::min(capacity,30);
+    int count=std::min(capacity,46);
     for(int i=0;i<count;i++)values[i]=impl->modulationFeedback[i].load(std::memory_order_relaxed);
     return count;
 }

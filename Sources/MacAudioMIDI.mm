@@ -533,7 +533,7 @@ void aurora_note_off(int note) { if (state().running) state().engine.midi(0, 0x8
 void aurora_panic() { state().engine.panic(); }
 int aurora_copy_modulation(float *values,int capacity) {
     if(!values||capacity<=0)return 0;
-    if(!state().running){int count=std::min(capacity,30);std::fill_n(values,count,0.f);return count;}
+    if(!state().running){int count=std::min(capacity,46);std::fill_n(values,count,0.f);return count;}
     return state().engine.copyModulation(values,capacity);
 }
 int aurora_copy_scope(float *samples,int capacity) {

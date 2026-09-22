@@ -1,5 +1,13 @@
 # Aurora
 
+## Aurora 0.23 · five-LFO modulation
+
+Aurora 0.23 adds LFO 3, LFO 4, and LFO 5 on every layer. Each has Depth and routes only from the Sound Matrix. LFO 1 and LFO 2 keep their own Destination and Depth. The Sound Matrix grows from 6 to 10 slots and adds the new continuous destinations, including wavetable formant, character, pulse width, and filter envelope. Existing parameter IDs and factory banks are unchanged. A six-slot matrix still loads.
+
+Shimmer send can be bypassed per layer inside the patch. All Patches keeps the last category, search, and scroll row for the session, and its master slider sits between the search field and the patch arrows.
+
+Release notes are also tracked in [CHANGELOG.md](CHANGELOG.md).
+
 ## Aurora 0.22 · release hardening and v1 regression baseline
 
 Aurora 0.22 consolidates the current v1 architecture after the 0.21.6 Shimmer-send release. Production fixes since 0.21.6 include safer plug-in parameter IDs for Layer D sends, routing/MIDI state preservation across prepare, revision-3 output-gain migration, and deferred patch-state preservation.

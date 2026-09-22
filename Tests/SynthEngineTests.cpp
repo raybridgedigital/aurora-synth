@@ -210,6 +210,37 @@ void lfoTwoShapes() {
     }
     std::puts("PASS: all five LFO 2 waveforms produce distinct modulation and release correctly");
 }
+void matrixLFOs() {
+    auto take=[&](bool route, float depth, float hz) {
+        SynthEngine e;dry(e);
+        e.setParameter(0,APLFODepth,0);e.setParameter(0,APLFO2Depth,0);
+        e.setParameter(0,APLFO3Shape,2);e.setParameter(0,APLFO3Rate,hz);e.setParameter(0,APLFO3Depth,depth);
+        e.setParameter(0,APLFO5Shape,2);e.setParameter(0,APLFO5Rate,hz);e.setParameter(0,APLFO5Depth,1);
+        if(route)e.setMatrix(0,7,true,6,1,4,1,1.f);
+        note(e,0,60);
+        std::vector<float> left(rate), right(rate);
+        e.render(left.data(),right.data(),rate);
+        for(float sample:left)assert(std::isfinite(sample));
+        return left;
+    };
+    auto plain=take(false,1,8);
+    auto full=take(true,1,8);
+    auto quiet=take(true,0,8);
+    double moved=0,scaled=0;
+    for(int i=rate/4;i<rate;i++){moved+=std::abs(full[i]-plain[i]);scaled+=std::abs(quiet[i]-plain[i]);}
+    assert(moved>1);
+    assert(scaled<1e-4);
+    SynthEngine fast,slow;dry(fast);dry(slow);
+    for(SynthEngine* e:{&fast,&slow}){e->setParameter(0,APLFODepth,0);e->setParameter(0,APLFO2Depth,0);e->setParameter(0,APLFO5Depth,1);e->setParameter(0,APLFO5Shape,2);e->setMatrix(0,9,true,8,3,4,1,1.f);}
+    fast.setParameter(0,APLFO5Rate,12);slow.setParameter(0,APLFO5Rate,.4f);
+    note(fast,0,60);note(slow,0,60);
+    std::vector<float> a(rate),b(rate),ar(rate),br(rate);
+    fast.render(a.data(),ar.data(),rate);slow.render(b.data(),br.data(),rate);
+    double fifth=0;for(int i=rate/4;i<rate;i++)fifth+=std::abs(a[i]-b[i]);
+    assert(fifth>1);
+    assert(fast.getParameter(0,APLFO3Depth)==1);
+    std::puts("PASS: LFO 3–5 are Matrix-only, Depth scales them, and LFO 5 does not alias to LFO 1");
+}
 std::vector<float> matrixAudio(int bank,int source,int destination,int target=4,bool enabled=true,float amount=.65f,int controllerChannel=0) {
     SynthEngine e;dry(e);e.setParameter(0,APAttack,.01f);e.setParameter(0,APCutoff,1700);
     e.setParameter(0,APLFORate,4);e.setParameter(0,APLFO2Rate,7);
@@ -268,11 +299,11 @@ void oscillatorCharacter() {
 void modulationFeedback() {
     SynthEngine e;dry(e);e.setMatrix(0,5,true,2,0,4,1,.5f);e.setMatrix(4,3,true,0,2,0,1,-.75f);
     cc(e,0,1,127);note(e,0,60);render(e);
-    std::array<float,30> feedback{};assert(e.copyModulation(feedback.data(),30)==30);assert(e.copyModulation(nullptr,30)==0);
-    assert(feedback[5]>0 && feedback[5]<=.501f);assert(std::abs(feedback[27]+.75f)<.001f);
-    for(int i=0;i<30;i++)if(i!=5&&i!=27)assert(feedback[i]==0);
-    e.setMatrix(4,3,false,0,2,0,1,-.75f);render(e);e.copyModulation(feedback.data(),30);assert(feedback[27]==0);
-    (void)drainPanic(e);e.copyModulation(feedback.data(),30);for(float x:feedback)assert(x==0);
+    std::array<float,46> feedback{};assert(e.copyModulation(feedback.data(),46)==46);assert(e.copyModulation(nullptr,46)==0);
+    assert(feedback[5]>0 && feedback[5]<=.501f);assert(std::abs(feedback[43]+.75f)<.001f);
+    for(int i=0;i<46;i++)if(i!=5&&i!=43)assert(feedback[i]==0);
+    e.setMatrix(4,3,false,0,2,0,1,-.75f);render(e);e.copyModulation(feedback.data(),46);assert(feedback[43]==0);
+    (void)drainPanic(e);e.copyModulation(feedback.data(),46);for(float x:feedback)assert(x==0);
     std::puts("PASS: signed modulation feedback preserves sparse route slots, bypasses and clears on panic");
 }
 void expressivePlaying() {
@@ -344,4 +375,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

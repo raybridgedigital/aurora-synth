@@ -116,7 +116,7 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
     for (int layer = 0; layer < 4; ++layer) {
         id entry = layers[layer];
         id values = [entry isKindOfClass:[NSDictionary class]] ? entry[@"values"] : nil;
-        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 58 && [values count] != 33)) {
+        if (![values isKindOfClass:[NSDictionary class]] || ([values count] != APParameterCount && [values count] != 99 && [values count] != 58 && [values count] != 33)) {
             [errors addObject:[NSString stringWithFormat:@"Layer %d must contain all %d parameter values", layer, APParameterCount]];
             continue;
         }

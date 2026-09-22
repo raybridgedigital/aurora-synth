@@ -62,6 +62,38 @@ private func same(_ a:SoundPreset,_ b:SoundPreset)->Bool {
         model.patch=edit;model.applyPatch();let before=model.patch.layers[0][7];model.checkpoint();model.set(0,7,6400);let after=model.patch.layers[0][7]
         check(after != before,"edit failed");model.undo();near(model.patch.layers[0][7],before,"undo");model.redo();near(model.patch.layers[0][7],after,"redo")
 
+        check(SynthModel.ranges.count==126,"layer parameter ranges did not grow with LFO 3-5")
+        near(model.patch.layers[0][101],1,"LFO 3 depth default")
+        near(model.patch.layers[0][110],1,"LFO 4 depth default")
+        near(model.patch.layers[0][119],1,"LFO 5 depth default")
+        var legacy=FactoryBank.make("baseline-lfo","Legacy Matrix","Templates","Six-slot fixture",a:[:])
+        var six=Array(repeating:Array(repeating:MatrixAssignment(),count:6),count:4)
+        six[1][2]=MatrixAssignment(enabled:true,source:8,destination:29,target:4,cc:1,amount:0.4)
+        legacy.soundMatrix=six
+        guard let padded=SynthModel.sanitized(legacy) else {fail("legacy six-slot matrix rejected")}
+        check(padded.soundMatrix?[1].count==10,"legacy matrix did not pad to ten slots")
+        check(padded.soundMatrix?[1][2].source==8 && padded.soundMatrix?[1][2].destination==29,"LFO 5 formant route was dropped")
+        check(padded.soundMatrix?[1][9].enabled==false,"padded matrix slot was not empty")
+        var blocked=legacy
+        blocked.soundMatrix?[0][0]=MatrixAssignment(enabled:true,source:6,destination:9,target:4,cc:1,amount:0.5)
+        check(SynthModel.sanitized(blocked)==nil,"sound matrix accepted a shared-FX destination")
+        let oldSend=try! dec.decode(LayerSends.self,from:Data("{\"delay\":0.2,\"reverb\":0.4,\"shimmer\":0.3}".utf8))
+        check(!oldSend.shimmerBypass,"missing shimmer bypass did not stay off")
+        let storedBypass=try! dec.decode(LayerSends.self,from:enc.encode(LayerSends(shimmerBypass:true)))
+        check(storedBypass.shimmerBypass,"shimmer bypass did not round-trip")
+        model.selectedLayer=2
+        model.setShimmerBypass(true)
+        check(model.patch.sends?[2].shimmerBypass==true,"layer bypass was not stored on the patch")
+        check(model.patch.sends?[0].shimmerBypass != true,"layer bypass leaked onto another layer")
+        model.selectedLayer=0
+        check(model.matrixRows(performance:false).count==10,"sound matrix row count")
+        check(model.matrixRows(performance:true).count==6,"performance matrix row count")
+        model.updateMatrix(performance:false,slot:9){$0.enabled=true;$0.source=6;$0.destination=36;$0.amount=0.25}
+        check(model.soundRows(0)[9].source==6 && model.soundRows(0)[9].destination==36,"slot 10 did not store LFO 3 to filter envelope")
+        check(model.modulationSlots(destination:36,layer:0)==[9],"sound feedback index")
+        model.updateMatrix(performance:true,slot:6){$0.enabled=true;$0.destination=1}
+        check(model.matrixRows(performance:true).allSatisfy{!$0.enabled},"performance matrix accepted a seventh slot")
+
         print("PASS baseline: Aurora v1 model/preset/UI contract")
     }
 }

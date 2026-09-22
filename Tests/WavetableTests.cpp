@@ -69,7 +69,7 @@ int main(){
     engine.setMatrix(0,0,true,0,12,0,1,.6f);engine.setMatrix(4,0,true,0,15,0,1,.5f);engine.midi(1,0xb0,1,127);engine.midi(1,0x90,60,100);
     std::array<float,256> left{},right{};float peak=0;
     for(int block=0;block<200;block++){engine.render(left.data(),right.data(),256);for(float x:left){assert(std::isfinite(x)&&std::abs(x)<=1);peak=std::max(peak,std::abs(x));}}
-    assert(peak>.001f);std::array<float,30> feedback{};engine.copyModulation(feedback.data(),30);assert(std::abs(feedback[0])>.01f&&feedback[24]>.49f);
+    assert(peak>.001f);std::array<float,46> feedback{};engine.copyModulation(feedback.data(),46);assert(std::abs(feedback[0])>.01f&&feedback[40]>.49f);
     for(int table=0;table<24;table++){
         engine.setParameter(0,APWT1Table,table);engine.setParameter(0,APWT2Table,23-table);
         engine.render(left.data(),right.data(),256);
@@ -77,7 +77,7 @@ int main(){
         for(int i=0;i<256;i++)assert(std::isfinite(left[i])&&std::isfinite(right[i])&&std::abs(left[i])<=1&&std::abs(right[i])<=1);
     }
     puts("PASS: all 24 tables can switch on both oscillators while retaining a held note and bounded output.");
-    engine.setMatrix(4,0,true,0,15,2,1,.5f);engine.render(left.data(),right.data(),256);engine.copyModulation(feedback.data(),30);assert(feedback[24]==0);
+    engine.setMatrix(4,0,true,0,15,2,1,.5f);engine.render(left.data(),right.data(),256);engine.copyModulation(feedback.data(),46);assert(feedback[40]==0);
     engine.setParameter(1,APWT1Position,.8f);engine.setParameter(1,APWT1Table,2);
     std::array<float,128> preview{};engine.copyWavetablePreview(1,0,preview.data(),128);
     for(int i=0;i<128;i++)assert(std::abs(preview[i]-banks[2]->sample(i/127.f,.0001f,.8f,0,0))<.00001f);

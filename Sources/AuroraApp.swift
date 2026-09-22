@@ -86,7 +86,7 @@ struct LayerPatch: Codable, Equatable {
         get { values[id] ?? Self.extensionDefaults[id] ?? (id==34 ? 0.5 : id==36 ? 1 : id==37 ? 8 : id==38 ? 0.6 : id==43 ? 2 : 0) }
         set { values[id] = newValue }
     }
-    static let extensionDefaults:[Int:Double]=[60:3200,63:0.5,64:0.01,65:0.35,67:0.35,72:1,74:0.25,75:1,76:0.5,77:12,78:1,82:4,88:4]
+    static let extensionDefaults:[Int:Double]=[60:3200,63:0.5,64:0.01,65:0.35,67:0.35,72:1,74:0.25,75:1,76:0.5,77:12,78:1,82:4,88:4,100:1,101:1,103:4,109:1,110:1,112:4,118:1,119:1,121:4]
     static var initial: LayerPatch {
         LayerPatch(values: [0:1,1:2,2:1,3:0.35,4:7,5:0.12,6:0,
             7:2600,8:0.15,9:0.025,10:0.35,11:0.75,12:0.7,13:0.65,
@@ -100,15 +100,17 @@ struct LayerSends:Codable,Equatable {
     var delay=1.0
     var reverb=1.0
     var shimmer=1.0
+    var shimmerBypass=false
     var valid:Bool{delay.isFinite && reverb.isFinite && shimmer.isFinite && (0...1).contains(delay) && (0...1).contains(reverb) && (0...1).contains(shimmer)}
-    enum CodingKeys:String,CodingKey{case delay,reverb,shimmer}
-    init(delay:Double=1,reverb:Double=1,shimmer:Double=1){self.delay=delay;self.reverb=reverb;self.shimmer=shimmer}
+    enum CodingKeys:String,CodingKey{case delay,reverb,shimmer,shimmerBypass}
+    init(delay:Double=1,reverb:Double=1,shimmer:Double=1,shimmerBypass:Bool=false){self.delay=delay;self.reverb=reverb;self.shimmer=shimmer;self.shimmerBypass=shimmerBypass}
     init(from decoder:Decoder) throws {
         let c=try decoder.container(keyedBy:CodingKeys.self)
         delay=try c.decodeIfPresent(Double.self,forKey:.delay) ?? 1
         reverb=try c.decodeIfPresent(Double.self,forKey:.reverb) ?? 1
         // Migration: missing shimmer key → copy reverb
         shimmer=try c.decodeIfPresent(Double.self,forKey:.shimmer) ?? reverb
+        shimmerBypass=try c.decodeIfPresent(Bool.self,forKey:.shimmerBypass) ?? false
     }
 }
 struct LayerClipboard {
@@ -125,9 +127,12 @@ struct MatrixAssignment:Codable,Equatable {
     var target=4
     var cc=1
     var amount=0.0
-    static let empty=Array(repeating:MatrixAssignment(),count:6)
+    static let soundEmpty=Array(repeating:MatrixAssignment(),count:10)
+    static let performanceEmpty=Array(repeating:MatrixAssignment(),count:6)
     func valid(performance:Bool)->Bool {
-        (0...5).contains(source) && (performance ? (0...20).contains(destination):((0...5).contains(destination)||(12...20).contains(destination))) && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
+        let sourceOK=performance ? (0...5).contains(source):(0...8).contains(source)
+        let destinationOK=performance ? (0...20).contains(destination):((0...7).contains(destination)||(12...36).contains(destination))
+        return sourceOK && destinationOK && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
     }
 }
 struct SoundPreset: Identifiable, Codable {
@@ -380,9 +385,9 @@ struct OutputScope:View {
 }
 @MainActor final class ModulationTelemetry:ObservableObject {
     var backend=AuroraBackend()
-    @Published private(set) var values=Array(repeating:Float(0),count:30)
+    @Published private(set) var values=Array(repeating:Float(0),count:46)
     func update() {
-        var next=Array(repeating:Float(0),count:30)
+        var next=Array(repeating:Float(0),count:46)
         _=next.withUnsafeMutableBufferPointer{backend.aurora_copy_modulation($0.baseAddress,Int32($0.count))}
         next=next.map{($0*100).rounded()/100}
         if next != values{values=next}
@@ -469,6 +474,9 @@ struct VoiceStatus:View {
     @Published var selectedLayer = 0
     @Published var screen = "Play"
     @Published var search = ""
+    @Published var patchBrowserCategory:String?=nil
+    @Published var patchBrowserUserOnly=false
+    @Published var patchBrowserRow=0
     @Published var collection = "Aurora"
     @Published var category = "All categories"
     @Published var outputGain=9.0
@@ -561,14 +569,14 @@ struct VoiceStatus:View {
     func toggleSolo(_ layer:Int){soloLayer=soloLayer==layer ? -1:layer;backend.aurora_solo_layer(Int32(soloLayer))}
     func copyLayer(_ layer:Int){
         let waves=Dictionary(uniqueKeysWithValues:(0..<2).compactMap{o -> (Int,ImportedWavetable)? in guard let wave=patch.importedWavetables?[layer*2+o] else{return nil};return (o,wave)})
-        layerClipboard=LayerClipboard(layer:patch.layers[layer],matrix:patch.soundMatrix?[layer] ?? MatrixAssignment.empty,motion:patch.motion?[layer] ?? MotionSettings(),sends:patch.sends?[layer] ?? LayerSends(),waves:waves)
+        layerClipboard=LayerClipboard(layer:patch.layers[layer],matrix:patch.soundMatrix?[layer] ?? MatrixAssignment.soundEmpty,motion:patch.motion?[layer] ?? MotionSettings(),sends:patch.sends?[layer] ?? LayerSends(),waves:waves)
         notice="Copied layer \(layerLetters[layer]), including modulation, sends and imported waves."
     }
     func pasteLayer(_ layer:Int, panic:Bool = true){
         guard let copied=layerClipboard else{return};checkpoint()
         if panic { backend.aurora_panic();pressed=[];holding=false }
         patch.layers[layer]=copied.layer
-        var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.empty,count:4);matrix[layer]=copied.matrix;patch.soundMatrix=matrix
+        var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.soundEmpty,count:4);matrix[layer]=copied.matrix;patch.soundMatrix=matrix
         var motion=patch.motion ?? Array(repeating:MotionSettings(),count:4);motion[layer]=copied.motion;patch.motion=motion
         var sends=patch.sends ?? Array(repeating:LayerSends(),count:4);sends[layer]=copied.sends;patch.sends=sends
         var waves=patch.importedWavetables ?? [:];for o in 0..<2{waves[layer*2+o]=copied.waves[o]};patch.importedWavetables=waves.isEmpty ? nil:waves
@@ -582,7 +590,16 @@ struct VoiceStatus:View {
     })}
     /// Compatibility for older call sites / InterfaceChecks
     func sendBinding(_ delay:Bool)->Binding<Double>{sendBinding(delay ? .delay:.reverb)}
-    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();backend.aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb),Float(sends.shimmer))}}
+    func applySends(){for l in 0..<4{let sends=patch.sends?[l] ?? LayerSends();backend.aurora_layer_sends(Int32(l),Float(sends.delay),Float(sends.reverb),Float(sends.shimmerBypass ? 0:sends.shimmer))}}
+    func setShimmerBypass(_ bypassed:Bool){
+        checkpoint()
+        finishComparison()
+        var sends=patch.sends ?? Array(repeating:LayerSends(),count:4)
+        sends[selectedLayer].shimmerBypass=bypassed
+        patch.sends=sends
+        applySends()
+        dirty=true
+    }
     @Published var wavetableMessage=""
     private var appliedWavetables:[Int:ImportedWavetable]=[:]
     func hasCustomWavetable(oscillator:Int)->Bool{patch.importedWavetables?[selectedLayer*2+oscillator] != nil}
@@ -724,20 +741,32 @@ struct VoiceStatus:View {
     private var outputUID: String?
     private var undoPatches: [SoundPreset] = []
     private var redoPatches: [SoundPreset] = []
-    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4]
-    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98]
+    static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8]
+    private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98,99,102,103,104,108,111,112,113,117,120,121,122]
     static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
         guard (input.phaserMix ?? 0).isFinite else{return nil}
-        if let matrix=input.soundMatrix {guard matrix.count==4,matrix.allSatisfy({$0.count==6 && $0.allSatisfy{$0.valid(performance:false)}}) else{return nil}}
+        var paddedSound:[[MatrixAssignment]]?
+        if let matrix=input.soundMatrix {
+            guard matrix.count==4 else{return nil}
+            var padded:[[MatrixAssignment]]=[]
+            for layer in matrix {
+                var rows=layer
+                if rows.count==6 {rows.append(contentsOf:Array(repeating:MatrixAssignment(),count:4))}
+                guard rows.count==10, rows.allSatisfy({$0.valid(performance:false)}) else{return nil}
+                padded.append(rows)
+            }
+            paddedSound=padded
+        }
         if let motion=input.motion{guard motion.count==4,motion.allSatisfy(\.valid) else{return nil}}
         if let sends=input.sends{guard sends.count==4,sends.allSatisfy(\.valid) else{return nil}}
         if let matrix=input.performanceMatrix {guard matrix.count==6,matrix.allSatisfy({$0.valid(performance:true)}) else{return nil}}
         if let macros=input.customMacros{guard macros.count<=8,macros.allSatisfy({(0..<8).contains($0.key) && $0.value.valid}) else{return nil}}
         if let xy=input.xy{guard xy.valid else{return nil}}
         var result=input
+        if let paddedSound {result.soundMatrix=paddedSound}
         if let tables=input.importedWavetables{guard tables.count<=8,tables.allSatisfy({(0..<8).contains($0.key)&&$0.value.valid}) else{return nil}}
         for slot in 0..<8 where input.layers[slot/2][45+(slot%2)*7]==24 {
             guard input.importedWavetables?[slot] != nil else{return nil}
@@ -860,33 +889,38 @@ struct VoiceStatus:View {
         for i in 0..<4 {for p in 0..<Self.ranges.count {backend.aurora_set_parameter(Int32(i),Int32(p),Float(patch.layers[i][p]))}}
         for (p,v) in patch.globals.enumerated() { backend.aurora_set_global(Int32(p),Float(v)) }
     }
+    func soundRows(_ layer:Int)->[MatrixAssignment] {
+        var rows=patch.soundMatrix?[layer] ?? MatrixAssignment.soundEmpty
+        if rows.count==6 {rows.append(contentsOf:Array(repeating:MatrixAssignment(),count:4))}
+        return rows.count==10 ? rows : MatrixAssignment.soundEmpty
+    }
     func matrixRows(performance:Bool)->[MatrixAssignment] {
-        performance ? (patch.performanceMatrix ?? MatrixAssignment.empty):(patch.soundMatrix?[selectedLayer] ?? MatrixAssignment.empty)
+        performance ? (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty):soundRows(selectedLayer)
     }
     func modulationSlots(destination:Int,layer:Int?=nil)->[Int] {
         let layer=layer ?? selectedLayer
         var slots:[Int]=[]
-        if destination<6 || destination>=12 {
-            for (i,row) in (patch.soundMatrix?[layer] ?? MatrixAssignment.empty).enumerated() where row.enabled && row.destination==destination {slots.append(layer*6+i)}
+        if destination<8 || destination>=12 {
+            for (i,row) in soundRows(layer).enumerated() where row.enabled && row.destination==destination {slots.append(layer*10+i)}
         }
-        for (i,row) in (patch.performanceMatrix ?? MatrixAssignment.empty).enumerated() where row.enabled && row.destination==destination && ((8...11).contains(destination) || row.target==4 || row.target==layer){slots.append(24+i)}
+        for (i,row) in (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty).enumerated() where row.enabled && row.destination==destination && ((8...11).contains(destination) || row.target==4 || row.target==layer){slots.append(40+i)}
         return slots
     }
     func updateMatrix(performance:Bool,slot:Int,change:(inout MatrixAssignment)->Void) {
         finishComparison()
-        guard (0..<6).contains(slot) else{return}
+        guard (0..<(performance ? 6:10)).contains(slot) else{return}
         var rows=matrixRows(performance:performance);change(&rows[slot])
         if performance && (8...11).contains(rows[slot].destination){rows[slot].target=4}
         guard rows[slot].valid(performance:performance) else{return}
         if performance{patch.performanceMatrix=rows}else{
-            var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.empty,count:4)
+            var matrix=patch.soundMatrix ?? Array(repeating:MatrixAssignment.soundEmpty,count:4)
             matrix[selectedLayer]=rows;patch.soundMatrix=matrix
         }
         applyMatrix();dirty=true
     }
     func applyMatrix() {
         for bank in 0..<5 {
-            let rows=bank==4 ? (patch.performanceMatrix ?? MatrixAssignment.empty):(patch.soundMatrix?[bank] ?? MatrixAssignment.empty)
+            let rows=bank==4 ? (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty):soundRows(bank)
             for (slot,row) in rows.enumerated(){backend.aurora_set_matrix(Int32(bank),Int32(slot),row.enabled ? 1:0,Int32(row.source),Int32(row.destination),Int32(row.target),Int32(row.cc),Float(row.amount))}
         }
     }
@@ -1470,7 +1504,7 @@ struct EditorView:View {
         ParameterSlider(title:label,value:m.parameter(p),range:range,logarithmic:log,format:format,onBegin:{m.checkpoint()})
             .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:m.selectedLayer,parameter:p)))
             .overlay(alignment:.bottom){
-                if let destination=[7:0,15:1,14:2,13:3,3:4,21:5,17:6,30:7,60:16,61:17,71:18,74:19,63:20][p] {
+                if let destination=[7:0,15:1,14:2,13:3,3:4,21:5,17:6,30:7,60:16,61:17,71:18,74:19,63:20,8:21,34:22,4:23,5:24,6:25,37:26,38:27,40:28,93:29,94:30,95:31,96:32,72:33,75:34,76:35,20:36][p] {
                     let slots=m.modulationSlots(destination:destination)
                     if !slots.isEmpty{ModulationIndicator(telemetry:m.modulation,slots:slots).offset(y:3)}
                 }
@@ -1490,6 +1524,23 @@ struct EditorView:View {
             DisclosureGroup("Phase · delay · fade"){
                 slider("Phase",base+3,format:{String(format:"%.0f°",$0*360)})
                 HStack{slider("Delay",base+4,0...8,format:timeText);slider("Fade in",base+5,0...8,format:timeText)}
+            }.font(.system(size:13))
+        }
+    }
+    func matrixLFOPanel(_ index:Int)->some View {
+        let base=99+index*9
+        return Panel(title:"LFO \(index+3) · movement"){
+            optionButtons("Shape",base,["Sine","Triangle","Saw","Square","Random"])
+            Text("Select destination on the Matrix").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+            optionButtons("Clock",base+3,["Hz","Tempo"])
+            if m.patch.layers[m.selectedLayer][base+3] > 0.5 {
+                slider("Division",base+4,0...9,format:{["4 bars","2 bars","1 bar","1/2","1/4","1/8","1/16","1/32","1/8 dotted","1/8 triplet"][max(0,min(9,Int($0.rounded())))]})
+            } else {slider("Rate",base+1,0.03...20,log:true,format:{String(format:"%.2f Hz",$0)})}
+            slider("Depth",base+2)
+            optionButtons("Mode",base+5,["Free-run","Retrigger"])
+            DisclosureGroup("Phase · delay · fade"){
+                slider("Phase",base+6,format:{String(format:"%.0f°",$0*360)})
+                HStack{slider("Delay",base+7,0...8,format:timeText);slider("Fade in",base+8,0...8,format:timeText)}
             }.font(.system(size:13))
         }
     }
@@ -1526,6 +1577,11 @@ struct EditorView:View {
                     slider("High key",28,0...127,format:{"MIDI \(Int($0))"})
                     slider("Pan",14,-1...1,format:{$0 == 0 ? "Center":String(format:"%.0f%% %@",abs($0)*100,$0<0 ? "L":"R")})
                 }
+                }
+                EqualHeightRow(spacing:16){
+                    matrixLFOPanel(0)
+                    matrixLFOPanel(1)
+                    matrixLFOPanel(2)
                 }
             }
             EqualHeightRow(spacing:16){
@@ -1721,9 +1777,20 @@ struct ArpEffectsView:View {
                             control("Late level",35)
                             control("Late decay",36,0.2...12,{String(format:"%.1f s",$0)})
                         }
-                        ParameterSlider(title:"Shimmer send",value:m.sendBinding(.shimmer),onBegin:{m.checkpoint()})
-                        Text("Layer send into shared shimmer return.")
-                            .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                        HStack(alignment:.center,spacing:12){
+                            VStack(alignment:.leading,spacing:4){
+                                ParameterSlider(title:"Shimmer send",value:m.sendBinding(.shimmer),onBegin:{m.checkpoint()})
+                                Text("Layer send into shared shimmer return.")
+                                    .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                            }.frame(maxWidth:.infinity,alignment:.leading)
+                            Button{m.setShimmerBypass(!(m.patch.sends?[m.selectedLayer].shimmerBypass ?? false))}label:{
+                                Text("Bypass").frame(maxWidth:.infinity)
+                            }
+                            .buttonStyle(AuroraButtonStyle(selected:m.patch.sends?[m.selectedLayer].shimmerBypass ?? false))
+                            .frame(maxWidth:.infinity)
+                            .accessibilityLabel("Bypass shimmer for this layer")
+                            .help("This layer does not feed Shimmer. The send level stays stored in the patch.")
+                        }
                         Text("Pitch-shifted multi-voice diffusion · +5 / +7 / +12 relative to Pitch.")
                             .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     }
@@ -1774,17 +1841,17 @@ struct ArpEffectsView:View {
 struct MatrixView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    private let soundSources=["LFO 1","LFO 2","Amp envelope","Mod envelope","Key tracking","Per-note random"]
+    private let soundSources:[(id:Int,name:String)]=[(0,"LFO 1"),(1,"LFO 2"),(6,"LFO 3"),(7,"LFO 4"),(8,"LFO 5"),(2,"Amp envelope"),(3,"Mod envelope"),(4,"Key tracking"),(5,"Per-note random")]
     private let performanceSources=["Mod wheel","Velocity","Channel pressure","Expression","Sustain","MIDI CC"]
-    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance"]
+    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance","Filter 1 resonance","Pulse width","Detune","Sub level","Noise level","Unison detune","Stereo spread","Sync tune","WT 1 formant","WT 1 tone","WT 2 formant","WT 2 tone","Osc mod ratio","Character mix","Character tone","Filter envelope"]
     func binding<T>(_ performance:Bool,_ slot:Int,_ key:WritableKeyPath<MatrixAssignment,T>)->Binding<T> {
         Binding(get:{m.matrixRows(performance:performance)[slot][keyPath:key]},set:{value in m.checkpoint();m.updateMatrix(performance:performance,slot:slot){$0[keyPath:key]=value}})
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16){
             Panel(title:"Sound Matrix · layer \(layerLetters[m.selectedLayer])"){
-                Text("Route either LFO, Amp envelope or Mod envelope to a sound control. Routes add to Edit settings; Mod envelope is independent of its direct Amount.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-                ForEach(0..<6){row in routeRow(false,row)}
+                Text("Route an LFO or envelope to a sound control. LFO 3, 4 and 5 get their destination here. LFO 1 and 2 also keep the destination on their own panels. Depth on LFO 3–5 scales every Matrix route from that LFO.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                ForEach(0..<10){row in routeRow(false,row)}
             }
             Panel(title:"Performance Matrix · this patch"){
                 Text("Use your wheels, playing dynamics, pedals, or any MIDI CC. Layer routes follow each note’s keyboard and channel. Shared FX follow the latest received source value across keyboards.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
@@ -1799,14 +1866,18 @@ struct MatrixView:View {
             Toggle("Slot \(slot+1)",isOn:binding(performance,slot,\.enabled)).labelsHidden().toggleStyle(.checkbox).accessibilityLabel("\(performance ? "Performance":"Sound") slot \(slot+1) enabled")
             Text("\(slot+1)").foregroundStyle(palette.muted).frame(width:14)
             Picker("Source",selection:binding(performance,slot,\.source)){
-                ForEach(Array((performance ? performanceSources:soundSources).enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                if performance {
+                    ForEach(Array(performanceSources.enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                } else {
+                    ForEach(soundSources,id:\.id){item in Text(item.name).tag(item.id)}
+                }
             }.labelsHidden().frame(width:performance ? 150:140).accessibilityLabel("Slot \(slot+1) source")
             if performance && row.source==5 {
                 HStack(spacing:3){Text("CC").foregroundStyle(palette.muted);TextField("CC number",value:binding(performance,slot,\.cc),format:.number).textFieldStyle(.roundedBorder).frame(width:36)}.frame(width:65)
             } else if performance {Color.clear.frame(width:65,height:1)}
             Image(systemName:"arrow.right").foregroundStyle(palette.muted)
             Picker("Destination",selection:binding(performance,slot,\.destination)){
-                ForEach(performance ? Array(0..<destinations.count):Array(0..<6)+Array(12..<destinations.count),id:\.self){i in Text(destinations[i]).tag(i)}
+                ForEach(performance ? Array(0..<21):Array(0..<8)+Array(12..<destinations.count),id:\.self){i in Text(destinations[i]).tag(i)}
             }.labelsHidden().frame(width:150).accessibilityLabel("Slot \(slot+1) destination")
             if performance {
                 if (8...11).contains(row.destination){Text("Whole patch").foregroundStyle(palette.accent).frame(width:100)}else{
@@ -1816,7 +1887,7 @@ struct MatrixView:View {
             Slider(value:Binding(get:{m.matrixRows(performance:performance)[slot].amount},set:{value in m.updateMatrix(performance:performance,slot:slot){$0.amount=value}}),in:-1...1,onEditingChanged:{if $0{m.checkpoint()}}).tint(palette.accent).frame(minWidth:70).accessibilityLabel("Slot \(slot+1) amount")
             VStack(spacing:3){
                 Text(String(format:"%+.0f%%",row.amount*100)).monospacedDigit()
-                ModulationIndicator(telemetry:m.modulation,slots:[(performance ? 24:m.selectedLayer*6)+slot])
+                ModulationIndicator(telemetry:m.modulation,slots:[(performance ? 40:m.selectedLayer*10)+slot])
             }.frame(width:58,alignment:.trailing)
             Button{m.checkpoint();m.updateMatrix(performance:performance,slot:slot){$0=MatrixAssignment()}}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(AuroraIconButtonStyle()).help("Reset slot \(slot+1)")
         }.font(.system(size:14,weight:palette.weight(.regular))).padding(.vertical,5).opacity(row.enabled ? 1:0.65)
@@ -2048,6 +2119,8 @@ struct SetPadButton: View {
     @Published var visible=false
     @Published var category:String?=nil
     @Published var userSavedOnly=false
+    @Published var headerWidth:CGFloat=0
+    @Published var trailingWidth:CGFloat=0
 }
 struct UserPatchBadge:View {
     @Environment(\.auroraPalette) private var palette
@@ -2113,21 +2186,40 @@ struct PatchBrowserCard:View {
         }
     }
 }
+private struct PatchRowKey:PreferenceKey {
+    static var defaultValue:[Int:CGFloat]=[:]
+    static func reduce(value:inout [Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{$1})}
+}
 struct PatchBrowser:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
     let close:()->Void
     @StateObject private var state=PatchBrowserState()
-    var category:String?{get{state.category} nonmutating set{state.category=newValue}}
+    var category:String?{get{m.patchBrowserCategory} nonmutating set{m.patchBrowserCategory=newValue}}
     var sounds:[SoundPreset]{
         let query=m.search.trimmingCharacters(in:.whitespacesAndNewlines)
-        return (state.userSavedOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
+        return (m.patchBrowserUserOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
             (category==nil || $0.category==category) &&
             (!m.favoritesOnly || m.favorites.contains($0.id)) &&
             (query.isEmpty || ($0.name+" "+$0.category+" "+$0.detail).localizedCaseInsensitiveContains(query))
         }.sorted{
             let order=$0.name.localizedStandardCompare($1.name)
             return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
+        }
+    }
+    @ViewBuilder private var browserMaster:some View {
+        let searchRight=state.headerWidth/2+160
+        let gap=state.headerWidth-state.trailingWidth-searchRight
+        let width=min(300,gap-12)
+        if state.headerWidth>0, state.trailingWidth>0, width>=140 {
+            HStack(spacing:6){
+                Text("Master").foregroundStyle(palette.muted)
+                Slider(value:m.globalBinding(0),in:0...1).tint(palette.accent).accessibilityLabel("Master volume")
+                Text(String(format:"%.0f%%",m.patch.globals[0]*100)).frame(width:40).monospacedDigit()
+            }
+            .font(.system(size:14,weight:palette.weight(.regular)))
+            .frame(width:width,height:36)
+            .offset(x:(searchRight+gap/2)-state.headerWidth/2)
         }
     }
     func step(_ delta:Int){
@@ -2141,8 +2233,8 @@ struct PatchBrowser:View {
             HStack(alignment:.center,spacing:12){
                 HStack(alignment:.center,spacing:12){
                     VStack(alignment:.leading,spacing:4){
-                        Text(state.userSavedOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)))
-                        Text(state.userSavedOnly ? "Your saved and imported sounds, ready to audition.":"Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                        Text(m.patchBrowserUserOnly ? "User saved patches":"All patches").font(.system(size:26,weight:palette.weight(.semibold)))
+                        Text(m.patchBrowserUserOnly ? "Your saved and imported sounds, ready to audition.":"Choose a sound, then play your keyboard.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     }
                     Button{m.setFavoritesOnly(!m.favoritesOnly)}label:{
                         Image(systemName:m.favoritesOnly ? "star.fill":"star")
@@ -2158,7 +2250,7 @@ struct PatchBrowser:View {
                 }
                 Spacer(minLength:0)
                 HStack(spacing:10){
-                    if state.userSavedOnly{
+                    if m.patchBrowserUserOnly{
                         Button("Import…"){m.importPresets()}.buttonStyle(AuroraButtonStyle())
                         Button("Export all"){m.exportUserPresets()}.buttonStyle(AuroraButtonStyle()).disabled(m.userPresets.isEmpty)
                     }
@@ -2167,7 +2259,9 @@ struct PatchBrowser:View {
                     Button{m.toggleAudio()}label:{Image(systemName:m.running ? "speaker.wave.2.fill":"speaker.slash").font(.system(size:18,weight:palette.weight(.regular))).frame(width:36,height:36)}.buttonStyle(AuroraIconButtonStyle()).foregroundStyle(m.running ? palette.accent:palette.muted).help(m.running ? "Turn audio off":"Turn audio on")
                     Button(action:close){Image(systemName:"xmark").font(.system(size:16,weight:palette.weight(.semibold))).frame(width:36,height:36).background(palette.buttonSurface,in:Circle())}.buttonStyle(AuroraFlatButtonStyle()).keyboardShortcut(.cancelAction).accessibilityLabel("Close patch browser")
                 }
+                .background{GeometryReader{geo in Color.clear.onAppear{state.trailingWidth=geo.size.width}.onChange(of:geo.size.width){_,width in state.trailingWidth=width}}}
             }
+            .background{GeometryReader{geo in Color.clear.onAppear{state.headerWidth=geo.size.width}.onChange(of:geo.size.width){_,width in state.headerWidth=width}}}
             .overlay(alignment:.center){
                 TextField("Search patches",text:$m.search)
                     .textFieldStyle(.plain)
@@ -2179,9 +2273,10 @@ struct PatchBrowser:View {
                     .accessibilityLabel("Search patches")
                     .help("Type part of a name — e.g. -GB for Grok Bot patches")
             }
+            .overlay(alignment:.center){browserMaster}
             CategoryWrap{
                 categoryButton("All",nil)
-                Button{state.userSavedOnly=true;category=nil}label:{Text("User Saved").font(.system(size:15,weight:state.userSavedOnly ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(state.userSavedOnly ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(state.userSavedOnly ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:state.userSavedOnly)).accessibilityLabel("Browse user saved patches").accessibilityAddTraits(state.userSavedOnly ? .isSelected:[])
+                Button{m.patchBrowserUserOnly=true;category=nil}label:{Text("User Saved").font(.system(size:15,weight:m.patchBrowserUserOnly ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(m.patchBrowserUserOnly ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(m.patchBrowserUserOnly ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:m.patchBrowserUserOnly)).accessibilityLabel("Browse user saved patches").accessibilityAddTraits(m.patchBrowserUserOnly ? .isSelected:[])
                 ForEach(m.orderedCategories(m.userPresets+FactoryBank.all),id:\.self){categoryButton($0,$0)}
             }
             Divider().opacity(0.2)
@@ -2198,12 +2293,25 @@ struct PatchBrowser:View {
                                     }else{Color.clear.frame(height:104).accessibilityHidden(true)}
                                 }
                             }
+                            .background{GeometryReader{geo in Color.clear.preference(key:PatchRowKey.self,value:[row:geo.frame(in:.named("patchGrid")).minY])}}
                         }
-                        if patches.isEmpty{Text(m.search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? (state.userSavedOnly ? "No user-saved patches yet. Save or import a sound to add it here.":"No patches in this view.") : "No patches match this search.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
+                        if patches.isEmpty{Text(m.search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? (m.patchBrowserUserOnly ? "No user-saved patches yet. Save or import a sound to add it here.":"No patches in this view.") : "No patches match this search.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
                     }.padding(2)
-                }.onChange(of:category){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
-                .onChange(of:state.userSavedOnly){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
-                .onChange(of:m.search){_,_ in if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                }
+                .coordinateSpace(name:"patchGrid")
+                .onPreferenceChange(PatchRowKey.self){offsets in
+                    guard let top=offsets.min(by:{abs($0.value)<abs($1.value)})?.key,m.patchBrowserRow != top else{return}
+                    m.patchBrowserRow=top
+                }
+                .onAppear{
+                    let rows=max(1,(patches.count+6)/7)
+                    let row=min(max(0,m.patchBrowserRow),rows-1)
+                    let index=row*7
+                    if patches.indices.contains(index){proxy.scrollTo(patches[index].id,anchor:.top)}
+                }
+                .onChange(of:category){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.patchBrowserUserOnly){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.search){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
                 .onChange(of:m.patch.id){_,id in withAnimation(.easeOut(duration:0.18)){proxy.scrollTo(id,anchor:.center)}}
             }
             HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
@@ -2212,8 +2320,8 @@ struct PatchBrowser:View {
             .shadow(color:.black.opacity(0.45),radius:30,y:12)
     }
     func categoryButton(_ label:String,_ value:String?)->some View{
-        let selected = !state.userSavedOnly && category==value
-        return Button{state.userSavedOnly=false;category=value}label:{Text(label).font(.system(size:15,weight:selected ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(selected ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(selected ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:selected)).accessibilityLabel("Browse \(label)").accessibilityAddTraits(selected ? .isSelected:[])
+        let selected = !m.patchBrowserUserOnly && category==value
+        return Button{m.patchBrowserUserOnly=false;category=value}label:{Text(label).font(.system(size:15,weight:selected ? .bold:.regular)).padding(.horizontal,13).padding(.vertical,8).background(selected ? palette.buttonSelected:palette.buttonSurface,in:Capsule()).foregroundStyle(selected ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:selected)).accessibilityLabel("Browse \(label)").accessibilityAddTraits(selected ? .isSelected:[])
     }
 }
 struct ContentView:View {

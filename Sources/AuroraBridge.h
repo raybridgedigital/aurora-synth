@@ -23,6 +23,9 @@ enum AuroraParameter {
     APCharacterMode, APCharacterDrive, APCharacterMix, APCharacterTone, APCharacterBits, APCharacterRate,
     APFilter1Slope, APFilter2Slope, APLFO1Sync, APLFO1Division, APLFO1Retrigger, APLFO1Phase, APLFO1Delay, APLFO1Fade, APLFO2Sync, APLFO2Division, APLFO2Retrigger, APLFO2Phase, APLFO2Delay, APLFO2Fade, APWT1Formant, APWT1Tone, APWT2Formant, APWT2Tone,
     APArpSwing, APArpVelocityShape,
+    APLFO3Shape, APLFO3Rate, APLFO3Depth, APLFO3Sync, APLFO3Division, APLFO3Retrigger, APLFO3Phase, APLFO3Delay, APLFO3Fade,
+    APLFO4Shape, APLFO4Rate, APLFO4Depth, APLFO4Sync, APLFO4Division, APLFO4Retrigger, APLFO4Phase, APLFO4Delay, APLFO4Fade,
+    APLFO5Shape, APLFO5Rate, APLFO5Depth, APLFO5Sync, APLFO5Division, APLFO5Retrigger, APLFO5Phase, APLFO5Delay, APLFO5Fade,
     APParameterCount
 };
 // Parameter units: cutoff Hz; envelopes seconds; rate Hz; detune cents;

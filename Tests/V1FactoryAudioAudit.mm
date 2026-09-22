@@ -159,7 +159,14 @@ bool loadPatch(NSDictionary *patch, aurora::SynthEngine& engine, NSMutableArray 
                     case 78: value = 1; break;
                     case 82: value = 4; break;
                     case 88: value = 4; break;
-                    default: value = 0; break;
+                    default:
+                        if (parameter >= 99) {
+                            int rel = (parameter - 99) % 9;
+                            if (rel == 1 || rel == 2) value = 1;
+                            else if (rel == 4) value = 4;
+                            else value = 0;
+                        } else value = 0;
+                        break;
                 }
             } else if (!number(raw, value)) {
                 [errors addObject:[NSString stringWithFormat:@"Layer %d parameter %d must be a finite number", layer, parameter]];

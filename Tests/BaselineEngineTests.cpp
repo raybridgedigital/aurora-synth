@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 using aurora::SynthEngine;
 
@@ -202,6 +203,132 @@ void prepareBoundaryContract() {
     renderFinite(engine, 44100 / 4);
     std::puts("PASS baseline: prepare() commits deferred state at a silent hard-reset boundary");
 }
+
+double difference(const std::vector<float>& a, const std::vector<float>& b) {
+    double total = 0;
+    for (size_t i = 0; i < a.size(); ++i) total += std::abs(a[i] - b[i]);
+    return total;
+}
+
+std::vector<float> renderHeld(SynthEngine& engine) {
+    noteOn(engine, 0, 60);
+    std::vector<float> left(kRate / 2), right(kRate / 2);
+    engine.render(left.data(), right.data(), static_cast<uint32_t>(left.size()));
+    for (float sample : left) require(std::isfinite(sample) && std::abs(sample) <= 1.001f, "LFO upgrade render left the contract");
+    return left;
+}
+
+void silenceDirectLFOs(SynthEngine& engine) {
+    engine.setParameter(0, APLFODepth, 0);
+    engine.setParameter(0, APLFO2Depth, 0);
+    engine.setParameter(0, APPWMDepth, 0);
+}
+
+void modulationUpgradeContract() {
+    static_assert(APParameterCount == 126, "LFO 3-5 must extend the parameter list without renumbering it");
+    static_assert(APLFORate == 16 && APLFO2Rate == 29 && APWT1Formant == 93, "existing parameter IDs moved");
+    static_assert(APLFO3Shape == 99 && APLFO4Shape == 108 && APLFO5Shape == 117 && APLFO5Fade == 125, "new LFO block is not appended");
+
+    SynthEngine fresh;
+    configurePlayable(fresh);
+    requireNear(fresh.getParameter(0, APLFO3Depth), 1, 0.0001f, "LFO 3 depth does not default to full");
+    requireNear(fresh.getParameter(0, APLFO4Depth), 1, 0.0001f, "LFO 4 depth does not default to full");
+    requireNear(fresh.getParameter(0, APLFO5Depth), 1, 0.0001f, "LFO 5 depth does not default to full");
+
+    auto held = [](auto&& setup) {
+        SynthEngine engine;
+        configurePlayable(engine);
+        silenceDirectLFOs(engine);
+        engine.setParameter(0, APWave1, 3);
+        engine.setParameter(0, APBlend, 0);
+        engine.setParameter(0, APPulseWidth, 0.5f);
+        setup(engine);
+        return renderHeld(engine);
+    };
+    const auto plain = held([](SynthEngine&) {});
+    const auto unrouted = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO3Shape, 2);
+        engine.setParameter(0, APLFO3Rate, 8);
+        engine.setParameter(0, APLFO3Depth, 1);
+    });
+    require(difference(plain, unrouted) < 1e-4, "an unrouted LFO 3 changed the audio");
+
+    const auto pitched = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO3Shape, 2);
+        engine.setParameter(0, APLFO3Rate, 8);
+        engine.setParameter(0, APLFO3Depth, 1);
+        engine.setMatrix(0, 9, true, 6, 1, 4, 1, 1);
+    });
+    require(difference(plain, pitched) > 1, "LFO 3 in sound-matrix slot 10 did not reach pitch");
+    const auto scaled = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO3Shape, 2);
+        engine.setParameter(0, APLFO3Rate, 8);
+        engine.setParameter(0, APLFO3Depth, 0);
+        engine.setMatrix(0, 9, true, 6, 1, 4, 1, 1);
+    });
+    require(difference(plain, scaled) < 1e-4, "LFO 3 depth did not scale its matrix route");
+
+    const auto fifthFast = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO5Shape, 2);
+        engine.setParameter(0, APLFO5Rate, 11);
+        engine.setParameter(0, APLFO5Depth, 1);
+        engine.setMatrix(0, 8, true, 8, 3, 4, 1, 0.8f);
+    });
+    const auto fifthSlow = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO5Shape, 2);
+        engine.setParameter(0, APLFO5Rate, 0.4f);
+        engine.setParameter(0, APLFO5Depth, 1);
+        engine.setMatrix(0, 8, true, 8, 3, 4, 1, 0.8f);
+    });
+    require(difference(fifthFast, fifthSlow) > 1, "LFO 5 aliased onto an earlier LFO");
+
+    const auto width = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFO4Shape, 2);
+        engine.setParameter(0, APLFO4Rate, 5);
+        engine.setParameter(0, APLFO4Depth, 1);
+        engine.setMatrix(0, 0, true, 7, 22, 4, 1, 0.8f);
+    });
+    require(difference(plain, width) > 0.2, "LFO 4 did not reach the new pulse-width destination");
+
+    const auto depthRoute = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFORate, 7);
+        engine.setParameter(0, APLFOShape, 0);
+        engine.setParameter(0, APLFODestination, 1);
+        engine.setParameter(0, APLFO3Shape, 2);
+        engine.setParameter(0, APLFO3Rate, 1.5f);
+        engine.setParameter(0, APLFO3Depth, 1);
+        engine.setMatrix(0, 1, true, 6, 6, 4, 1, 1);
+    });
+    const auto depthOff = held([](SynthEngine& engine) {
+        engine.setParameter(0, APLFORate, 7);
+        engine.setParameter(0, APLFOShape, 0);
+        engine.setParameter(0, APLFODestination, 1);
+    });
+    require(difference(depthRoute, depthOff) > 0.2, "LFO 3 did not modulate LFO 1 depth");
+
+    const auto blocked = held([](SynthEngine& engine) {
+        engine.setMatrix(0, 0, true, 0, 9, 4, 1, 1);
+        engine.setMatrix(4, 6, true, 0, 1, 4, 1, 1);
+    });
+    require(difference(plain, blocked) < 1e-4, "a blocked sound or performance route became audible");
+
+    SynthEngine meters;
+    configurePlayable(meters);
+    silenceDirectLFOs(meters);
+    meters.setParameter(0, APLFO3Shape, 3);
+    meters.setParameter(0, APLFO3Rate, 4);
+    meters.setParameter(0, APLFO3Depth, 1);
+    meters.setMatrix(0, 9, true, 6, 1, 4, 1, 0.5f);
+    meters.setMatrix(4, 0, true, 0, 1, 4, 1, -0.25f);
+    noteOn(meters, 0, 60, 100);
+    meters.midi(0, 0xb0, 1, 127);
+    renderFinite(meters, kRate / 8);
+    std::array<float, 46> feedback{};
+    require(meters.copyModulation(feedback.data(), 46) == 46, "modulation meter did not grow to 46 values");
+    require(std::abs(feedback[9]) > 0.01f, "sound-matrix slot 10 did not report feedback");
+    require(std::abs(feedback[40] + 0.25f) < 0.02f, "performance feedback did not stay at index 40");
+    std::puts("PASS baseline: five LFOs, ten sound routes, new destinations, and meter layout");
+}
 } // namespace
 
 int main() {
@@ -211,6 +338,7 @@ int main() {
     panicDeferredCommitContract();
     panicGenerationContract();
     prepareBoundaryContract();
+    modulationUpgradeContract();
     std::puts("PASS baseline: Aurora v1 native DSP contract");
     return 0;
 }

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.23.0 — 2026-09-22
+
+### Modulation
+
+- Added LFO 3, LFO 4, and LFO 5 on each layer. They have Depth and no destination of their own. Depth scales every Sound Matrix route from that LFO and defaults to full.
+- Kept LFO 1 and LFO 2 behavior, including their Destination and Depth. An unrouted new LFO does not change the sound.
+- Widened the Sound Matrix from 6 to 10 slots and appended destinations through filter envelope, wavetable formant and tone, character, pulse width, detune, and the other continuous controls. Shared effect destinations stay off the Sound Matrix. The Performance Matrix remains 6 slots.
+- A saved 6-slot matrix loads as 10 slots. Existing parameter IDs are unchanged.
+
+### Interface
+
+- Added a second Edit row for LFO 3–5. The destination line reads “Select destination on the Matrix”.
+- Added a per-layer Shimmer bypass stored in the patch. The send level is kept.
+- All Patches remembers the category, User Saved filter, search, and scroll row for the session. The master slider sits between the search field and the patch arrows.
+
+### Regression
+
+- Baseline engine coverage for the five LFOs, slot 10, the new destinations, rejected routes, and the 46-value modulation meter.
+- Baseline model coverage for the longer parameter list, legacy matrix padding, LFO 5 formant routes, and per-layer Shimmer bypass.
+
+### Version metadata
+
+- Git tag: `v0.23`
+- Standalone marketing version: `0.23.0`
+- Standalone build: `29`
+- AU/VST3 marketing version: `0.23.0`
+
 ## 0.22.0 — 2026-09-21
 
 ### Release hardening
