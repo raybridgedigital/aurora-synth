@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.23.3 — 2026-09-22
+
+### Fixes
+
+- VST3 host automation now exposes the full 37-parameter global range (was 15): delay-sync, EQ, and the complete shimmer return block appear in the host automation list. Output gain stays on its dedicated path and tempo stays read-only. Existing parameter IDs are unchanged, so saved host automation keeps working.
+
+### Version metadata
+
+- Git tag: `v0.23.3`
+- Standalone marketing version: `0.23.3`
+- Standalone build: `32`
+- AU/VST3 marketing version: `0.23.3`
+
 ## 0.23.2 — 2026-09-22
 
 ### Fixes

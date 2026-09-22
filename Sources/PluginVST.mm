@@ -71,7 +71,7 @@ public:
         processContextRequirements.needTempo().needTransportState().needProjectTimeMusic().needContinousTimeSamples();
         auto add=[&](int id,std::string name,int flags=ParameterInfo::kCanAutomate){parameters.addParameter(new PlainParameter(id,name,core.normalized(id),flags));};
         for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)add(layerID(l,p),std::string(1,char('A'+l))+" / "+layers[p].name);
-        for(int p=0;p<15;p++)add(1000+p,globals[p].name,p==1?ParameterInfo::kIsReadOnly:ParameterInfo::kCanAutomate);
+        for(int p=0;p<AGGlobalCount;p++){if(p==AGOutputGain)continue;add(1000+p,globals[p].name,p==1?ParameterInfo::kIsReadOnly:ParameterInfo::kCanAutomate);}
         for(int i=0;i<8;i++)add(2000+i,"Macro "+std::to_string(i+1));
         add(xyX,"XY / X");add(xyY,"XY / Y");add(transposeID,"Global transpose");add(holdID,"Hold");
         add(routeMaskID,"MIDI / Layers");add(routeChannelID,"MIDI / Channel");add(velocityID,"MIDI / Velocity curve");
@@ -166,5 +166,5 @@ public:
 bool InitModule(){return true;}
 bool DeinitModule(){return true;}
 BEGIN_FACTORY_DEF("Ray Bridge Digital","https://github.com/raybridgedigital/aurora-synth","")
-DEF_CLASS2(INLINE_UID_FROM_FUID(auroraPlugin::processorUID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Aurora",0,"Instrument|Synth","0.23.2",kVstVersionString,auroraPlugin::Processor::createInstance)
+DEF_CLASS2(INLINE_UID_FROM_FUID(auroraPlugin::processorUID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Aurora",0,"Instrument|Synth","0.23.3",kVstVersionString,auroraPlugin::Processor::createInstance)
 END_FACTORY
