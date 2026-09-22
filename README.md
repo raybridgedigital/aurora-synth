@@ -24,6 +24,7 @@ Release notes are also tracked in [CHANGELOG.md](CHANGELOG.md).
 
 These are deliberately parked design proposals, **not active implementation work**.
 
+- **Scroll smoothness:** UI-only invalidation fixes (P1–P4) to make patch-browser and editor scrolling feel like Safari — no dropped frames while scrolling with audio running. **Proposal only — not implemented; the UI stays frozen until this specific change is explicitly unfrozen.** See [FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md](FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md).
 - **Modulation expansion:** 10 Sound Matrix slots per layer, expanded continuous destinations, and Matrix-only LFO 3/4/5 while preserving LFO 1/2 and Motion compatibility. **Do not implement yet; revisit after more real-world use and performance testing of v0.22.** See [FUTURE-PROPOSAL-MODULATION-EXPANSION.md](FUTURE-PROPOSAL-MODULATION-EXPANSION.md).
 - **Dual-patch live:** design for stacking two full patches with dual FX buses is locked but **not implemented**. See [Dual-Patch-Specification.md](Dual-Patch-Specification.md).
 
