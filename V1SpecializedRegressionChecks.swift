@@ -67,7 +67,6 @@ import SwiftUI
             print("PASS: concurrent plug-in library additions, renames, favorites and deletions preserve unrelated edits.")
         }
         defer { aurora_shutdown() }
-        print("Factory bank counts · Spectrum \(FactoryBank.expansion.count + FactoryBank.prism.count + FactoryBank.nova.count) · GB \(FactoryBank.gb.count) · Shimmer \(FactoryBank.shimmer.count) · total \(FactoryBank.all.count)")
         precondition(model.collection == "Aurora","Initial collection is \(model.collection), expected Aurora")
         print("PASS: initial collection is Aurora.")
         precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9,"Default output gain migration failed")
@@ -85,7 +84,6 @@ import SwiftUI
             let presetBankData=try JSONEncoder().encode(Array(FactoryBank.all.prefix(12)))
             let singleCount=try SynthModel.presets(in:singlePresetData).count
             let bankCount=try SynthModel.presets(in:presetBankData).count
-            print("Preset decode counts · single \(singleCount) · bank \(bankCount)")
             precondition(singleCount==1,"Single-preset decode returned \(singleCount)")
             precondition(bankCount==12,"Preset-bank decode returned \(bankCount)")
         } catch {
@@ -125,9 +123,7 @@ import SwiftUI
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
         model.selectTheme(.copperOrange)
         renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:"/private/tmp/aurora-upgrade-editor.png")
-        print("CHECKPOINT: upgrade editor view rendered")
         renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:"/private/tmp/aurora-upgrade-browser.png")
-        print("CHECKPOINT: patch browser view rendered")
         precondition(model.collectionSounds.count == 438)
         precondition(FactoryBank.prism.count == 100)
         precondition(Set(FactoryBank.all.map(\.id)).count==438)
@@ -135,9 +131,6 @@ import SwiftUI
         precondition(FactoryBank.nova.count==100)
         print("CHECKPOINT: factory count preconditions passed")
         model.search=""
-        print("CHECKPOINT: search reset")
-        let spectrumCount=model.library.filter{$0.id.hasPrefix("spectrum-")}.count
-        print("CHECKPOINT: spectrum count = \(spectrumCount)")
         // The Spectrum bank was replaced: its sounds now live inside the three
         // main banks with `spectrum-` ids. The exact count is environment-dependent
         // and purely content: the checked-in banks hold 270 of them, while CI's
@@ -145,7 +138,6 @@ import SwiftUI
         // `spectrum-` id to all 300 generated patches (300 on CI). Assert nothing
         // here — factory bank contents are being redone; engine behavior is
         // verified by the sampled factory smoke below.
-        print("CHECKPOINT: spectrum library count passed (count=\(spectrumCount), content-unasserted)")
         // Aurora v1 factory contract: sampled engine smoke. Every 10th preset
         // (spread across all banks) goes through load + sanitize + round-trip +
         // macro/XY to verify the engine. Exhaustive per-patch validation is
