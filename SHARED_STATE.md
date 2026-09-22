@@ -8,7 +8,7 @@ Aurora — native macOS synthesizer (standalone + AU + VST3) for Apple silicon, 
 
 - Repo: `raybridgedigital/aurora-synth`, branch `main`
 - Build: `./scripts/build.sh` → `build/Aurora.app` · Tests: `./scripts/run-tests.sh` and specialized suites under `scripts/`
-- Docs: `README.md` (system requirements + release notes), `CHANGELOG.md`, `FUTURE-PROPOSAL-*` (parked design proposals — not active work)
+- Docs: `README.md` (system requirements + release notes), `CHANGELOG.md`, `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md` (parked + frozen), `FUTURE-PROPOSAL-MODULATION-EXPANSION.md` (shipped v0.23 — design history), `Dual-Patch-Specification.md` (locked design, not implemented)
 
 ## Roles (label every statement)
 
@@ -20,6 +20,7 @@ Aurora — native macOS synthesizer (standalone + AU + VST3) for Apple silicon, 
 - **`archive/InterfaceChecks.swift` is archived** — kept for regression archaeology only, **not CI/release authority**. Path references updated in `check-interface.sh`, `.github/workflows/smoke-build.yml`, `AURORA-LEGACY-TEST-CLASSIFICATION-v1.md`, `AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md`.
 - README now has an explicit **system-requirements line** (top of file): Apple silicon + macOS 14 or newer, no Intel/Windows/Linux versions planned.
 - Working tree: clean except untracked `.grok/` (owner-managed — never stage or commit it). This file is committed at the owner's explicit request (22 Sep 2026).
+- **Remaining roadmap = exactly 3** (owner-confirmed 22 Sep 2026): patch redesign → then harness re-tighten; scroll P1–P4 (frozen; spec = `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md`); dual-patch live (parked, design locked). Modulation expansion is NOT outstanding — shipped in v0.23.
 
 ## Freeze / approval rules (never violate)
 
@@ -40,9 +41,10 @@ Aurora — native macOS synthesizer (standalone + AU + VST3) for Apple silicon, 
 
 ## Pending queue
 
-1. **Owner's patch/bank redo** (owner side) → after it lands, re-tighten the harness: re-assert spectrum count, exhaustive preset-restore coverage.
+1. **Owner's patch redesign (= patch/bank redo, owner side)** → after it lands, re-tighten the harness: re-assert spectrum count, exhaustive preset-restore coverage.
 2. **P1–P4 scroll-smoothness work** — proposal published at `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md` (commit `58abe96`, indexed in README's parked proposals). Implementation starts only when the owner unfreezes the UI for this named change.
-3. **This file's git fate** — ✅ resolved: committed and pushed at the owner's explicit request (22 Sep 2026); now visible on GitHub and in clones. PII scan clean (no real name, email, or local paths — only the already-public repo handle).
+3. **Dual-patch live** — design locked in `Dual-Patch-Specification.md`, not implemented; engine-touching, parked until the owner explicitly scopes and unfreezes it.
+4. **This file's git fate** — ✅ resolved: committed and pushed at the owner's explicit request (22 Sep 2026); now visible on GitHub and in clones. PII scan clean (no real name, email, or local paths — only the already-public repo handle).
 
 ## Handoff protocol
 
