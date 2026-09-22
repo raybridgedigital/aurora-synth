@@ -21,7 +21,7 @@ The current v1 baseline and reconstructed specialized regression suite were buil
 
 | Historical test | Status | v1 treatment | Reason |
 | --- | --- | --- | --- |
-| `InterfaceChecks.swift` | **RETIRED from CI authority / RETAIN as historical reference** | `V1SpecializedRegressionChecks.swift` + isolated A/B test | Contains useful model/UI regression history, but also obsolete macro-center equality, fixed-XY and old state-storage assumptions. Retained so future maintainers can see where the suite stopped matching the architecture and use it for regression archaeology/troubleshooting. |
+| `archive/InterfaceChecks.swift` (moved from root 2026-09-22) | **RETIRED from CI authority / RETAIN as historical reference** | `V1SpecializedRegressionChecks.swift` + isolated A/B test | Contains useful model/UI regression history, but also obsolete macro-center equality, fixed-XY and old state-storage assumptions. Retained so future maintainers can see where the suite stopped matching the architecture and use it for regression archaeology/troubleshooting. |
 | `check-interface.sh` | **RETIRED from CI authority / RETAIN as historical runner** | `check-v1-specialized-regression.sh` | No longer invoked by Product Smoke. Retained so the historical InterfaceChecks path can still be reproduced manually when investigating old regressions or architectural history. |
 | `Tests/SynthEngineTests.cpp` | **KEEP** | Continue running under native sanitizer workflow | Deep current DSP/MIDI coverage: routing, ownership, Panic, transpose, arp, matrices, FX, mono/legato/glide, queue recovery and concurrency. Green under ASan/UBSan and TSan. |
 | `Tests/RecordingChecks.cpp` | **KEEP** | Continue running | Valid behavioral coverage for WAV recording and normalization. |
@@ -110,4 +110,4 @@ The clean v1 CI structure is:
 3. **Aurora v1 Specialized Regression** for reconstructed model/UI, isolated A/B and current factory-bank audio audits.
 4. **Product/plugin smoke** for standalone build plus AU/VST3 build/host validation.
 
-`InterfaceChecks.swift` and `check-interface.sh` are intentionally retained as historical reference/troubleshooting material, but they are no longer release blockers and are not part of Aurora v1 CI authority.
+`archive/InterfaceChecks.swift` (moved from the repository root on 2026-09-22) and `check-interface.sh` are intentionally retained as historical reference/troubleshooting material, but they are no longer release blockers and are not part of Aurora v1 CI authority.

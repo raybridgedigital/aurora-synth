@@ -30,7 +30,7 @@ jobs:
           rm -rf build
           bash scripts/build.sh
 
-      # Historical InterfaceChecks.swift and check-interface.sh are intentionally retained
+      # Historical InterfaceChecks.swift (now archive/InterfaceChecks.swift) and check-interface.sh are intentionally retained
       # in the repository for regression archaeology and future troubleshooting.
       # They are no longer CI authority for Aurora v1 because they contain obsolete
       # implementation assumptions that were replaced by the v1 baseline and specialized suite.

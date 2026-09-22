@@ -522,8 +522,8 @@ On 2026-09-21, the legacy `InterfaceChecks.swift` gate was formally retired from
 
 The decision is intentionally narrow:
 
-- `InterfaceChecks.swift` remains in the repository;
-- `check-interface.sh` remains in the repository;
+- `InterfaceChecks.swift` remains in the repository (moved to `archive/InterfaceChecks.swift` on 2026-09-22);
+- `check-interface.sh` remains in the repository at the root;
 - neither file is deleted or rewritten merely to make it match Aurora v1;
 - Product Smoke no longer runs the historical InterfaceChecks path;
 - the files remain available to show where the historical suite stopped tracking architectural change;

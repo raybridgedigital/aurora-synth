@@ -1,3 +1,9 @@
+// ARCHIVED 2026-09-22 — moved to archive/. Retired from CI authority per
+// AURORA-LEGACY-TEST-CLASSIFICATION-v1.md; contains obsolete macro-center
+// equality, fixed-XY, and old state-storage assumptions. Kept only for
+// regression archaeology. Current authority: V1SpecializedRegressionChecks.swift
+// (run via check-v1-specialized-regression.sh). Manual historical runner:
+// check-interface.sh at the repository root.
 import AppKit
 import Combine
 import SwiftUI
