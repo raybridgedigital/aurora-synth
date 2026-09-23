@@ -8,6 +8,9 @@ public:
     ~SynthEngine();
     void prepare(double sampleRate); // called only while audio stopped
     void setParameter(int layer,int parameter,float value);
+    // FM engine mode payload: kFmParamCount floats (FmEngine.hpp layout). Main-thread entry;
+    // the render thread consumes the atomics at the next block boundary.
+    void setLayerFM(int layer,const float* data,int count);
     float getParameter(int layer,int parameter) const;
     void setMatrix(int bank,int slot,bool enabled,int source,int destination,int target,int cc,float amount);
     void setTranspose(int semitones);

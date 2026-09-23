@@ -68,7 +68,7 @@ extension SynthModel {
     func pluginMetadataChanged(_ old:SoundPreset){
 #if AURORA_PLUGIN
         guard !syncingPlugin,backend.isPlugin else{return}
-        if old.id != patch.id || old.name != patch.name || old.category != patch.category || old.detail != patch.detail || old.motion != patch.motion || old.sends != patch.sends || old.soundMatrix != patch.soundMatrix || old.performanceMatrix != patch.performanceMatrix || old.customMacros != patch.customMacros || old.xy != patch.xy || old.importedWavetables != patch.importedWavetables {
+        if old.id != patch.id || old.name != patch.name || old.category != patch.category || old.detail != patch.detail || old.layers != patch.layers || old.motion != patch.motion || old.sends != patch.sends || old.soundMatrix != patch.soundMatrix || old.performanceMatrix != patch.performanceMatrix || old.customMacros != patch.customMacros || old.xy != patch.xy || old.importedWavetables != patch.importedWavetables {
             commitPluginPatch(apply:false)
         }
 #endif

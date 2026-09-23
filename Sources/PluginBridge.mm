@@ -27,6 +27,7 @@ int aurora_plugin_set_motion(void* p,int l,const float* data,int count){return c
 float aurora_plugin_motion_phase(void* p,int l){return core(p).engine.motionPhase(l);}
 void aurora_plugin_layer_sends(void* p,int l,float delay,float reverb,float shimmer){core(p).setActual(auroraPlugin::sendID(l,0),delay,true);core(p).setActual(auroraPlugin::sendID(l,1),reverb,true);core(p).setActual(auroraPlugin::sendID(l,2),shimmer,true);}
 void aurora_plugin_solo_layer(void* p,int l){core(p).engine.soloLayer(l);}
+void aurora_plugin_set_layer_fm(void* p,int l,const float* d,int n){core(p).engine.setLayerFM(l,d,n);if(p&&l>=0&&l<4&&d&&n>0){int m=std::min(n,int(aurora::kFmParamCount));for(int i=0;i<m;i++)if(std::isfinite(d[i]))core(p).fmState[l][i]=d[i];}}
 void aurora_plugin_set_transpose(void* p,int semitones){core(p).setActual(2012,semitones,true);}
 void aurora_plugin_route_source(void* p,int32_t source,int mask,int channel){if(source==1){core(p).setActual(2030,mask,true);core(p).setActual(2031,channel,true);}}
 void aurora_plugin_velocity_curve(void* p,int32_t source,int curve){if(source==1&&core(p).values[2032]!=curve)core(p).setActual(2032,curve,true);}

@@ -1,5 +1,6 @@
 #pragma once
 #include "SynthEngine.hpp"
+#include "FmEngine.hpp"
 #include "PluginParameters.hpp"
 #include <array>
 #include <atomic>
@@ -30,6 +31,8 @@ public:
     Core();~Core();
     aurora::SynthEngine engine;
     std::array<std::atomic<float>,8192> values{};
+    // Last-applied FM payload per layer — round-trips through patchJSON()/setPatchJSON().
+    std::array<std::array<float,aurora::kFmParamCount>,4> fmState{};
     std::array<std::array<MacroRoute,16>,8> macroRoutes;
     std::array<std::atomic<int>,8> macroCounts{};
     std::array<std::atomic<double>,8> storageLegacy{};

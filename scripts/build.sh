@@ -27,6 +27,9 @@ COMMON_FLAGS=(-std=c++20 -O2 -target "$TARGET" -isysroot "$SDK_DIR" -I "$ROOT_DI
 printf 'Compiling audio engine…\n'
 "$CLANGXX" "${COMMON_FLAGS[@]}" -c "$ROOT_DIR/Sources/SynthEngine.cpp" -o "$BUILD_DIR/objects/SynthEngine.o"
 
+printf 'Compiling FM engine…\n'
+"$CLANGXX" "${COMMON_FLAGS[@]}" -c "$ROOT_DIR/Sources/FmEngine.cpp" -o "$BUILD_DIR/objects/FmEngine.o"
+
 printf 'Compiling Core Audio and MIDI bridge…\n'
 "$CLANGXX" "${COMMON_FLAGS[@]}" -fobjc-arc -c "$ROOT_DIR/Sources/MacAudioMIDI.mm" -o "$BUILD_DIR/objects/MacAudioMIDI.o"
 
@@ -36,7 +39,7 @@ printf 'Compiling native interface and linking Aurora…\n'
     -Xcc "-fmodules-cache-path=$MODULE_CACHE_DIR" \
     -import-objc-header "$ROOT_DIR/Sources/AuroraBridge.h" \
     "$ROOT_DIR/Sources/AuroraApp.swift" "$ROOT_DIR/Sources/AuroraBackend.swift" "$ROOT_DIR/Sources/PluginEditor.swift" "$ROOT_DIR/Sources/WavetableViews.swift" "$ROOT_DIR/Sources/MotionViews.swift" "$ROOT_DIR/Sources/CreativeTools.swift" \
-    "$BUILD_DIR/objects/SynthEngine.o" "$BUILD_DIR/objects/MacAudioMIDI.o" \
+    "$BUILD_DIR/objects/SynthEngine.o" "$BUILD_DIR/objects/FmEngine.o" "$BUILD_DIR/objects/MacAudioMIDI.o" \
     -lc++ -framework SwiftUI -framework AppKit -framework Foundation \
     -framework CoreAudio -framework AudioUnit -framework AudioToolbox -framework CoreMIDI \
     -o "$BUILD_DIR/Aurora"

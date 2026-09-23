@@ -65,6 +65,10 @@ double aurora_sample_rate(void);
 uint32_t aurora_buffer_frames(void);
 void aurora_set_parameter(int layer,int parameter,float value);
 float aurora_get_parameter(int layer,int parameter);
+// Per-layer FM engine payload (spec FUTURE-PROPOSAL-FM-ENGINE.md §7): kFmParamCount = 96
+// floats, layout documented in FmEngine.hpp (8 globals + 4 operators x 22 fields).
+// All zeros / absent => engine mode Subtractive.
+void aurora_set_layer_fm(int layer,const float* data,int count);
 // bank 0...3: sound layer; bank 4: performance; target 0...3 or 4=all.
 void aurora_set_matrix(int bank,int slot,int enabled,int source,int destination,int target,int cc,float amount);
 int aurora_set_motion(int layer,const float* data,int count);

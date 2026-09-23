@@ -474,6 +474,7 @@ uint32_t aurora_current_device() { return state().currentDevice; }
 double aurora_sample_rate() { return state().sampleRate; }
 uint32_t aurora_buffer_frames() { return state().bufferFrames; }
 void aurora_set_parameter(int layer, int parameter, float value) { state().engine.setParameter(layer, parameter, value); }
+void aurora_set_layer_fm(int layer, const float *data, int count) { state().engine.setLayerFM(layer, data, count); }
 int aurora_set_custom_wavetable(int layer,int oscillator,const float* samples,int frames,int frameSize){return state().engine.setCustomWavetable(layer,oscillator,samples,frames,frameSize);}
 void aurora_clear_custom_wavetable(int layer,int oscillator){state().engine.clearCustomWavetable(layer,oscillator);}
 int aurora_copy_wavetable_preview(int layer,int oscillator,float* samples,int capacity){return state().engine.copyWavetablePreview(layer,oscillator,samples,capacity);}

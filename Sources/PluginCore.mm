@@ -32,6 +32,7 @@ static bool validPatch(NSDictionary* p){
     for(NSString* name in @[@"id",@"name",@"category",@"detail"])if(![p[name] isKindOfClass:NSString.class])return false;
     if(!arraySize(p[@"layers"],4)||!arraySize(p[@"globals"],6)||!arraySize(p[@"macros"],8))return false;
     for(id layer in p[@"layers"])if(!dictionary(layer)||!numericDictionary(layer[@"values"]))return false;
+    for(id layer in p[@"layers"])if(layer[@"fm"]&&![layer[@"fm"] isKindOfClass:NSDictionary.class])return false; // spec §7: fm optional, must be a dictionary
     for(id v in p[@"globals"])if(!number(v))return false;
     for(id v in p[@"macros"])if(!number(v))return false;
     if(p[@"fx"]&&!numericDictionary(p[@"fx"]))return false;
@@ -180,6 +181,63 @@ void Core::configureMetadata(){
         values[xyX+i]=std::abs(span)<.000001?.5:std::clamp((values[macroBase+xyMacros[i]]-start)/span,0.,1.);
     }
 }
+// --- FM payload (FUTURE-PROPOSAL-FM-ENGINE.md §7): NSDictionary <-> 96 floats ---
+static double fmNum(NSDictionary* d,NSString* k,double fallback){
+    id v=d[k];return [v isKindOfClass:NSNumber.class]&&std::isfinite([v doubleValue])?[v doubleValue]:fallback;
+}
+static void packFmOp(NSDictionary* op,float* out){ // 22 fields, mirrors FmEngine.hpp enums
+    if(!dictionary(op))return;
+    out[0]=float(fmNum(op,@"wave",0));out[1]=float(fmNum(op,@"ratio",1));
+    out[2]=float(fmNum(op,@"fixedHz",440));out[3]=float(fmNum(op,@"fixedMode",0));
+    out[4]=float(fmNum(op,@"fine",0));out[5]=float(fmNum(op,@"level",0));
+    out[6]=float(fmNum(op,@"vel",0));out[7]=float(fmNum(op,@"keyScale",0));
+    out[8]=float(fmNum(op,@"keySync",1));out[9]=float(fmNum(op,@"envMode",0));
+    out[10]=float(fmNum(op,@"pulseWidth",.5));
+    id envValue=op[@"env"];NSDictionary* env=dictionary(envValue)?envValue:nil;
+    NSArray* rates=[env[@"rates"] isKindOfClass:NSArray.class]?env[@"rates"]:nil;
+    NSArray* levels=[env[@"levels"] isKindOfClass:NSArray.class]?env[@"levels"]:nil;
+    for(int i=0;i<4;i++){
+        id r=i<int(rates.count)?rates[i]:nil,lv=i<int(levels.count)?levels[i]:nil;
+        out[11+i]=float([r isKindOfClass:NSNumber.class]?[r doubleValue]:.02);
+        out[15+i]=float([lv isKindOfClass:NSNumber.class]?[lv doubleValue]:0);
+    }
+    out[19]=float(fmNum(op,@"wtTable",0));out[20]=float(fmNum(op,@"wtPos",.5));out[21]=float(fmNum(op,@"wtWarp",0));
+}
+static void packFmPatch(NSDictionary* fm,float* out){
+    std::fill(out,out+aurora::kFmParamCount,0.f);
+    if(!fm)return;
+    out[aurora::FmEnabled]=[fm[@"enabled"] boolValue]?1.f:0.f;
+    out[aurora::FmAlgorithm]=float(fmNum(fm,@"algorithm",4));
+    out[aurora::FmFeedback]=float(fmNum(fm,@"feedback",0));
+    out[aurora::FmCarrierMix]=float(fmNum(fm,@"carrierMix",.5));
+    id peValue=fm[@"pitchEnv"];NSDictionary* pe=dictionary(peValue)?peValue:nil;
+    out[aurora::FmPitchEnvAmount]=float(fmNum(pe,@"amount",0));
+    out[aurora::FmPitchEnvTime]=float(fmNum(pe,@"time",.05));
+    out[aurora::FmPitchEnvCurve]=float(fmNum(pe,@"curve",.5));
+    id opsValue=fm[@"ops"];NSDictionary* ops=dictionary(opsValue)?opsValue:nil;
+    for(int o=0;o<4;o++)packFmOp(ops[[NSString stringWithFormat:@"%d",o]],out+aurora::kFmGlobalCount+o*aurora::kFmOpStride);
+}
+static NSDictionary* fmDictionary(const float* f){
+    if(!f||f[aurora::FmEnabled]<.5f)return nil; // absent fm key = Subtractive (spec §7)
+    NSMutableDictionary* fm=[NSMutableDictionary dictionary];
+    fm[@"enabled"]=@YES;fm[@"algorithm"]=@(int(f[aurora::FmAlgorithm]));
+    fm[@"feedback"]=@(f[aurora::FmFeedback]);fm[@"carrierMix"]=@(f[aurora::FmCarrierMix]);
+    fm[@"pitchEnv"]=@{@"amount":@(f[aurora::FmPitchEnvAmount]),@"time":@(f[aurora::FmPitchEnvTime]),@"curve":@(f[aurora::FmPitchEnvCurve])};
+    NSMutableDictionary* ops=[NSMutableDictionary dictionary];
+    for(int o=0;o<4;o++){
+        const float* p=f+aurora::kFmGlobalCount+o*aurora::kFmOpStride;
+        NSMutableArray* rates=[NSMutableArray array],*levels=[NSMutableArray array];
+        for(int i=0;i<4;i++){[rates addObject:@(p[11+i])];[levels addObject:@(p[15+i])];}
+        ops[[NSString stringWithFormat:@"%d",o]]=@{
+            @"wave":@(int(p[0])),@"ratio":@(p[1]),@"fixedHz":@(p[2]),@"fixedMode":@(int(p[3])),
+            @"fine":@(p[4]),@"level":@(p[5]),@"vel":@(p[6]),@"keyScale":@(int(p[7])),
+            @"keySync":@(int(p[8])),@"envMode":@(int(p[9])),@"pulseWidth":@(p[10]),
+            @"env":@{@"rates":rates,@"levels":levels},
+            @"wtTable":@(int(p[19])),@"wtPos":@(p[20]),@"wtWarp":@(p[21])};
+    }
+    fm[@"ops"]=ops;
+    return fm;
+}
 bool Core::setPatchJSON(const char* json,bool apply){
     @autoreleasepool {
         if(!json || strlen(json)>12'000'000)return false;
@@ -193,6 +251,10 @@ bool Core::setPatchJSON(const char* json,bool apply){
         if(apply){
             engine.panic();
             for(int l=0;l<4;l++)for(int i=0;i<APParameterCount;i++){id v=p[@"layers"][l][@"values"][key(i)];setActual(layerID(l,i),[v isKindOfClass:NSNumber.class]?[v doubleValue]:defaults[i]);}
+            for(int l=0;l<4;l++){ // fm sibling absent => zeros => Subtractive
+                packFmPatch(dictionary(p[@"layers"][l][@"fm"])?p[@"layers"][l][@"fm"]:nil,fmState[l].data());
+                engine.setLayerFM(l,fmState[l].data(),aurora::kFmParamCount);
+            }
             for(int i=0;i<AGGlobalCount;i++){
                 if(i==AGOutputGain)continue; // managed via outputGainID / saveState revision
                 double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4};
@@ -237,6 +299,7 @@ std::string Core::patchJSON(){
     @autoreleasepool {
         std::lock_guard lock(storage->mutex);NSMutableDictionary* p=clone(storage->patch);if(!p[@"layers"])return "{}";
         for(int l=0;l<4;l++)for(int i=0;i<APParameterCount;i++)p[@"layers"][l][@"values"][key(i)]=@(values[layerID(l,i)].load());
+        for(int l=0;l<4;l++)if(NSDictionary* fm=fmDictionary(fmState[l].data()))p[@"layers"][l][@"fm"]=fm; // round-trip fm only when enabled
         for(int i=0;i<6;i++)p[@"globals"][i]=@(values[globalBase+i].load());
         p[@"phaserMix"]=@(values[1006].load());if(!p[@"fx"])p[@"fx"]=[NSMutableDictionary dictionary];
         for(int i=7;i<AGGlobalCount;i++){if(i==AGOutputGain)continue;p[@"fx"][key(i)]=@(values[globalBase+i].load());}

@@ -80,8 +80,249 @@ struct ImportedWavetable:Codable,Equatable {
     var valid:Bool{[256,512,1024,2048].contains(frameSize) && (1...64).contains(frames) && data.count==frames*frameSize*4 && !name.isEmpty && samples.allSatisfy{$0.isFinite && abs($0)<=1.001}}
 }
 
+/// FM engine payload — FUTURE-PROPOSAL-FM-ENGINE.md §7: `fm` sibling of `values` per layer;
+/// absent = Subtractive. Packed 96 floats matching FmEngine.hpp enums exactly.
+struct FmEnv: Codable, Equatable {
+    var rates: [Double] = [80, 30, 20, 60]
+    var levels: [Double] = [0.9, 0.5, 0.45, 0]
+    enum CodingKeys: String, CodingKey { case rates, levels }
+    init() {}
+    init(rates: [Double], levels: [Double]) { self.rates = rates; self.levels = levels }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        rates = Array(((try? c.decode([Double].self, forKey: .rates)) ?? rates).prefix(4))
+        levels = Array(((try? c.decode([Double].self, forKey: .levels)) ?? levels).prefix(4))
+        while rates.count < 4 { rates.append(0.02) }
+        while levels.count < 4 { levels.append(0) }
+    }
+}
+struct FmPitchEnv: Codable, Equatable {
+    var amount = 0.0, time = 0.05, curve = 0.5
+    enum CodingKeys: String, CodingKey { case amount, time, curve }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        amount = (try? c.decode(Double.self, forKey: .amount)) ?? amount
+        time = (try? c.decode(Double.self, forKey: .time)) ?? time
+        curve = (try? c.decode(Double.self, forKey: .curve)) ?? curve
+    }
+}
+struct FmOpState: Codable, Equatable {
+    var wave = 0, ratio = 1.0, fixedHz = 440.0, fixedMode = 0, fine = 0.0
+    var level = 0.0, vel = 0.0, keyScale = 0, keySync = 1, envMode = 0, pulseWidth = 0.5
+    var wtTable = 0, wtPos = 0.5, wtWarp = 0.0
+    var env = FmEnv()
+    enum CodingKeys: String, CodingKey {
+        case wave, ratio, fixedHz, fixedMode, fine, level, vel, keyScale, keySync, envMode, pulseWidth, wtTable, wtPos, wtWarp, env
+    }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        wave = (try? c.decode(Int.self, forKey: .wave)) ?? wave
+        ratio = (try? c.decode(Double.self, forKey: .ratio)) ?? ratio
+        fixedHz = (try? c.decode(Double.self, forKey: .fixedHz)) ?? fixedHz
+        fixedMode = (try? c.decode(Int.self, forKey: .fixedMode)) ?? fixedMode
+        fine = (try? c.decode(Double.self, forKey: .fine)) ?? fine
+        level = (try? c.decode(Double.self, forKey: .level)) ?? level
+        vel = (try? c.decode(Double.self, forKey: .vel)) ?? vel
+        keyScale = (try? c.decode(Int.self, forKey: .keyScale)) ?? keyScale
+        keySync = (try? c.decode(Int.self, forKey: .keySync)) ?? keySync
+        envMode = (try? c.decode(Int.self, forKey: .envMode)) ?? envMode
+        pulseWidth = (try? c.decode(Double.self, forKey: .pulseWidth)) ?? pulseWidth
+        wtTable = (try? c.decode(Int.self, forKey: .wtTable)) ?? wtTable
+        wtPos = (try? c.decode(Double.self, forKey: .wtPos)) ?? wtPos
+        wtWarp = (try? c.decode(Double.self, forKey: .wtWarp)) ?? wtWarp
+        env = (try? c.decode(FmEnv.self, forKey: .env)) ?? env
+    }
+}
+struct FmPatch: Codable, Equatable {
+    var enabled = false
+    var algorithm = 4            // "EP Twin" — life-blood default (spec §4/§8)
+    var feedback = 0.45
+    var carrierMix = 0.5
+    var pitchEnv = FmPitchEnv()
+    var ops: [String: FmOpState] = FmPatch.defaultOps
+    enum CodingKeys: String, CodingKey { case enabled, algorithm, feedback, carrierMix, pitchEnv, ops }
+    static var defaultOps: [String: FmOpState] {
+        // EP-flavoured: tine modulator on op1, body modulator on op2, ops 3–4 carriers (EP Twin).
+        var tine = FmOpState(); tine.ratio = 14; tine.level = 0.5; tine.vel = 0.6
+        tine.env = FmEnv(rates: [180, 10, 8, 40], levels: [1, 0.25, 0.2, 0])
+        var body = FmOpState(); body.level = 0.35; body.vel = 0.4
+        body.env = FmEnv(rates: [40, 8, 6, 30], levels: [0.8, 0.5, 0.45, 0])
+        var car1 = FmOpState(); car1.level = 0.85; car1.vel = 0.9
+        car1.env = FmEnv(rates: [120, 6, 6, 50], levels: [1, 0.75, 0.7, 0])
+        var car2 = FmOpState(); car2.level = 0.8; car2.vel = 0.9
+        car2.env = FmEnv(rates: [60, 5, 5, 60], levels: [1, 0.6, 0.55, 0])
+        return ["0": tine, "1": body, "2": car1, "3": car2]
+    }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? enabled
+        algorithm = (try? c.decode(Int.self, forKey: .algorithm)) ?? algorithm
+        feedback = (try? c.decode(Double.self, forKey: .feedback)) ?? feedback
+        carrierMix = (try? c.decode(Double.self, forKey: .carrierMix)) ?? carrierMix
+        pitchEnv = (try? c.decode(FmPitchEnv.self, forKey: .pitchEnv)) ?? pitchEnv
+        ops = (try? c.decode([String: FmOpState].self, forKey: .ops)) ?? ops
+    }
+    func op(_ i: Int) -> FmOpState { ops[String(i)] ?? FmOpState() }
+    mutating func setOp(_ i: Int, _ value: FmOpState) { ops[String(i)] = value }
+    static func cl(_ v: Double, _ lo: Double, _ hi: Double) -> Double { v.isFinite ? max(lo, min(hi, v)) : lo }
+    static func cl(_ v: Int, _ lo: Int, _ hi: Int) -> Int { max(lo, min(hi, v)) }
+    /// 96-float bridge payload — field order mirrors FmEngine.hpp enums exactly.
+    func packed() -> [Float] {
+        var out = [Float](repeating: 0, count: 96)
+        out[0] = enabled ? 1 : 0
+        out[1] = Float(FmPatch.cl(algorithm, 0, 15))
+        out[2] = Float(FmPatch.cl(feedback, 0, 1))
+        out[3] = Float(FmPatch.cl(carrierMix, 0, 1))
+        out[4] = Float(FmPatch.cl(pitchEnv.amount, -1, 1))
+        out[5] = Float(FmPatch.cl(pitchEnv.time, 0.001, 4))
+        out[6] = Float(FmPatch.cl(pitchEnv.curve, 0, 1))
+        for i in 0..<4 {
+            let o = op(i), b = 8 + i * 22
+            let rates = o.env.rates + [0.02, 0.02, 0.02, 0.02]
+            let levels = o.env.levels + [0, 0, 0, 0]
+            out[b + 0] = Float(FmPatch.cl(o.wave, 0, 4))
+            out[b + 1] = Float(FmPatch.cl(o.ratio, 0.25, 16))
+            out[b + 2] = Float(FmPatch.cl(o.fixedHz, 1, 20000))
+            out[b + 3] = o.fixedMode > 0 ? 1 : 0
+            out[b + 4] = Float(FmPatch.cl(o.fine, -1, 1))
+            out[b + 5] = Float(FmPatch.cl(o.level, 0, 1))
+            out[b + 6] = Float(FmPatch.cl(o.vel, 0, 1))
+            out[b + 7] = Float(FmPatch.cl(o.keyScale, 0, 3))
+            out[b + 8] = o.keySync > 0 ? 1 : 0
+            out[b + 9] = o.envMode > 0 ? 1 : 0
+            out[b + 10] = Float(FmPatch.cl(o.pulseWidth, 0.05, 0.95))
+            for r in 0..<4 { out[b + 11 + r] = Float(FmPatch.cl(rates[r], 0.02, 300)) }
+            for l in 0..<4 { out[b + 15 + l] = Float(FmPatch.cl(levels[l], 0, 1)) }
+            out[b + 19] = Float(FmPatch.cl(o.wtTable, 0, 23))
+            out[b + 20] = Float(FmPatch.cl(o.wtPos, 0, 1))
+            out[b + 21] = Float(FmPatch.cl(o.wtWarp, 0, 1))
+        }
+        return out
+    }
+}
+/// Vector diagram of one FM algorithm — 4 op boxes, routing arrows, filled carriers, feedback dot.
+/// Static content inside a bounded canvas (no per-frame invalidation; rendering-audit lessons).
+struct FmAlgorithmDiagram: View {
+    @Environment(\.auroraPalette) private var palette
+    let algorithm:Int
+    let selected:Bool
+    var body: some View {
+        let meta=FmPatch.algorithmMeta[min(max(algorithm,0),15)]
+        Canvas { ctx,size in
+            let box=CGSize(width:min(16,size.width*0.26),height:13)
+            let positions=(0..<4).map{idx->CGPoint in
+                CGPoint(x: idx%2==0 ? size.width*0.16 : size.width*0.70,
+                        y: idx<2 ? size.height*0.24 : size.height*0.74)
+            }
+            let ink=Color.white.opacity(selected ? 0.92 : 0.62)
+            let accent=palette.accent
+            for i in 0..<4 where meta.target[i]>=0 {
+                var arrow=Path()
+                let a=positions[i],b=positions[meta.target[i]]
+                arrow.move(to:a)
+                arrow.addLine(to:b)
+                ctx.stroke(arrow,with:.color(accent.opacity(0.85)),style:StrokeStyle(lineWidth:1.2,lineCap:.round))
+                var tip=Path()
+                let dx=b.x-a.x,dy=b.y-a.y,len=max(1,(dx*dx+dy*dy).squareRoot())
+                let ux=dx/len,uy=dy/len
+                let end=CGPoint(x:b.x-ux*(box.width*0.5+2),y:b.y-uy*(box.height*0.5+2))
+                tip.move(to:end)
+                tip.addLine(to:CGPoint(x:end.x-ux*4-uy*2.4,y:end.y-uy*4+ux*2.4))
+                tip.move(to:end)
+                tip.addLine(to:CGPoint(x:end.x-ux*4+uy*2.4,y:end.y-uy*4-ux*2.4))
+                ctx.stroke(tip,with:.color(accent.opacity(0.9)),lineWidth:1.2)
+            }
+            for i in 0..<4 {
+                let p=positions[i]
+                let rect=CGRect(x:p.x-box.width/2,y:p.y-box.height/2,width:box.width,height:box.height)
+                let carrier=meta.target[i]<0
+                let opRect=Path(roundedRect:rect,cornerRadius:3)
+                if carrier {ctx.fill(opRect,with:.color(accent.opacity(selected ? 0.85 : 0.55)))}
+                ctx.stroke(opRect,with:.color(ink),lineWidth:1)
+                let label=Text("\(i+1)").font(.system(size:9,weight:.bold)).foregroundColor(carrier ? Color.black : ink)
+                ctx.draw(label,at:CGPoint(x:p.x,y:p.y-0.5),anchor:.center)
+                if meta.fb==i {
+                    var fb=Path()
+                    fb.addEllipse(in:CGRect(x:p.x+box.width*0.34,y:p.y-box.height*0.78,width:5,height:5))
+                    ctx.fill(fb,with:.color(Color.orange.opacity(0.95)))
+                }
+            }
+        }
+        .accessibilityLabel("Algorithm diagram \(algorithm+1) \(FmPatch.algorithmMeta[min(max(algorithm,0),15)].name)")
+    }
+}
+/// Mini envelope curve (4 levels across, L4 tail) — bounded, static per parameter value.
+struct FmEnvCurve: View {
+    @Environment(\.auroraPalette) private var palette
+    let op:FmOpState
+    var body: some View {
+        Canvas { ctx,size in
+            let levels=op.env.levels
+            var seq:[Double]=[]
+            seq.append(levels.count>3 ? levels[3] : 0)
+            seq.append(contentsOf:(0..<4).map{i in i<levels.count ? levels[i] : 0})
+            seq.append(levels.count>3 ? levels[3] : 0)
+            let pts=(0..<seq.count).map{idx->CGPoint in
+                CGPoint(x:size.width*CGFloat(idx)/CGFloat(seq.count-1),
+                        y:size.height*(1-CGFloat(max(0,min(1,seq[idx]))))*0.9+size.height*0.05)
+            }
+            var grid=Path()
+            grid.move(to:CGPoint(x:0,y:size.height-0.5));grid.addLine(to:CGPoint(x:size.width,y:size.height-0.5))
+            ctx.stroke(grid,with:.color(.white.opacity(0.12)),lineWidth:1)
+            var path=Path()
+            path.move(to:pts[0])
+            for p in pts.dropFirst(){path.addLine(to:p)}
+            ctx.stroke(path,with:.color(palette.accent),style:StrokeStyle(lineWidth:1.5,lineJoin:.round))
+            for p in pts{ctx.fill(Path(ellipseIn:CGRect(x:p.x-1.8,y:p.y-1.8,width:3.6,height:3.6)),with:.color(palette.accent))}
+        }
+        .background(palette.buttonSurface,in:RoundedRectangle(cornerRadius:5))
+        .accessibilityLabel("Operator envelope shape")
+    }
+}
+func ratioText(_ v:Double)->String{String(format:"%.2f×",v)}
+func fmRateText(_ v:Double)->String{String(format:"%.1f",v)}
+func fmLevelText(_ v:Double)->String{String(format:"%.2f",v)}
+func fmFreqText(_ v:Double)->String{v>=1000 ? String(format:"%.1f kHz",v/1000):String(format:"%.0f Hz",v)}
+/// One cell of the 16-algorithm picker grid — keeps the grid closure trivially typed.
+struct FmAlgorithmCell: View {
+    @Environment(\.auroraPalette) private var palette
+    let index:Int
+    let selected:Bool
+    let select:()->Void
+    var body: some View {
+        Button(action:select){
+            VStack(spacing:2){
+                FmAlgorithmDiagram(algorithm:index,selected:selected).frame(width:66,height:40)
+                Text(FmPatch.algorithmMeta[index].name).font(.system(size:9)).lineLimit(1).foregroundStyle(selected ? palette.selectedText:palette.muted)
+            }
+        }.buttonStyle(.plain)
+        .padding(4).background(selected ? palette.accent.opacity(0.18):palette.buttonSurface,in:RoundedRectangle(cornerRadius:6))
+        .overlay(RoundedRectangle(cornerRadius:6).stroke(selected ? palette.accent:.white.opacity(0.08)))
+        .accessibilityLabel("Algorithm \(index+1) \(FmPatch.algorithmMeta[index].name)")
+    }
+}
+/// One operator column — hoisted so the FM panel closure stays type-checkable.
+struct FmOperatorColumn: View {
+    let index:Int
+    let editor:EditorView
+    var body: some View { editor.fmOpColumnBody(index) }
+}
+extension FmPatch {
+    /// Mirrors kAlgos in Sources/FmEngine.cpp (locked spec §4) — UI labels + diagram routing.
+    /// Families: 4 single-carrier chains · 5 two-carrier pairs (EP home) · 4 stacked · 3 feedback-forward.
+    static let algorithmMeta:[(name:String,target:[Int],fb:Int)]=[
+        ("Deep Tine",[1,2,3,-1],0),("Twin Roots",[2,2,3,-1],0),("Split Chain",[1,3,3,-1],0),("Triple Root",[3,3,3,-1],0),
+        ("EP Twin",[-1,-1,0,1],2),("Chain & Solo",[-1,0,1,-1],2),("Mirror Pair",[1,-1,-1,2],0),("Nested Twin",[-1,-1,3,0],2),
+        ("Hub Pair",[2,3,-1,-1],0),("Triple Crown",[-1,-1,-1,0],3),("Post Stack",[-1,-1,-1,1],3),("Head Stack",[3,-1,-1,-1],0),
+        ("Pure Additive",[-1,-1,-1,-1],-1),("Deep Feedback",[1,2,3,-1],2),("Twin Feedback",[-1,-1,0,1],3),("Loopback",[1,2,3,-1],3)]
+}
 struct LayerPatch: Codable, Equatable {
     var values: [Int: Double]
+    /// Spec §7: FM payload sibling of `values`. nil / absent = engine mode Subtractive.
+    var fm: FmPatch? = nil
     subscript(_ id: Int) -> Double {
         get { values[id] ?? Self.extensionDefaults[id] ?? (id==34 ? 0.5 : id==36 ? 1 : id==37 ? 8 : id==38 ? 0.6 : id==43 ? 2 : 0) }
         set { values[id] = newValue }
@@ -130,8 +371,8 @@ struct MatrixAssignment:Codable,Equatable {
     static let soundEmpty=Array(repeating:MatrixAssignment(),count:10)
     static let performanceEmpty=Array(repeating:MatrixAssignment(),count:6)
     func valid(performance:Bool)->Bool {
-        let sourceOK=performance ? (0...5).contains(source):(0...8).contains(source)
-        let destinationOK=performance ? (0...20).contains(destination):((0...7).contains(destination)||(12...36).contains(destination))
+        let sourceOK=performance ? (0...5).contains(source):(0...10).contains(source)
+        let destinationOK=performance ? (0...20).contains(destination):((0...7).contains(destination)||(12...46).contains(destination))
         return sourceOK && destinationOK && (0...4).contains(target) && (0...127).contains(cc) && amount.isFinite && (-1...1).contains(amount)
     }
 }
@@ -230,7 +471,7 @@ enum FactoryBank {
         guard let url = AuroraResources.bundle.url(forResource: "Aurora100", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let sounds = try? JSONDecoder().decode([SoundPreset].self, from: data),
-              sounds.count == 100 else { return [] }
+              sounds.count >= 100 else { return [] }
         return sounds
     }()
     static let prism: [SoundPreset] = {
@@ -799,6 +1040,7 @@ struct VoiceStatus:View {
                 layer[p]=integerParameters.contains(p) ? clipped.rounded():clipped
             }
             if layer[27]>layer[28]{layer[28]=layer[27]}
+            layer.fm=input.layers[i].fm
             result.layers[i]=layer
         }
         for p in 0..<6 {result.globals[p]=max(globalRanges[p].lowerBound,min(globalRanges[p].upperBound,input.globals[p]))}
@@ -887,6 +1129,7 @@ struct VoiceStatus:View {
         }
         applySessionEQ() // house EQ stays session-sticky across patch loads
         for i in 0..<4 {for p in 0..<Self.ranges.count {backend.aurora_set_parameter(Int32(i),Int32(p),Float(patch.layers[i][p]))}}
+        for i in 0..<4 { applyFm(i) }
         for (p,v) in patch.globals.enumerated() { backend.aurora_set_global(Int32(p),Float(v)) }
     }
     func soundRows(_ layer:Int)->[MatrixAssignment] {
@@ -970,6 +1213,19 @@ struct VoiceStatus:View {
         if parameter==21{setEqMid(value);return}
         if parameter==22{setEqHigh(value);return}
         if parameter>6{if patch.fx==nil{patch.fx=[:]};patch.fx?[parameter]=value}else if parameter==6{patch.phaserMix=value}else{patch.globals[parameter]=value};backend.aurora_set_global(Int32(parameter),Float(value));dirty=true
+    }
+    /// FM engine edit: checkpoint for undo, mutate this layer's FmPatch, push 96 floats.
+    func setFm(_ mutate:(inout FmPatch)->Void, layer:Int?=nil, checkpointing:Bool=true) {
+        let l=layer ?? selectedLayer
+        if checkpointing { checkpoint() }
+        var fm=patch.layers[l].fm ?? FmPatch()
+        mutate(&fm)
+        patch.layers[l].fm=fm
+        applyFm(l)
+        dirty=true
+    }
+    func applyFm(_ l:Int) {
+        backend.aurora_set_layer_fm(Int32(l),(patch.layers[l].fm ?? FmPatch()).packed(),Int32(96))
     }
     func parameter(_ parameter:Int, layer:Int?=nil) -> Binding<Double> {
         let l=layer ?? selectedLayer
@@ -1423,6 +1679,10 @@ struct LayerStrip:View {
                 Menu{Button("Copy layer"){model.copyLayer(index)};Button("Paste layer"){model.pasteLayer(index)}.disabled(model.layerClipboard==nil)}label:{AuroraEllipsisLabel()}.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Copy or paste this layer, including its modulation and wavetable data").accessibilityLabel("Copy or paste layer \(layerLetters[index])")
                 Button{model.checkpoint();model.set(index,0,model.patch.layers[index][0]>0.5 ? 0:1)}label:{Image(systemName:"power").foregroundStyle(model.patch.layers[index][0]>0.5 ? palette.selectedText:Color.white)}.buttonStyle(AuroraIconButtonStyle(selected:model.patch.layers[index][0]>0.5)).accessibilityLabel("Enable layer \(layerLetters[index])")
             }
+            Picker("Layer \(layerLetters[index]) engine",selection:Binding(get:{(model.patch.layers[index].fm?.enabled ?? false) ? 1:0},set:{v in model.selectedLayer=index;model.setFm{fm in fm.enabled = v==1}})){
+                Text("Sub").tag(0)
+                Text("FM").tag(1)
+            }.labelsHidden().frame(width:96).pickerStyle(.segmented).font(.system(size:13)).accessibilityLabel("Layer \(layerLetters[index]) engine Subtractive or FM")
             Picker("Layer \(layerLetters[index]) waveform",selection:Binding(get:{model.patch.layers[index][44] > 0.5 ? 5:Int(model.patch.layers[index][1])},set:{model.checkpoint();if $0==5{model.set(index,44,1)}else{model.set(index,1,Double($0))};model.selectedLayer=index})){
                 ForEach(Array(["Sine","Triangle","Saw","Pulse","Harmonic"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
                 Text("Wavetable").tag(5)
@@ -1468,6 +1728,108 @@ struct EditorView:View {
     func choice(_ label:String,_ p:Int,_ options:[String])->some View {
         Picker(label,selection:Binding(get:{Int(m.patch.layers[m.selectedLayer][p])},set:{m.checkpoint();m.set(m.selectedLayer,p,Double($0))})){ForEach(Array(options.enumerated()),id:\.offset){i,s in Text(s).tag(i)}}.font(.system(size:15,weight:palette.weight(.regular)))
     }
+    // MARK: - FM engine panel (FUTURE-PROPOSAL-FM-ENGINE.md §3/§9)
+    var fmOn:Bool{m.patch.layers[m.selectedLayer].fm?.enabled ?? false}
+    var fm:FmPatch{m.patch.layers[m.selectedLayer].fm ?? FmPatch()}
+    func fmBinding<T>(_ kp:WritableKeyPath<FmPatch,T>)->Binding<T>{
+        Binding(get:{(m.patch.layers[m.selectedLayer].fm ?? FmPatch())[keyPath:kp]},
+                set:{v in m.setFm({$0[keyPath:kp]=v},checkpointing:false)})
+    }
+    func fmOpBinding<T>(_ op:Int,_ kp:WritableKeyPath<FmOpState,T>)->Binding<T>{
+        Binding(get:{(m.patch.layers[m.selectedLayer].fm ?? FmPatch()).op(op)[keyPath:kp]},
+                set:{v in m.setFm({var o=$0.op(op);o[keyPath:kp]=v;$0.setOp(op,o)},checkpointing:false)})
+    }
+    func fmEnvBinding(_ op:Int,_ levels:Bool,_ i:Int)->Binding<Double>{
+        Binding(get:{let o=(m.patch.layers[m.selectedLayer].fm ?? FmPatch()).op(op)
+            return levels ? (o.env.levels.count>i ? o.env.levels[i] : 0) : (o.env.rates.count>i ? o.env.rates[i] : 0.02)},
+                set:{v in m.setFm({var o=$0.op(op);var e=o.env
+                    if levels {while e.levels.count<=i{e.levels.append(0)};e.levels[i]=v}
+                    else {while e.rates.count<=i{e.rates.append(0.02)};e.rates[i]=v}
+                    o.env=e;$0.setOp(op,o)},checkpointing:false)})
+    }
+    func fmSlider(_ title:String,_ value:Binding<Double>,_ range:ClosedRange<Double>,log:Bool=false,help:String="",format:@escaping(Double)->String={String(format:"%.0f%%",$0*100)})->some View{
+        ParameterSlider(title:title,value:value,range:range,logarithmic:log,format:format,onBegin:{m.checkpoint()}).help(help.isEmpty ? title : help)
+    }
+    /// Engine toggle — lives above the panel content in BOTH modes so FM is always reachable.
+    var enginePicker:some View{
+        HStack(spacing:14){
+            Picker("Engine",selection:Binding(get:{fmOn ? 1:0},set:{v in m.setFm({$0.enabled=v==1})})){
+                Text("Subtractive").tag(0);Text("FM").tag(1)
+            }.pickerStyle(.segmented).frame(width:180).accessibilityLabel("Engine mode Subtractive or FM")
+            Spacer()
+            Text(fmOn ? "Sub + noise + filters + Character stay live under FM" : "Switch to FM for 4-operator synthesis").font(.system(size:12)).foregroundStyle(palette.muted)
+        }
+    }
+    @ViewBuilder func fmContent()->some View{
+        VStack(alignment:.leading,spacing:12){
+            // 16 visual algorithms — vector drawings in bounded canvases (spec §9)
+            LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:8),count:8),spacing:8){
+                ForEach(0..<16,id:\.self){idx in FmAlgorithmCell(index:idx,selected:fm.algorithm==idx,select:{m.setFm({$0.algorithm=idx})})}
+            }
+            HStack(spacing:14){
+                fmSlider("Feedback",fmBinding(\.feedback),0...1,help:"FM feedback amount into the algorithm's designated operator")
+                fmSlider("Carrier mix",fmBinding(\.carrierMix),0...1,help:"FM carrier mix between the algorithm's carriers",format:{String(format:"%.0f%% A/B",$0*100)})
+                fmSlider("Pitch env",fmBinding(\.pitchEnv.amount),-1...1,help:"FM pitch strike envelope amount in semitones",format:{String(format:"%.0f st",$0*12)})
+                fmSlider("Strike time",fmBinding(\.pitchEnv.time),0.001...4,log:true,help:"FM pitch strike envelope decay time",format:{String(format:"%.0f ms",$0*1000)})
+                fmSlider("Curve",fmBinding(\.pitchEnv.curve),0...1,help:"FM pitch strike envelope curve")
+            }
+            HStack(alignment:.top,spacing:10){ForEach(0..<4,id:\.self){FmOperatorColumn(index:$0,editor:self)}}
+            HStack{slider("Sub",5);slider("Noise",6)}
+        }
+    }
+    func fmOpColumn(_ i:Int)->some View { FmOperatorColumn(index:i,editor:self) }
+    func fmOpColumnBody(_ i:Int)->some View {
+        let op=fm.op(i)
+        let meta=FmPatch.algorithmMeta[fm.algorithm]
+        let fmWaves=["Sine","Tri","Saw","Pulse","Table"]
+        return VStack(alignment:.leading,spacing:6){
+            HStack(spacing:4){
+                Text("Op \(i+1)").font(.system(size:13,weight:palette.weight(.medium)))
+                Spacer()
+                Text(meta.target[i]<0 ? "carrier":"mod→\(meta.target[i]+1)").font(.system(size:9)).foregroundStyle(palette.muted)
+            }
+            Picker("Wave",selection:fmOpBinding(i,\.wave)){
+                ForEach(Array(fmWaves.enumerated()),id:\.offset){idx,n in Text(n).tag(idx)}
+            }.labelsHidden().pickerStyle(.segmented).font(.system(size:11)).accessibilityLabel("Op \(i+1) wave").help("Operator \(i+1) waveform")
+            fmSlider("Ratio",fmOpBinding(i,\.ratio),0.25...16,log:true,help:"Operator \(i+1) frequency ratio",format:ratioText)
+            fmSlider("Level",fmOpBinding(i,\.level),0...1,help:"Operator \(i+1) level — modulator index or carrier amplitude")
+            fmSlider("Velocity",fmOpBinding(i,\.vel),0...1,help:"Operator \(i+1) velocity sensitivity")
+            FmEnvCurve(op:op).frame(height:42)
+            DisclosureGroup("Envelope"){
+                Picker("Mode",selection:fmOpBinding(i,\.envMode)){Text("Rate/Level").tag(0);Text("ADSR").tag(1)}
+                    .pickerStyle(.segmented).font(.system(size:11)).accessibilityLabel("Op \(i+1) envelope mode")
+                ForEach(0..<4,id:\.self){s in fmEnvRow(i,s)}
+                Picker("Keys",selection:fmOpBinding(i,\.keyScale)){
+                    ForEach(Array(["Off","Low","Even","Odd"].enumerated()),id:\.offset){idx,n in Text(n).tag(idx)}
+                }.pickerStyle(.segmented).font(.system(size:11)).accessibilityLabel("Op \(i+1) key scale")
+                HStack(spacing:8){
+                    fmSlider("Fine",fmOpBinding(i,\.fine),-1...1,format:{String(format:"%.0f ¢",$0*100)})
+                    if op.wave==3 {fmSlider("Width",fmOpBinding(i,\.pulseWidth),0.05...0.95,format:{String(format:"%.0f%%",$0*100)})}
+                }
+            }.font(.system(size:12))
+            HStack(spacing:8){
+                Toggle("Fixed",isOn:Binding(get:{fm.op(i).fixedMode>0},set:{v in m.setFm({var o=$0.op(i);o.fixedMode=v ? 1:0;$0.setOp(i,o)},checkpointing:false)}))
+                    .toggleStyle(.checkbox).tint(palette.accent).font(.system(size:12)).accessibilityLabel("Op \(i+1) fixed frequency")
+                if op.fixedMode>0 {
+                    fmSlider("Freq",fmOpBinding(i,\.fixedHz),1...20000,log:true,format:fmFreqText)
+                }
+            }
+            if op.wave==4 {
+                fmSlider("Position",fmOpBinding(i,\.wtPos),0...1)
+                fmSlider("Warp",fmOpBinding(i,\.wtWarp),0...1)
+            }
+        }.padding(8).background(palette.surface,in:RoundedRectangle(cornerRadius:8))
+        .overlay(RoundedRectangle(cornerRadius:8).stroke(.white.opacity(0.06)))
+        .accessibilityLabel("Operator \(i+1) column")
+    }
+
+    func fmEnvRow(_ i:Int,_ s:Int)->some View {
+        HStack(spacing:6){
+            fmSlider("R\(s+1)",fmEnvBinding(i,false,s),0.02...300,log:true,format:fmRateText)
+            fmSlider("L\(s+1)",fmEnvBinding(i,true,s),0...1,format:fmLevelText)
+        }
+    }
+
     func optionButtons(_ label:String,_ parameter:Int,_ options:[String],offset:Int=0)->some View {
         HStack(spacing:8){
             Text(label).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
@@ -1544,28 +1906,48 @@ struct EditorView:View {
             }.font(.system(size:13))
         }
     }
+    func filter1Panel()->some View{
+        Panel(title:"Filter 1"){
+            optionButtons("Type",32,["Low-pass","High-pass","Band-pass","Notch"])
+            optionButtons("Slope",79,["12 dB","24 dB"])
+            slider("Cutoff",7,30...18000,log:true,format:{$0>=1000 ? String(format:"%.1f kHz",$0/1000):String(format:"%.0f Hz",$0)})
+            slider("Resonance",8,0...0.9);slider("Envelope amount",20,-1...1)
+            slider("Drive",21)
+        }
+    }
+    func ampEnvPanel()->some View{
+        Panel(title:"Amplitude envelope"){
+            slider("Attack",9,0.001...8,log:true,format:timeText)
+            slider("Decay",10,0.01...8,log:true,format:timeText)
+            slider("Sustain",11)
+            slider("Release",12,0.01...12,log:true,format:timeText)
+        }
+    }
     var body:some View {
         LazyVStack(alignment:.leading,spacing:16){
             HStack{Text("Layer \(layerLetters[m.selectedLayer]) · sound design").font(.system(size:21,weight:palette.weight(.medium)));Spacer();Text("Every control shapes the audio engine").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)}
             VStack(alignment:.leading,spacing:16){
+                if fmOn {
+                    // FM gets its own full-width row — the 16-algorithm grid and four operator
+                    // columns need the space; Filter 1 + Amp envelope pair up below.
+                    Panel(title:"FM Engine · layer \(layerLetters[m.selectedLayer])"){
+                        enginePicker
+                        fmContent()
+                    }
+                    EqualHeightRow(spacing:16){
+                        filter1Panel()
+                        ampEnvPanel()
+                    }
+                } else {
                 EqualHeightRow(spacing:16){
                 Panel(title:"Oscillators"){
+                    enginePicker
                     optionButtons("Oscillator 1",1,waves);optionButtons("Oscillator 2",2,waves)
                     slider("Oscillator blend",3);slider("Detune",4,0...30,format:{String(format:"%.1f cents",$0)})
                     HStack{slider("Sub",5);slider("Noise",6)}
                 }
-                Panel(title:"Filter 1"){
-                    optionButtons("Type",32,["Low-pass","High-pass","Band-pass","Notch"])
-                    optionButtons("Slope",79,["12 dB","24 dB"])
-                    slider("Cutoff",7,30...18000,log:true,format:{$0>=1000 ? String(format:"%.1f kHz",$0/1000):String(format:"%.0f Hz",$0)})
-                    slider("Resonance",8,0...0.9);slider("Envelope amount",20,-1...1)
-                    slider("Drive",21)
-                }
-                Panel(title:"Amplitude envelope"){
-                    slider("Attack",9,0.001...8,log:true,format:timeText)
-                    slider("Decay",10,0.01...8,log:true,format:timeText)
-                    slider("Sustain",11)
-                    slider("Release",12,0.01...12,log:true,format:timeText)
+                filter1Panel()
+                ampEnvPanel()
                 }
                 }
                 EqualHeightRow(spacing:16){
@@ -1841,9 +2223,9 @@ struct ArpEffectsView:View {
 struct MatrixView:View {
     @Environment(\.auroraPalette) private var palette
     @ObservedObject var m:SynthModel
-    private let soundSources:[(id:Int,name:String)]=[(0,"LFO 1"),(1,"LFO 2"),(6,"LFO 3"),(7,"LFO 4"),(8,"LFO 5"),(2,"Amp envelope"),(3,"Mod envelope"),(4,"Key tracking"),(5,"Per-note random")]
+    private let soundSources:[(id:Int,name:String)]=[(0,"LFO 1"),(1,"LFO 2"),(6,"LFO 3"),(7,"LFO 4"),(8,"LFO 5"),(2,"Amp envelope"),(3,"Mod envelope"),(4,"Key tracking"),(5,"Per-note random"),(9,"Velocity"),(10,"Channel pressure")]
     private let performanceSources=["Mod wheel","Velocity","Channel pressure","Expression","Sustain","MIDI CC"]
-    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance","Filter 1 resonance","Pulse width","Detune","Sub level","Noise level","Unison detune","Stereo spread","Sync tune","WT 1 formant","WT 1 tone","WT 2 formant","WT 2 tone","Osc mod ratio","Character mix","Character tone","Filter envelope"]
+    private let destinations=["Cutoff","Pitch","Pan","Amplitude","Oscillator blend","Drive","LFO 1 depth","LFO 2 depth","Chorus","Phaser","Reverb","Delay mix","WT 1 position","WT 2 position","WT 1 warp","WT 2 warp","Filter 2 cutoff","Filter 2 resonance","Osc modulation","Character drive","Filter balance","Filter 1 resonance","Pulse width","Detune","Sub level","Noise level","Unison detune","Stereo spread","Sync tune","WT 1 formant","WT 1 tone","WT 2 formant","WT 2 tone","Osc mod ratio","Character mix","Character tone","Filter envelope","Op 1 level","Op 2 level","Op 3 level","Op 4 level","FM feedback","FM carrier mix","Pitch envelope","FM ratio fine","WT mod position","WT mod warp"]
     func binding<T>(_ performance:Bool,_ slot:Int,_ key:WritableKeyPath<MatrixAssignment,T>)->Binding<T> {
         Binding(get:{m.matrixRows(performance:performance)[slot][keyPath:key]},set:{value in m.checkpoint();m.updateMatrix(performance:performance,slot:slot){$0[keyPath:key]=value}})
     }

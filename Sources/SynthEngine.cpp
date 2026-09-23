@@ -1,6 +1,7 @@
 #include "SynthEngine.hpp"
 #include "Wavetable.hpp"
 #include "MotionEnvelope.hpp"
+#include "FmEngine.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -178,6 +179,7 @@ struct Voice {
     float envelope=0,velocity=1,ic1=0,ic2=0,filterG=.2f,filterK=1,lastL=0,lastR=0;
     float modEnvelope=0,filter2G=.2f,filter2K=1;int modStage=0;
     std::array<OscillatorLane,8> lanes{};
+    aurora::FmVoiceState fm{}; // FM-mode operator phases/envelopes (zeroed per note by Voice{})
     std::array<float,5> lfoPhase{},lfoRandom{};
     uint32_t extraLFOSeed=0xA5A5A5A5u;
     double age=0;float noteRandom=0;
@@ -212,6 +214,8 @@ struct Layer {
     std::array<uint32_t,5> lfoSeed{0,0x71b48a95u,0x51c3a91eu,0x8a2e17b4u,0x3d6f90c1u};
     double arpCountdown=0,gateCountdown=0;
     uint64_t arpStep=0; bool previousEnabled=false,previousArp=false,arpWaiting=true;
+    aurora::FmParams fm{}; // block-boundary snapshot of this layer's 96 FM floats
+    bool fmActive=false;
 };
 struct Candidate { int source=0,channel=0,key=0,note=0; float velocity=0; uint64_t order=0; };
 struct Comb {
@@ -294,6 +298,8 @@ struct SynthEngine::Impl {
     // retune shimmer mid-fade (Infinite Mirror / Fifth Cascade). Flushed at silence.
     std::atomic<bool> panicDeferParams{false};
     std::array<std::array<std::atomic<float>,APParameterCount>,kLayers> pendingParameters{};
+    std::array<std::array<std::atomic<float>,kFmParamCount>,kLayers> fmParameters{};
+    std::array<std::array<std::atomic<float>,kFmParamCount>,kLayers> pendingFmParameters{};
     std::array<std::atomic<float>,AGGlobalCount> pendingGlobals{};
     static constexpr float kPanicFadeOutMs=100.f;
     static constexpr float kPanicFadeInMs=25.f;
@@ -408,6 +414,9 @@ struct SynthEngine::Impl {
                 pendingParameters[l][p].store(parameters[l][p].load(std::memory_order_relaxed),std::memory_order_relaxed);
         for(int g=0;g<AGGlobalCount;g++)
             pendingGlobals[g].store(globals[g].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        for(int l=0;l<kLayers;l++)
+            for(int i=0;i<kFmParamCount;i++)
+                pendingFmParameters[l][i].store(fmParameters[l][i].load(std::memory_order_relaxed),std::memory_order_relaxed);
     }
     void flushPendingToLive() {
         for(int l=0;l<kLayers;l++)
@@ -415,6 +424,9 @@ struct SynthEngine::Impl {
                 parameters[l][p].store(pendingParameters[l][p].load(std::memory_order_relaxed),std::memory_order_relaxed);
         for(int g=0;g<AGGlobalCount;g++)
             globals[g].store(pendingGlobals[g].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        for(int l=0;l<kLayers;l++)
+            for(int i=0;i<kFmParamCount;i++)
+                fmParameters[l][i].store(pendingFmParameters[l][i].load(std::memory_order_relaxed),std::memory_order_relaxed);
     }
     void beginPanicMute() {
         // Fade the FINAL bus first. Clearing voices/wet state here clicks while gain is still ~1
@@ -498,6 +510,7 @@ struct SynthEngine::Impl {
         return panicGain;
     }
     void prepare(double rate) {
+        aurora::FmEngine::initTables();
         sampleRate=std::isfinite(rate)?std::clamp(rate,8000.,192000.):48000;
         // Device configuration may be queued before audio has started. Keep it,
         // but discard notes from a stopped interval and any old panic request.
@@ -663,6 +676,8 @@ struct SynthEngine::Impl {
             }
             float oldTranspose=p[APTranspose];
             for(int i=0;i<APParameterCount;i++)p[i]=parameters[l][i].load(std::memory_order_relaxed);
+            for(int i=0;i<kFmParamCount;i++)layer.fm.v[i]=fmParameters[l][i].load(std::memory_order_relaxed);
+            layer.fmActive=layer.fm.v[FmEnabled]>.5f;
             if(oldTranspose!=p[APTranspose])for(auto& voice:voices)if(voice.active&&voice.layer==l){
                 float ratio=std::exp2((std::clamp(voice.untransposedPitch+int(p[APTranspose]),0,127)-std::clamp(voice.untransposedPitch+int(oldTranspose),0,127))/12.f);
                 voice.frequency*=ratio;voice.targetFrequency*=ratio;
@@ -1040,13 +1055,15 @@ struct SynthEngine::Impl {
                     }else noteLFO[o]=shaped*p[ix.depth];
                 }
                 v.age+=1/sampleRate;notePitch=std::exp2(notePitch/12.f);noteAmp=std::clamp(noteAmp,0.f,2.f);
-                std::array<float,37> mod{};
+                std::array<float,kFmDestCount> mod{};
                 constexpr int modDestinations[]={0,16,1,18,19,12,13};
                 mod[modDestinations[int(p[APModDestination])]]+=v.modEnvelope*p[APModAmount];
                 for(int i=0;i<matrixCount[v.layer];i++){
                     const auto& r=activeMatrix[v.layer][i];
-                    if(r.source<0||r.source>8||r.destination<0||r.destination>36)continue;
-                    float signals[]={noteLFO[0],noteLFO[1],v.envelope,v.modEnvelope,std::clamp((v.key-60)/60.f,-1.f,1.f),v.noteRandom,noteLFO[2],noteLFO[3],noteLFO[4]};
+                    if(r.source<0||r.source>10||r.destination<0||r.destination>=kFmDestCount)continue;
+                    float signals[]={noteLFO[0],noteLFO[1],v.envelope,v.modEnvelope,std::clamp((v.key-60)/60.f,-1.f,1.f),v.noteRandom,noteLFO[2],noteLFO[3],noteLFO[4],
+                        // Sources 9/10: velocity + channel pressure promoted into soundSources (spec §6).
+                        v.velocity,float(source.pressure[v.channel])};
                     float signal=signals[r.source];
                     mod[r.destination]+=signal*r.amount;
                     frameFeedback[v.layer*kMatrixSlots+r.slot]=signal*r.amount;
@@ -1078,7 +1095,7 @@ struct SynthEngine::Impl {
                     }
                 }
                 float g=v.filterG,k=v.filterK,a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2;
-                int unison=std::clamp(int(p[APUnison]),1,8);
+                int unison=layer.fmActive?1:std::clamp(int(p[APUnison]),1,8); // FM renders a single lane
                 float width=std::clamp(p[APPulseWidth]+noteLFO[0]*p[APPWMDepth]*.45f+mod[22],.05f,.95f);
                 v.lastL=v.lastR=0;
                 float positions[2],amounts[2];
@@ -1097,6 +1114,17 @@ struct SynthEngine::Impl {
                     float position=unison==1?0.f:2.f*laneIndex/(unison-1)-1;
                     float uniExtra=std::exp2(position*std::clamp(mod[26],-1.f,1.f)*30.f/1200.f);
                     float step=std::clamp(frequency*layer.unisonRatios[laneIndex]*uniExtra/float(sampleRate),.000001f,.45f);
+                    float input;
+                    if(layer.fmActive){
+                        // Engine mode FM (spec §3): the four operators replace Osc1/Osc2;
+                        // sub + noise stay beneath, then drive/filters/Character/amp/matrix run unchanged.
+                        input=aurora::FmEngine::renderSample(layer.fm,v.fm,frequency,v.velocity,v.key,v.stage==3,double(sampleRate),mod.data()+aurora::kFmModBase);
+                        float subLevel=std::clamp(p[APSub]+mod[24],0.f,1.f);
+                        input+=std::sin(tau*lane.subphase)*subLevel*.6f;
+                        float noiseLevel=std::clamp(p[APNoise]+mod[25],0.f,1.f);
+                        if(noiseLevel>.0001f)input+=randomUnit(random)*noiseLevel*.3f;
+                        lane.subphase+=step*.5f;if(lane.subphase>=1)lane.subphase-=1;
+                    } else {
                     int oscMode=int(p[APOscModMode]);
                     float oscAmount=std::clamp(p[APOscModAmount]+mod[18],0.f,1.f);
                     float detuneExtra=std::exp2(std::clamp(mod[23],-1.f,1.f)*30.f/1200.f);
@@ -1109,7 +1137,7 @@ struct SynthEngine::Impl {
                     float phase=lane.phase1+(oscMode==1?second*depth*.5f:0.f);phase-=std::floor(phase);
                     float first=wave(0,phase,std::min(.45f,step+(oscMode==1?step2*depth:0.f)));
                     if(oscMode==3)first=first*(1-depth)+first*second*depth;
-                    float input=first*(1-blend)+second*blend;
+                    input=first*(1-blend)+second*blend;
                     float subLevel=std::clamp(p[APSub]+mod[24],0.f,1.f);
                     input+=std::sin(tau*lane.subphase)*subLevel*.6f;
                     float noiseLevel=std::clamp(p[APNoise]+mod[25],0.f,1.f);
@@ -1128,6 +1156,7 @@ struct SynthEngine::Impl {
                     }
                     lane.syncCorrection*=layer.syncDecay;
                     lane.subphase+=step*.5f;if(lane.subphase>=1)lane.subphase-=1;
+                    }
                     if(drive>.001f)input=std::tanh(input*(1+8*drive));
                     auto filter=[](float in,float g,float k,int type,float& ic1,float& ic2){
                         float a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2;
@@ -1159,7 +1188,7 @@ struct SynthEngine::Impl {
                         filtered+=(lane.tone-filtered)*std::clamp(p[APCharacterMix]+mod[34],0.f,1.f);
                     }
                     float amplitude=motion.routed(0)?motion.value(0,v.motionValue)*v.motionRelease*v.motionFade:v.envelope;
-                    float value=filtered*amplitude*v.velocity*source.expression[v.channel]*layer.gain*std::clamp(noteAmp+mod[3]+extraAmp,0.f,2.f)*.16f/unison;
+                    float value=filtered*amplitude*(layer.fmActive?1.f:v.velocity)*source.expression[v.channel]*layer.gain*std::clamp(noteAmp+mod[3]+extraAmp,0.f,2.f)*.16f/unison;
                     float spread=std::clamp(p[APStereoSpread]+mod[27],0.f,1.f);
                     float pan=std::clamp((motion.routed(3)?motion.value(3,v.motionValue):p[APPan])+notePan+mod[2]+extraPan+position*spread,-1.f,1.f);
                     if(!std::isfinite(value)||!std::isfinite(lane.ic1)||!std::isfinite(lane.ic2)||!std::isfinite(lane.f2ic1)||!std::isfinite(lane.f2ic2)){lane=OscillatorLane{};continue;}
@@ -1409,6 +1438,17 @@ void SynthEngine::setParameter(int layer,int parameter,float value) {
             impl->parameters[layer][parameter].store(v,std::memory_order_relaxed);
     }
 }
+void SynthEngine::setLayerFM(int layer,const float* data,int count) {
+    if(layer<0||layer>=kLayers||!data||count<=0)return;
+    int n=std::min(count,int(kFmParamCount));
+    bool defer=impl->panicDeferParams.load(std::memory_order_acquire);
+    for(int i=0;i<n;i++){
+        float v=data[i];
+        if(!std::isfinite(v))continue;
+        if(defer)impl->pendingFmParameters[layer][i].store(v,std::memory_order_relaxed);
+        else impl->fmParameters[layer][i].store(v,std::memory_order_relaxed);
+    }
+}
 float SynthEngine::getParameter(int layer,int parameter)const {
     return layer>=0&&layer<kLayers&&parameter>=0&&parameter<APParameterCount?
         impl->parameters[layer][parameter].load(std::memory_order_relaxed):0;
@@ -1453,7 +1493,7 @@ int aurora::SynthEngine::copyScope(float* samples,int capacity) const {
 void aurora::SynthEngine::setMatrix(int bank,int slot,bool enabled,int source,int destination,int target,int cc,float amount) {
     int slotLimit=bank==4?6:10;
     if(bank<0||bank>4||slot<0||slot>=slotLimit)return;
-    bool soundBlocked=bank!=4 && ((source<0||source>8) || destination<0 || destination>36 || (destination>7 && destination<12));
+    bool soundBlocked=bank!=4 && ((source<0||source>10) || destination<0 || destination>46 || (destination>7 && destination<12));
     bool performanceBlocked=bank==4 && (source<0||source>5||destination<0||destination>20);
     if(soundBlocked||performanceBlocked||target<0||target>4||cc<0||cc>127||!std::isfinite(amount))enabled=false;
     unsigned a=unsigned(int(std::round(std::clamp(std::isfinite(amount)?amount:0.f,-1.f,1.f)*32767))+32768);

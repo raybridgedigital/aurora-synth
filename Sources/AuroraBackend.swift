@@ -102,6 +102,13 @@ final class AuroraBackend {
         return aurora_get_parameterStandalone(layer, parameter)
 #endif
     }
+    func aurora_set_layer_fm(_ layer: Int32, _ data: UnsafePointer<Float>?, _ count: Int32) -> Void {
+#if AURORA_PLUGIN
+        return aurora_plugin_set_layer_fm(context, layer, data, count)
+#else
+        return aurora_set_layer_fmStandalone(layer, data, count)
+#endif
+    }
     func aurora_set_matrix(_ bank: Int32, _ slot: Int32, _ enabled: Int32, _ source: Int32, _ destination: Int32, _ target: Int32, _ cc: Int32, _ amount: Float) -> Void {
 #if AURORA_PLUGIN
         return aurora_plugin_set_matrix(context, bank, slot, enabled, source, destination, target, cc, amount)
@@ -349,6 +356,7 @@ private let aurora_sample_rateStandalone = aurora_sample_rate
 private let aurora_buffer_framesStandalone = aurora_buffer_frames
 private let aurora_set_parameterStandalone = aurora_set_parameter
 private let aurora_get_parameterStandalone = aurora_get_parameter
+private let aurora_set_layer_fmStandalone = aurora_set_layer_fm
 private let aurora_set_matrixStandalone = aurora_set_matrix
 private let aurora_set_motionStandalone = aurora_set_motion
 private let aurora_motion_phaseStandalone = aurora_motion_phase

@@ -17,6 +17,7 @@ double aurora_plugin_sample_rate(void *context);
 uint32_t aurora_plugin_buffer_frames(void *context);
 void aurora_plugin_set_parameter(void *context, int layer, int parameter, float value);
 float aurora_plugin_get_parameter(void *context, int layer, int parameter);
+void aurora_plugin_set_layer_fm(void *context, int layer, const float *data, int count);
 void aurora_plugin_set_matrix(void *context, int bank, int slot, int enabled, int source, int destination, int target, int cc, float amount);
 int aurora_plugin_set_motion(void *context, int layer, const float *data, int count);
 float aurora_plugin_motion_phase(void *context, int layer);

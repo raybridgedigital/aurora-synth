@@ -195,6 +195,64 @@ def macros(p):
     assert all(v['routes'] for v in result.values())
     return result
 
+def fm_op(wave=0,ratio=1.0,level=0.5,vel=0.6,rates=(180,10,8,40),levels=(1,0.25,0.2,0),
+          fixedHz=440.0,fixedMode=0,fine=0.0,keyScale=0,keySync=1,envMode=0,pulseWidth=0.5,
+          wtTable=0,wtPos=0.5,wtWarp=0.0):
+    return dict(wave=wave,ratio=ratio,fixedHz=fixedHz,fixedMode=fixedMode,fine=fine,
+                level=level,vel=vel,keyScale=keyScale,keySync=keySync,envMode=envMode,
+                pulseWidth=pulseWidth,wtTable=wtTable,wtPos=wtPos,wtWarp=wtWarp,
+                env=dict(rates=list(rates),levels=list(levels)))
+
+def fm_layer(algorithm,feedback,ops,pitch_amount=0.0,pitch_time=0.05,pitch_curve=0.5,carrierMix=0.5):
+    return dict(enabled=True,algorithm=algorithm,feedback=feedback,carrierMix=carrierMix,
+                pitchEnv=dict(amount=pitch_amount,time=pitch_time,curve=pitch_curve),
+                ops={str(i):op for i,op in enumerate(ops)})
+
+def fm_flagships():
+    """Spec §8: the 15 flagship FM patches — category 'FM', appended into Aurora100.json.
+    Core-on-sine (wave policy); ≥10 of the 16 algorithms exercised; every patch routes
+    velocity→index (soundMatrix source 9 = Velocity → destination 37+op = Op N level)."""
+    def C(ratio=1.0,level=0.85,vel=0.8,rates=(100,6,5,50),levels=(1,0.72,0.68,0),**kw):
+        return fm_op(ratio=ratio,level=level,vel=vel,rates=rates,levels=levels,**kw)
+    def M(ratio=1.0,level=0.5,vel=0.85,rates=(150,10,8,45),levels=(1,0.28,0.2,0),**kw):
+        return fm_op(ratio=ratio,level=level,vel=vel,rates=rates,levels=levels,**kw)
+    # name · base family · algorithm · feedback · ops 1-4 · velocity→index op (0-based)
+    specs=[
+      ('Solar Tine','Keys',4,0.3,[C(),C(fine=0.004,level=0.8,rates=(90,6,5,55)),M(ratio=1,level=0.55),M(ratio=14,level=0.26,vel=0.7,rates=(200,14,10,60),levels=(1,0.14,0.1,0))],2),
+      ('Ballad Tine','Keys',5,0.2,[C(rates=(60,5,4,40),levels=(1,0.8,0.75,0)),M(ratio=1,level=0.42,rates=(80,7,6,35),levels=(1,0.4,0.35,0)),M(ratio=2,level=0.3,rates=(50,6,5,30)),C(rates=(70,5,4,45),levels=(1,0.7,0.6,0))],1),
+      ('Wurli Coals','Keys',2,0.35,[M(ratio=1,level=0.45,rates=(120,9,7,40)),M(ratio=1,level=0.55),M(ratio=2.99,level=0.3,vel=0.7),C(level=0.9,rates=(110,7,6,55),levels=(1,0.65,0.6,0))],0),
+      ('Felt Cinema Tine','Keys',7,0.25,[C(rates=(45,5,4,35),levels=(1,0.75,0.7,0),level=0.8),C(rates=(55,5,4,40),level=0.75),M(ratio=1,level=0.4,rates=(70,7,6,30),levels=(1,0.45,0.4,0)),M(ratio=3.01,level=0.3)],2),
+      ('Rhodes Hybrid','Keys',6,0.3,[M(ratio=1,level=0.5),C(level=0.85),C(fine=-0.003,level=0.8,rates=(80,6,5,50)),M(ratio=3.5,level=0.28,vel=0.7,rates=(180,12,9,50),levels=(1,0.2,0.15,0))],0),
+      ('Chrome Clav','Keys',8,0.2,[M(ratio=1,level=0.5,rates=(200,25,18,60),levels=(1,0.1,0.05,0)),M(ratio=3.98,level=0.42,vel=0.75,rates=(220,30,20,70),levels=(1,0.08,0.04,0)),C(rates=(160,18,14,70),levels=(1,0.3,0.2,0),level=0.8),C(rates=(150,16,13,65),levels=(1,0.28,0.18,0),level=0.75)],1),
+      ('Glass House EP','Keys',0,0.3,[M(ratio=1,level=0.42,rates=(90,8,7,35),levels=(1,0.5,0.45,0)),M(ratio=1,level=0.5,rates=(110,9,7,40),levels=(1,0.4,0.35,0)),M(ratio=7,level=0.22,vel=0.65,rates=(210,16,12,55),levels=(1,0.12,0.08,0)),C(level=0.88,rates=(100,6,5,50),levels=(1,0.68,0.6,0))],0),
+      ('Velvet Vibes','Keys',3,0.2,[M(ratio=1,level=0.5,rates=(60,4,3,25),levels=(1,0.55,0.5,0)),M(ratio=2.76,level=0.32,vel=0.7,rates=(55,4,3,22),levels=(1,0.3,0.25,0)),M(ratio=5.4,level=0.18,vel=0.6,rates=(75,5,4,28),levels=(1,0.15,0.1,0)),C(level=0.85,rates=(55,3.5,2.5,22),levels=(1,0.5,0.42,0))],0),
+      ('Glass Marimba','Keys',9,0.15,[C(level=0.85,rates=(170,30,25,90),levels=(1,0.12,0,0)),C(ratio=2.99,level=0.35,rates=(180,35,30,95),levels=(1,0.08,0,0)),C(ratio=9.2,level=0.12,rates=(200,45,40,110),levels=(1,0.04,0,0)),M(ratio=3.98,level=0.4,vel=0.8,rates=(230,50,45,120),levels=(1,0.05,0,0))],3),
+      ('Nylon Harp','Keys',10,0.2,[C(level=0.8,rates=(150,12,10,60),levels=(1,0.25,0.15,0)),C(ratio=2,level=0.5,rates=(140,14,12,65),levels=(1,0.2,0.12,0)),C(ratio=3,level=0.25,rates=(160,16,14,70),levels=(1,0.1,0.06,0)),M(ratio=1,level=0.45,vel=0.8,rates=(170,15,12,70),levels=(1,0.18,0.1,0))],3),
+      ('Copper Harpsichord','Keys',11,0.0,[M(ratio=3,level=0.5,vel=0.85,rates=(240,35,30,90),levels=(1,0.06,0.03,0)),C(ratio=2,level=0.3,rates=(190,25,22,80),levels=(1,0.1,0.06,0)),C(ratio=1.005,level=0.55,rates=(170,22,20,75),levels=(1,0.12,0.08,0)),C(level=0.85,rates=(180,24,20,85),levels=(1,0.12,0.07,0))],0),
+      ('Round FM Bass','Bass',13,0.55,[M(ratio=1,level=0.55,vel=0.75,rates=(130,10,8,45),levels=(1,0.35,0.3,0)),M(ratio=1,level=0.45,rates=(110,9,8,40),levels=(1,0.4,0.35,0)),M(ratio=0.5,level=0.35,rates=(90,8,7,35),levels=(1,0.5,0.45,0)),C(level=0.9,rates=(120,7,6,50),levels=(1,0.7,0.65,0))],0),
+      ('Click Tine Bass','Bass',14,0.5,[C(level=0.88,rates=(130,8,7,55),levels=(1,0.65,0.6,0)),C(level=0.7,rates=(120,9,8,50),levels=(1,0.55,0.5,0)),M(ratio=1,level=0.5,vel=0.85,rates=(150,10,8,50),levels=(1,0.3,0.25,0)),M(ratio=2,level=0.4,vel=0.7,rates=(190,14,12,60),levels=(1,0.15,0.1,0))],2),
+      ('Bell Pad Drift','Pads',12,0.0,[C(level=0.7,rates=(18,2.5,2,14),levels=(1,0.8,0.75,0)),C(ratio=2.01,level=0.4,vel=0.8,rates=(15,2.2,1.8,12),levels=(1,0.6,0.5,0)),C(ratio=4.98,level=0.22,vel=0.7,rates=(12,2,1.6,10),levels=(1,0.4,0.3,0)),C(ratio=7.03,level=0.12,vel=0.6,rates=(10,1.8,1.5,9),levels=(1,0.25,0.18,0))],1),
+      ('Evolving Keys','Pads',15,0.6,[M(ratio=1,level=0.45,rates=(30,4,3,18),levels=(1,0.55,0.5,0)),M(ratio=2,level=0.35,vel=0.7,rates=(26,3.5,3,16),levels=(1,0.45,0.4,0)),M(ratio=5.01,level=0.2,vel=0.6,rates=(40,5,4,22),levels=(1,0.3,0.25,0)),C(level=0.85,rates=(24,3,2.5,16),levels=(1,0.7,0.65,0))],0),
+    ]
+    out=[]
+    for n,(name,base,alg,fb,ops,velop) in enumerate(specs):
+        p=make_patch(base,n%10,name)
+        p['category']='FM';p['id']='fm-'+re.sub('[^a-z0-9]+','-',name.lower())
+        p['layers'][0]['fm']=fm_layer(alg,fb,ops)
+        p['soundMatrix'][0][2]=route(9,37+velop,0.5)  # velocity→index rides slot 2 (spec §6/§8)
+        out.append(p)
+    assert len(out)==15 and len({p['name'] for p in out})==15 and len({p['id'] for p in out})==15
+    assert len({s[2] for s in specs})>=10,'spec §8: >=10 of 16 algorithms exercised'
+    for p in out:
+        fm=p['layers'][0]['fm']
+        assert fm['enabled'] and 0<=fm['algorithm']<=15 and p['category']=='FM'
+        assert any(r['source']==9 and 37<=r['destination']<=46 and r['amount']>0 for r in p['soundMatrix'][0])
+        for op in fm['ops'].values():
+            assert 0.25<=op['ratio']<=16 and 0<=op['level']<=1 and 0<=op['vel']<=1
+            assert all(0.02<=r<=300 for r in op['env']['rates'])
+            assert all(0<=l<=1 for l in op['env']['levels'])
+    return out
+
 def make_patch(c,i,name):
     roles=FAMILIES[c][i%10];layers=[make_layer(c,i,l,role) for l,role in enumerate(roles)]
     ambient=c in ('Pads','Textures');bass=c=='Bass';variant=i//10
@@ -245,8 +303,11 @@ def assemble():
                 assert not integer or v==int(v)
     # Distribute evenly between existing resource containers; user-facing library
     # is one Spectrum bank, not three inherited collections.
+    flagships=fm_flagships()
+    assert not {p['name'].lower() for p in flagships}&{p['name'].lower() for p in patches}
     for n,file in enumerate(['Aurora100','AuroraPrism100','AuroraNova100']):
-        (ROOT/f'Resources/{file}.json').write_text(json.dumps(patches[n::3],indent=2)+'\n')
+        bank=patches[n::3]+(flagships if n==0 else [])
+        (ROOT/f'Resources/{file}.json').write_text(json.dumps(bank,indent=2)+'\n')
     (ROOT/'Resources/AuroraSpectrum300.json').write_text(json.dumps(patches,indent=2)+'\n')
     output=ROOT/'Patch Banks';output.mkdir(exist_ok=True)
     with zipfile.ZipFile(output/'Aurora Spectrum 300 Patches.zip','w',zipfile.ZIP_DEFLATED) as archive:
