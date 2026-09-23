@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.1 — 2026-09-23
+
+### Fixes
+
+- Matrix slot number "10" no longer wraps onto two lines: the slot-number column in the Sound and Performance Matrices is wider (22pt) with monospaced digits and a single-line limit.
+- Previous/next patch arrows now step alphabetically within the current patch's category (e.g. FM → next FM patch) instead of across the whole library, in both the header arrows and the Patch Browser arrows/keyboard shortcuts. Falls back to the full library when no same-category patch exists; an explicit browser category filter still wins.
+- Performance Matrix row layout: the source dropdown is now the same width as the Sound Matrix's and the 65pt dead spacer is gone, so the → arrow sits right after the dropdown and aligns with the Sound Matrix rows. The CC-number field appears inline only when the source is "MIDI CC".
+
+### Version metadata
+
+- Git tag: `v0.24.1`
+- Standalone marketing version: `0.24.1`
+- Standalone build: `34`
+- AU/VST3 marketing version: `0.24.1`
+
 ## 0.23.3 — 2026-09-22
 
 ### Fixes

@@ -802,7 +802,9 @@ struct VoiceStatus:View {
         comparingSaved=true;patch=reference;applyPatch();patch=edits
     }
     func browsePatch(_ delta:Int, panic:Bool = true){
-        let sounds=library.sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+        let all=library.sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+        let scoped=all.filter{$0.category==patch.category}
+        let sounds=scoped.isEmpty ? all:scoped
         guard !sounds.isEmpty else{return}
         let index=sounds.firstIndex{$0.id==patch.id} ?? (delta>0 ? -1:0)
         loadPreset(sounds[(index+delta+sounds.count)%sounds.count], panic: panic)
@@ -2246,17 +2248,17 @@ struct MatrixView:View {
         let row=m.matrixRows(performance:performance)[slot]
         return HStack(spacing:10){
             Toggle("Slot \(slot+1)",isOn:binding(performance,slot,\.enabled)).labelsHidden().toggleStyle(.checkbox).accessibilityLabel("\(performance ? "Performance":"Sound") slot \(slot+1) enabled")
-            Text("\(slot+1)").foregroundStyle(palette.muted).frame(width:14)
+            Text("\(slot+1)").foregroundStyle(palette.muted).monospacedDigit().lineLimit(1).frame(width:22,alignment:.leading)
             Picker("Source",selection:binding(performance,slot,\.source)){
                 if performance {
                     ForEach(Array(performanceSources.enumerated()),id:\.offset){i,name in Text(name).tag(i)}
                 } else {
                     ForEach(soundSources,id:\.id){item in Text(item.name).tag(item.id)}
                 }
-            }.labelsHidden().frame(width:performance ? 150:140).accessibilityLabel("Slot \(slot+1) source")
+            }.labelsHidden().frame(width:140).accessibilityLabel("Slot \(slot+1) source")
             if performance && row.source==5 {
-                HStack(spacing:3){Text("CC").foregroundStyle(palette.muted);TextField("CC number",value:binding(performance,slot,\.cc),format:.number).textFieldStyle(.roundedBorder).frame(width:36)}.frame(width:65)
-            } else if performance {Color.clear.frame(width:65,height:1)}
+                HStack(spacing:3){Text("CC").foregroundStyle(palette.muted);TextField("CC number",value:binding(performance,slot,\.cc),format:.number).textFieldStyle(.roundedBorder).frame(width:36)}
+            }
             Image(systemName:"arrow.right").foregroundStyle(palette.muted)
             Picker("Destination",selection:binding(performance,slot,\.destination)){
                 ForEach(performance ? Array(0..<21):Array(0..<8)+Array(12..<destinations.count),id:\.self){i in Text(destinations[i]).tag(i)}
@@ -2605,7 +2607,10 @@ struct PatchBrowser:View {
         }
     }
     func step(_ delta:Int){
-        let list=sounds;guard !list.isEmpty else{return}
+        let all=sounds
+        let scoped=category==nil ? all.filter{$0.category==m.patch.category}:all
+        let list=scoped.isEmpty ? all:scoped
+        guard !list.isEmpty else{return}
         let next=list.firstIndex{$0.id==m.patch.id}.map{($0+delta+list.count)%list.count} ?? (delta>0 ? 0:list.count-1)
         m.loadPreset(list[next])
     }
@@ -2732,8 +2737,8 @@ struct AuroraContentView:View {
                             .help(m.favoritesOnly ? "Showing favorites only · tap to show all":"Show favorites only")
                             .accessibilityLabel(m.favoritesOnly ? "Show all patches":"Show favorites only")
                             .accessibilityAddTraits(m.favoritesOnly ? .isSelected:[])
-                            Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the filtered library")
-                            Button{m.browsePatch(1)}label:{Image(systemName:"chevron.right")}.help("Next patch in the filtered library")
+                            Button{m.browsePatch(-1)}label:{Image(systemName:"chevron.left")}.help("Previous patch in the current category")
+                            Button{m.browsePatch(1)}label:{Image(systemName:"chevron.right")}.help("Next patch in the current category")
                             Button(m.comparingSaved ? "A · Saved — return to B":"B · Edited — compare A"){m.toggleComparison()}.buttonStyle(AuroraButtonStyle(selected:m.comparingSaved)).disabled(m.savedComparison==nil)
                             if m.comparingSaved{Text("Hearing saved sound · your edits are retained").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.accent)}
                             Button("Creative tools…"){m.showingCreativeTools=true}
