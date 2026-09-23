@@ -6,13 +6,13 @@
 	<array>
 		<dict>
 			<key>description</key>
-			<string>Aurora Synthesizer</string>
+			<string>KiMiA Synthesizer</string>
 			<key>factoryFunction</key>
 			<string>AUWrapperFactory</string>
 			<key>manufacturer</key>
 			<string>RyBr</string>
 			<key>name</key>
-			<string>Ray Bridge Digital: Aurora</string>
+			<string>Ray Bridge Digital: KiMiA</string>
 			<key>subtype</key>
 			<string>Auro</string>
 			<key>type</key>
@@ -39,8 +39,8 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.24.1</string>
+	<string>0.24.2</string>
 	<key>CFBundleVersion</key>
-	<string>0.24.1</string>
+	<string>0.24.2</string>
 </dict>
 </plist>

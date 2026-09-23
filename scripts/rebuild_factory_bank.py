@@ -209,7 +209,7 @@ def fm_layer(algorithm,feedback,ops,pitch_amount=0.0,pitch_time=0.05,pitch_curve
                 ops={str(i):op for i,op in enumerate(ops)})
 
 def fm_flagships():
-    """Spec §8: the 15 flagship FM patches — category 'FM', appended into Aurora100.json.
+    """Spec §8: the flagship FM patches (15 original + 5 pure DX7-style EPs) — category 'FM', appended into Aurora100.json.
     Core-on-sine (wave policy); ≥10 of the 16 algorithms exercised; every patch routes
     velocity→index (soundMatrix source 9 = Velocity → destination 37+op = Op N level)."""
     def C(ratio=1.0,level=0.85,vel=0.8,rates=(100,6,5,50),levels=(1,0.72,0.68,0),**kw):
@@ -233,15 +233,34 @@ def fm_flagships():
       ('Click Tine Bass','Bass',14,0.5,[C(level=0.88,rates=(130,8,7,55),levels=(1,0.65,0.6,0)),C(level=0.7,rates=(120,9,8,50),levels=(1,0.55,0.5,0)),M(ratio=1,level=0.5,vel=0.85,rates=(150,10,8,50),levels=(1,0.3,0.25,0)),M(ratio=2,level=0.4,vel=0.7,rates=(190,14,12,60),levels=(1,0.15,0.1,0))],2),
       ('Bell Pad Drift','Pads',12,0.0,[C(level=0.7,rates=(18,2.5,2,14),levels=(1,0.8,0.75,0)),C(ratio=2.01,level=0.4,vel=0.8,rates=(15,2.2,1.8,12),levels=(1,0.6,0.5,0)),C(ratio=4.98,level=0.22,vel=0.7,rates=(12,2,1.6,10),levels=(1,0.4,0.3,0)),C(ratio=7.03,level=0.12,vel=0.6,rates=(10,1.8,1.5,9),levels=(1,0.25,0.18,0))],1),
       ('Evolving Keys','Pads',15,0.6,[M(ratio=1,level=0.45,rates=(30,4,3,18),levels=(1,0.55,0.5,0)),M(ratio=2,level=0.35,vel=0.7,rates=(26,3.5,3,16),levels=(1,0.45,0.4,0)),M(ratio=5.01,level=0.2,vel=0.6,rates=(40,5,4,22),levels=(1,0.3,0.25,0)),C(level=0.85,rates=(24,3,2.5,16),levels=(1,0.7,0.65,0))],0),
+      # Owner order 23 Sep 2026: five more DX7-style FM electric pianos — strictly
+      # piano, single FM layer (subtractive layers B/C/D disabled), no pad/texture.
+      # Trailing True = pure-piano flag.
+      ('DX Tine Classic','Keys',4,0.25,[C(fine=0.003,rates=(110,7,5.5,60),levels=(1,0.7,0.65,0)),C(fine=-0.003,level=0.75,rates=(95,6.5,5,55),levels=(1,0.68,0.62,0)),M(ratio=1,level=0.5,vel=0.8,rates=(140,9,7,45),levels=(1,0.32,0.25,0)),M(ratio=14.02,level=0.22,vel=0.75,rates=(220,16,12,70),levels=(1,0.1,0.06,0))],2,True),
+      ('Suitcase 77','Keys',5,0.2,[C(rates=(70,5.5,4.5,45),levels=(1,0.78,0.72,0)),C(fine=0.002,level=0.8,rates=(65,5,4,42),levels=(1,0.74,0.68,0)),M(ratio=1,level=0.42,vel=0.7,rates=(85,7,6,38),levels=(1,0.42,0.38,0)),M(ratio=2,level=0.3,vel=0.65,rates=(60,6,5,32),levels=(1,0.3,0.26,0))],2,True),
+      ('Stage Bark','Keys',2,0.4,[M(ratio=1,level=0.5,vel=0.85,rates=(130,10,8,42),levels=(1,0.3,0.24,0)),M(ratio=1,level=0.45,rates=(115,9,7.5,40),levels=(1,0.34,0.28,0)),M(ratio=2.99,level=0.32,vel=0.8,rates=(180,12,10,55),levels=(1,0.14,0.1,0)),C(level=0.9,rates=(120,7.5,6.5,58),levels=(1,0.62,0.56,0))],0,True),
+      ('Glass Hammer EP','Keys',6,0.3,[M(ratio=1,level=0.48,vel=0.8,rates=(150,11,9,48),levels=(1,0.3,0.24,0)),C(level=0.85,rates=(105,6.5,5.5,52),levels=(1,0.7,0.64,0)),C(fine=-0.0035,level=0.78,rates=(88,6,5,50),levels=(1,0.66,0.6,0)),M(ratio=7.04,level=0.3,vel=0.75,rates=(200,14,11,62),levels=(1,0.12,0.08,0))],3,True),
+      ('Midnight Tine','Keys',7,0.3,[C(level=0.82,rates=(55,4.5,3.5,32),levels=(1,0.76,0.7,0)),C(fine=-0.0025,level=0.76,rates=(48,4,3,30),levels=(1,0.72,0.66,0)),M(ratio=1,level=0.36,vel=0.65,rates=(75,6,5,30),levels=(1,0.4,0.35,0)),M(ratio=2.01,level=0.26,vel=0.6,rates=(65,5.5,4.5,28),levels=(1,0.28,0.24,0))],2,True),
     ]
+    pure_details={
+      'DX Tine Classic':'Play with touch; A: classic DX7-style tine piano — bell attack, warm sustain. Velocity opens the tine bite. X: Color; Y: Ensemble.',
+      'Suitcase 77':'Play with touch; A: round suitcase-style FM piano — soft attack, long warm body. Velocity adds gentle bite. X: Color; Y: Ensemble.',
+      'Stage Bark':'Dig in; A: punchy stage FM piano — tidy when soft, barks when played hard. Velocity drives the bark. X: Color; Y: Ensemble.',
+      'Glass Hammer EP':'Play with touch; A: glassy hammer FM piano — bright top over a round body. Velocity brings the sparkle. X: Color; Y: Ensemble.',
+      'Midnight Tine':'Play softly; A: dark late-night FM tine — mellow, close, velvety. Velocity gently wakes the top. X: Color; Y: Ensemble.',
+    }
     out=[]
-    for n,(name,base,alg,fb,ops,velop) in enumerate(specs):
+    for n,spec in enumerate(specs):
+        name,base,alg,fb,ops,velop=spec[:6];pure=len(spec)>6 and spec[6]
         p=make_patch(base,n%10,name)
         p['category']='FM';p['id']='fm-'+re.sub('[^a-z0-9]+','-',name.lower())
         p['layers'][0]['fm']=fm_layer(alg,fb,ops)
         p['soundMatrix'][0][2]=route(9,37+velop,0.5)  # velocity→index rides slot 2 (spec §6/§8)
+        if pure:
+            for l in range(1,4):p['layers'][l]['values']['0']=0
+            p['detail']=pure_details[name]
         out.append(p)
-    assert len(out)==15 and len({p['name'] for p in out})==15 and len({p['id'] for p in out})==15
+    assert len(out)==20 and len({p['name'] for p in out})==20 and len({p['id'] for p in out})==20
     assert len({s[2] for s in specs})>=10,'spec §8: >=10 of 16 algorithms exercised'
     for p in out:
         fm=p['layers'][0]['fm']

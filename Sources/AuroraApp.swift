@@ -718,7 +718,7 @@ struct VoiceStatus:View {
     @Published var patchBrowserCategory:String?=nil
     @Published var patchBrowserUserOnly=false
     @Published var patchBrowserRow=0
-    @Published var collection = "Aurora"
+    @Published var collection = "KiMiA"
     @Published var category = "All categories"
     @Published var outputGain=9.0
     static func restoredOutputGain(_ saved:Double?,revision:Int?)->Double {
@@ -1054,7 +1054,7 @@ struct VoiceStatus:View {
     static let defaultMacroNames = ["Brightness","Warmth","Movement","Space","Attack","Release","Width","Character"]
     var collectionSounds: [SoundPreset] {
         switch collection {
-        case "Aurora": return FactoryBank.all
+        case "KiMiA": return FactoryBank.all
         case "Your sounds": return userPresets
         case "Deleted sounds": return deletedPresets
         default: return userPresets + FactoryBank.all
@@ -2788,7 +2788,7 @@ struct AuroraContentView:View {
     }
     var header:some View {
         HStack(spacing:12){
-            HStack(spacing:8){Image(systemName:"waveform").foregroundStyle(palette.accent);Text("AURORA").tracking(3).font(.system(size:19,weight:palette.weight(.semibold))).lineLimit(1)}.frame(minWidth:125,idealWidth:262,maxWidth:262,alignment:.leading).help(m.notice.isEmpty ? "Aurora synthesizer":m.notice)
+            HStack(spacing:8){Image(systemName:"waveform").foregroundStyle(palette.accent);Text("KiMiA").tracking(3).font(.system(size:19,weight:palette.weight(.semibold))).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.frame(minWidth:125,idealWidth:262,maxWidth:262,alignment:.center).help(m.notice.isEmpty ? "KiMiA synthesizer":m.notice)
             HStack(spacing:3){ForEach(["Play","Edit","Matrix","Routing"],id:\.self){name in Button{m.screen=name}label:{Text(name).font(.system(size:13,weight:m.screen==name ? .bold:.regular)).frame(maxWidth:.infinity).frame(height:28).background(m.screen==name ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(m.screen==name ? palette.selectedText:Color.white)}.buttonStyle(AuroraFlatButtonStyle(selected:m.screen==name)).accessibilityAddTraits(m.screen==name ? .isSelected:[])}}.frame(width:250)
             OutputScope(telemetry:m.scope).frame(minWidth:65,idealWidth:120,maxWidth:160).frame(height:30)
             HStack(spacing:6){
@@ -2822,7 +2822,7 @@ struct AuroraContentView:View {
             TextField("Search sounds",text:$m.search).textFieldStyle(.roundedBorder).font(.system(size:15,weight:palette.weight(.regular)))
             VStack(alignment:.leading,spacing:9){
                 Picker("Collection",selection:$m.collection){
-                    Text("Aurora").tag("Aurora")
+                    Text("KiMiA").tag("KiMiA")
                     Text("Your sounds").tag("Your sounds")
                     Text("Deleted sounds").tag("Deleted sounds")
                     Text("All sounds").tag("All sounds")
@@ -2857,7 +2857,7 @@ struct AuroraContentView:View {
                     Text("\(m.library.count) of \(m.collectionSounds.count) sounds").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     Text("by Ray Bridge Digital").font(.system(size:14,weight:palette.weight(.bold),design:.rounded)).foregroundStyle(palette.accent)
                     if let version=AuroraResources.bundle.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String {
-                        Text("v"+version.split(separator:".").prefix(2).joined(separator:".")).font(.system(size:13,weight:.regular)).foregroundStyle(palette.muted).accessibilityLabel("Aurora version \(version)")
+                        Text("v"+version.split(separator:".").prefix(2).joined(separator:".")).font(.system(size:13,weight:.regular)).foregroundStyle(palette.muted).accessibilityLabel("KiMiA version \(version)")
                     }
                 }
                 Spacer(minLength:6)
@@ -2905,7 +2905,7 @@ final class AppDelegate:NSObject,NSApplicationDelegate {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var model=SynthModel()
     var body:some Scene {
-        WindowGroup("Aurora") {ContentView(m:model).onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in model.shutdown()}}
+        WindowGroup("KiMiA") {ContentView(m:model).onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in model.shutdown()}}
             .defaultSize(width:1480,height:940)
             .commands{CommandGroup(replacing:.newItem){};CommandGroup(after:.saveItem){Button("Save"){model.saveCurrent()}.keyboardShortcut("s",modifiers:.command);Button("Save As…"){model.beginSaveAs()}.keyboardShortcut("s",modifiers:[.command,.shift])}}
     }

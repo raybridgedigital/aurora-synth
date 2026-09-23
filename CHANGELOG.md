@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.24.2 — 2026-09-24
+
+### New sounds
+
+- Five new pure DX7-style FM electric pianos (single FM layer, velocity→index on slot 2): **DX Tine Classic**, **Suitcase 77**, **Stage Bark**, **Glass Hammer EP**, **Midnight Tine**. Factory bank grows to 120 patches (FM category now 20).
+
+### Rebrand
+
+- The app is now **KiMiA**: sidebar wordmark (with mirrored wave icons, centered), window title, menu bar/Dock name, library collection picker, VoiceOver label, and the AU plugin display name ("Ray Bridge Digital: KiMiA" — visible after the next plugin rebuild). Internal identifiers, AU subtype, and file/folder names are unchanged, so DAW projects, presets, and settings keep working.
+
+### Version metadata
+
+- App 0.24.2 (build 35); Audio Unit 0.24.2.
+
 ## 0.24.1 — 2026-09-23
 
 ### Fixes
