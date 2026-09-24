@@ -771,6 +771,7 @@ struct VoiceStatus:View {
     @Published var dirty = false
     @Published var saveName = ""
     @Published var saveCategory = ""
+    @Published var saveFavorite = false
     @Published var showingSave = false
     @Published var transpose = 0
     @Published var keyboardOctave = 0
@@ -967,7 +968,7 @@ struct VoiceStatus:View {
         if !userPresets.contains(where:{$0.id==id}){userPresets.insert(sound,at:0)}
         persist();notice="Restored \(sound.name)."
     }
-    func beginSaveAs() {saveName=patch.name+" copy";saveCategory=patch.category;showingSave=true}
+    func beginSaveAs() {saveName=patch.name+" copy";saveCategory=patch.category;saveFavorite=false;showingSave=true}
     func saveCurrent() {
         finishComparison()
         guard let i=userPresets.firstIndex(where:{$0.id==patch.id}) else{beginSaveAs();return}
@@ -1469,8 +1470,9 @@ struct VoiceStatus:View {
         let category=String(saveCategory.trimmingCharacters(in:.whitespacesAndNewlines).prefix(60))
         if !category.isEmpty{copy.category=category}
         userPresets.insert(copy,at:0);patch=copy;dirty=false;showingSave=false
+        let starred=saveFavorite;if starred{favorites.insert(copy.id)}
         collection="Your sounds";self.category="All categories";search=""
-        persist();notice="Saved \(name)."
+        persist();notice="Saved \(name)."+(starred ? " Added to favorites.":"")
     }
     func exportPreset() {
         let panel=NSSavePanel();panel.nameFieldStringValue=patch.name+".aurora.json";panel.allowedContentTypes=[.json]
@@ -2725,7 +2727,7 @@ struct AuroraContentView:View {
             HStack(spacing:0){sidebar.frame(width:270);Divider().opacity(0.15)
                 ScrollView{
                     LazyVStack(alignment:.leading,spacing:23){
-                        HStack(alignment:.center){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();HStack(alignment:.center,spacing:8){if m.userPresets.contains(where:{$0.id==m.patch.id}){UserPatchMenu(name:m.patch.name,rename:{m.renameName=m.patch.name;m.renameCategory=m.patch.category;m.renameID=m.patch.id},deletePatch:{m.deleteSound(m.patch.id)})};Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}}
+                        HStack(alignment:.center){VStack(alignment:.leading,spacing:6){Text(m.patch.category.uppercased()).font(.system(size:13,weight:palette.weight(.medium))).tracking(2).foregroundStyle(palette.accent);Text(m.patch.name+(m.dirty ? " ·":"")).font(.system(size:36,weight:palette.weight(.medium),design:.rounded));Text(m.patch.detail).font(.system(size:15,weight:palette.weight(.regular))).foregroundStyle(palette.muted)};Spacer();HStack(alignment:.center,spacing:8){if m.userPresets.contains(where:{$0.id==m.patch.id}){UserPatchMenu(name:m.patch.name,rename:{m.renameName=m.patch.name;m.renameCategory=m.patch.category;m.renameID=m.patch.id},deletePatch:{m.deleteSound(m.patch.id)})};Button{m.favorite(m.patch.id)}label:{Image(systemName:m.favorites.contains(m.patch.id) ? "star.fill":"star").foregroundStyle(m.favorites.contains(m.patch.id) ? palette.accent:Color.white).frame(width:32,height:32).background(palette.surface,in:RoundedRectangle(cornerRadius:6)).overlay(RoundedRectangle(cornerRadius:6).stroke(m.favorites.contains(m.patch.id) ? palette.accent.opacity(0.85):palette.graphCyan.opacity(0.35),lineWidth:1))}.buttonStyle(AuroraFlatButtonStyle()).help(m.favorites.contains(m.patch.id) ? "Remove from favorites":"Save to favorites").accessibilityLabel("\(m.favorites.contains(m.patch.id) ? "Unfavorite":"Favorite") \(m.patch.name)").accessibilityAddTraits(m.favorites.contains(m.patch.id) ? .isSelected:[]);Button("Save",systemImage:"square.and.arrow.down"){m.saveCurrent()}.controlSize(.regular);Button("Save As…"){m.beginSaveAs()}}}
                         HStack(spacing:10){
                             Button{m.setFavoritesOnly(!m.favoritesOnly)}label:{
                                 Image(systemName:m.favoritesOnly ? "star.fill":"star")
@@ -2784,7 +2786,7 @@ struct AuroraContentView:View {
             VStack(alignment:.leading,spacing:18){Text("Edit sound details").font(.system(size:26,weight:palette.weight(.semibold)));TextField("Sound name",text:$m.renameName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.renameCategory).textFieldStyle(.roundedBorder);HStack{Button("Cancel"){m.renameID=nil};Spacer();Button("Save details"){m.renameSound()}.keyboardShortcut(.defaultAction).disabled(m.renameName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())
         }
         .sheet(isPresented:$m.showingCreativeTools){CreativeToolsView(m:m)}
-        .sheet(isPresented:$m.showingSave){VStack(alignment:.leading,spacing:18){Text("Save sound as").font(.system(size:26,weight:palette.weight(.semibold)));TextField("Preset name",text:$m.saveName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.saveCategory).textFieldStyle(.roundedBorder);Text("Use an existing category or enter your own.").foregroundStyle(palette.muted);HStack{Button("Cancel"){m.showingSave=false};Spacer();Button("Save"){m.saveUserPreset()}.keyboardShortcut(.defaultAction).disabled(m.saveName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())}
+        .sheet(isPresented:$m.showingSave){VStack(alignment:.leading,spacing:18){Text("Save sound as").font(.system(size:26,weight:palette.weight(.semibold)));TextField("Preset name",text:$m.saveName).textFieldStyle(.roundedBorder);TextField("Category",text:$m.saveCategory).textFieldStyle(.roundedBorder);Text("Use an existing category or enter your own.").foregroundStyle(palette.muted);HStack(spacing:8){Button{m.saveFavorite.toggle()}label:{Image(systemName:m.saveFavorite ? "star.fill":"star").foregroundStyle(m.saveFavorite ? palette.accent:Color.white).frame(width:32,height:32).background(palette.surface,in:RoundedRectangle(cornerRadius:6)).overlay(RoundedRectangle(cornerRadius:6).stroke(m.saveFavorite ? palette.accent.opacity(0.85):palette.graphCyan.opacity(0.35),lineWidth:1))}.buttonStyle(AuroraFlatButtonStyle()).help(m.saveFavorite ? "Will be added to favorites":"Save to favorites").accessibilityLabel("Save to favorites").accessibilityAddTraits(m.saveFavorite ? .isSelected:[]);Text("Add to favorites").foregroundStyle(palette.muted)};HStack{Button("Cancel"){m.showingSave=false};Spacer();Button("Save"){m.saveUserPreset()}.keyboardShortcut(.defaultAction).disabled(m.saveName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}}.padding(28).frame(width:460).buttonStyle(AuroraButtonStyle())}
     }
     var header:some View {
         HStack(spacing:12){

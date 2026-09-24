@@ -209,7 +209,9 @@ def fm_layer(algorithm,feedback,ops,pitch_amount=0.0,pitch_time=0.05,pitch_curve
                 ops={str(i):op for i,op in enumerate(ops)})
 
 def fm_flagships():
-    """Spec §8: the flagship FM patches (15 original + 5 pure DX7-style EPs) — category 'FM', appended into Aurora100.json.
+    """Spec §8: the flagship FM patches (15 original + 5 pure DX7-style EPs + 5 'DX7 …' EP
+    variants) — appended into Aurora100.json. EP-character patches live in category 'FM EP'
+    (single FM layer, L3=0 natural decay); marimba/harp/clav/bass/pads stay in 'FM'.
     Core-on-sine (wave policy); ≥10 of the 16 algorithms exercised; every patch routes
     velocity→index (soundMatrix source 9 = Velocity → destination 37+op = Op N level)."""
     def C(ratio=1.0,level=0.85,vel=0.8,rates=(100,6,5,50),levels=(1,0.72,0.68,0),**kw):
@@ -222,12 +224,12 @@ def fm_flagships():
       ('Ballad Tine','Keys',5,0.2,[C(rates=(60,5,4,40),levels=(1,0.8,0.75,0)),M(ratio=1,level=0.42,rates=(80,7,6,35),levels=(1,0.4,0.35,0)),M(ratio=2,level=0.3,rates=(50,6,5,30)),C(rates=(70,5,4,45),levels=(1,0.7,0.6,0))],1),
       ('Wurli Coals','Keys',2,0.35,[M(ratio=1,level=0.45,rates=(120,9,7,40)),M(ratio=1,level=0.55),M(ratio=2.99,level=0.3,vel=0.7),C(level=0.9,rates=(110,7,6,55),levels=(1,0.65,0.6,0))],0),
       ('Felt Cinema Tine','Keys',7,0.25,[C(rates=(45,5,4,35),levels=(1,0.75,0.7,0),level=0.8),C(rates=(55,5,4,40),level=0.75),M(ratio=1,level=0.4,rates=(70,7,6,30),levels=(1,0.45,0.4,0)),M(ratio=3.01,level=0.3)],2),
-      ('Rhodes Hybrid','Keys',6,0.3,[M(ratio=1,level=0.5),C(level=0.85),C(fine=-0.003,level=0.8,rates=(80,6,5,50)),M(ratio=3.5,level=0.28,vel=0.7,rates=(180,12,9,50),levels=(1,0.2,0.15,0))],0),
+      ('Rhodes Hybrid','Keys',6,0.3,[M(ratio=1,level=0.5,vel=0.8,rates=(140,9,0.9,45),levels=(1,0.3,0,0)),C(level=0.85,rates=(100,6.5,0.22,52),levels=(1,0.58,0,0)),C(fine=-0.003,level=0.8,rates=(80,6,0.2,50),levels=(1,0.54,0,0)),M(ratio=3.5,level=0.28,vel=0.7,rates=(180,12,1.0,50),levels=(1,0.18,0,0))],0,True),
       ('Chrome Clav','Keys',8,0.2,[M(ratio=1,level=0.5,rates=(200,25,18,60),levels=(1,0.1,0.05,0)),M(ratio=3.98,level=0.42,vel=0.75,rates=(220,30,20,70),levels=(1,0.08,0.04,0)),C(rates=(160,18,14,70),levels=(1,0.3,0.2,0),level=0.8),C(rates=(150,16,13,65),levels=(1,0.28,0.18,0),level=0.75)],1),
-      ('Glass House EP','Keys',0,0.3,[M(ratio=1,level=0.42,rates=(90,8,7,35),levels=(1,0.5,0.45,0)),M(ratio=1,level=0.5,rates=(110,9,7,40),levels=(1,0.4,0.35,0)),M(ratio=7,level=0.22,vel=0.65,rates=(210,16,12,55),levels=(1,0.12,0.08,0)),C(level=0.88,rates=(100,6,5,50),levels=(1,0.68,0.6,0))],0),
+      ('Glass House EP','Keys',0,0.3,[M(ratio=1,level=0.42,vel=0.7,rates=(90,8,0.8,35),levels=(1,0.42,0,0)),M(ratio=1,level=0.5,rates=(110,9,0.9,40),levels=(1,0.38,0,0)),M(ratio=7,level=0.22,vel=0.65,rates=(210,16,1.2,55),levels=(1,0.12,0,0)),C(level=0.88,rates=(100,6.5,0.24,50),levels=(1,0.6,0,0))],0,True),
       ('Velvet Vibes','Keys',3,0.2,[M(ratio=1,level=0.5,rates=(60,4,3,25),levels=(1,0.55,0.5,0)),M(ratio=2.76,level=0.32,vel=0.7,rates=(55,4,3,22),levels=(1,0.3,0.25,0)),M(ratio=5.4,level=0.18,vel=0.6,rates=(75,5,4,28),levels=(1,0.15,0.1,0)),C(level=0.85,rates=(55,3.5,2.5,22),levels=(1,0.5,0.42,0))],0),
-      ('Glass Marimba','Keys',9,0.15,[C(level=0.85,rates=(170,30,25,90),levels=(1,0.12,0,0)),C(ratio=2.99,level=0.35,rates=(180,35,30,95),levels=(1,0.08,0,0)),C(ratio=9.2,level=0.12,rates=(200,45,40,110),levels=(1,0.04,0,0)),M(ratio=3.98,level=0.4,vel=0.8,rates=(230,50,45,120),levels=(1,0.05,0,0))],3),
-      ('Nylon Harp','Keys',10,0.2,[C(level=0.8,rates=(150,12,10,60),levels=(1,0.25,0.15,0)),C(ratio=2,level=0.5,rates=(140,14,12,65),levels=(1,0.2,0.12,0)),C(ratio=3,level=0.25,rates=(160,16,14,70),levels=(1,0.1,0.06,0)),M(ratio=1,level=0.45,vel=0.8,rates=(170,15,12,70),levels=(1,0.18,0.1,0))],3),
+      ('Glass Marimba','Keys',9,0.15,[C(level=0.85,rates=(170,30,0.28,90),levels=(1,0.14,0,0)),C(ratio=2.99,level=0.35,rates=(180,35,0.4,95),levels=(1,0.09,0,0)),C(ratio=9.2,level=0.12,rates=(200,45,0.6,110),levels=(1,0.05,0,0)),M(ratio=3.98,level=0.4,vel=0.8,rates=(230,50,0.8,120),levels=(1,0.06,0,0))],3,True),
+      ('Nylon Harp','Keys',10,0.2,[C(level=0.8,rates=(150,12,0.35,60),levels=(1,0.5,0,0)),C(ratio=2,level=0.5,rates=(140,14,0.45,65),levels=(1,0.35,0,0)),C(ratio=3,level=0.25,rates=(160,16,0.6,70),levels=(1,0.22,0,0)),M(ratio=1,level=0.45,vel=0.8,rates=(170,15,0.7,70),levels=(1,0.3,0,0))],3,True),
       ('Copper Harpsichord','Keys',11,0.0,[M(ratio=3,level=0.5,vel=0.85,rates=(240,35,30,90),levels=(1,0.06,0.03,0)),C(ratio=2,level=0.3,rates=(190,25,22,80),levels=(1,0.1,0.06,0)),C(ratio=1.005,level=0.55,rates=(170,22,20,75),levels=(1,0.12,0.08,0)),C(level=0.85,rates=(180,24,20,85),levels=(1,0.12,0.07,0))],0),
       ('Round FM Bass','Bass',13,0.55,[M(ratio=1,level=0.55,vel=0.75,rates=(130,10,8,45),levels=(1,0.35,0.3,0)),M(ratio=1,level=0.45,rates=(110,9,8,40),levels=(1,0.4,0.35,0)),M(ratio=0.5,level=0.35,rates=(90,8,7,35),levels=(1,0.5,0.45,0)),C(level=0.9,rates=(120,7,6,50),levels=(1,0.7,0.65,0))],0),
       ('Click Tine Bass','Bass',14,0.5,[C(level=0.88,rates=(130,8,7,55),levels=(1,0.65,0.6,0)),C(level=0.7,rates=(120,9,8,50),levels=(1,0.55,0.5,0)),M(ratio=1,level=0.5,vel=0.85,rates=(150,10,8,50),levels=(1,0.3,0.25,0)),M(ratio=2,level=0.4,vel=0.7,rates=(190,14,12,60),levels=(1,0.15,0.1,0))],2),
@@ -236,35 +238,56 @@ def fm_flagships():
       # Owner order 23 Sep 2026: five more DX7-style FM electric pianos — strictly
       # piano, single FM layer (subtractive layers B/C/D disabled), no pad/texture.
       # Trailing True = pure-piano flag.
-      ('DX Tine Classic','Keys',4,0.25,[C(fine=0.003,rates=(110,7,5.5,60),levels=(1,0.7,0.65,0)),C(fine=-0.003,level=0.75,rates=(95,6.5,5,55),levels=(1,0.68,0.62,0)),M(ratio=1,level=0.5,vel=0.8,rates=(140,9,7,45),levels=(1,0.32,0.25,0)),M(ratio=14.02,level=0.22,vel=0.75,rates=(220,16,12,70),levels=(1,0.1,0.06,0))],2,True),
-      ('Suitcase 77','Keys',5,0.2,[C(rates=(70,5.5,4.5,45),levels=(1,0.78,0.72,0)),C(fine=0.002,level=0.8,rates=(65,5,4,42),levels=(1,0.74,0.68,0)),M(ratio=1,level=0.42,vel=0.7,rates=(85,7,6,38),levels=(1,0.42,0.38,0)),M(ratio=2,level=0.3,vel=0.65,rates=(60,6,5,32),levels=(1,0.3,0.26,0))],2,True),
-      ('Stage Bark','Keys',2,0.4,[M(ratio=1,level=0.5,vel=0.85,rates=(130,10,8,42),levels=(1,0.3,0.24,0)),M(ratio=1,level=0.45,rates=(115,9,7.5,40),levels=(1,0.34,0.28,0)),M(ratio=2.99,level=0.32,vel=0.8,rates=(180,12,10,55),levels=(1,0.14,0.1,0)),C(level=0.9,rates=(120,7.5,6.5,58),levels=(1,0.62,0.56,0))],0,True),
-      ('Glass Hammer EP','Keys',6,0.3,[M(ratio=1,level=0.48,vel=0.8,rates=(150,11,9,48),levels=(1,0.3,0.24,0)),C(level=0.85,rates=(105,6.5,5.5,52),levels=(1,0.7,0.64,0)),C(fine=-0.0035,level=0.78,rates=(88,6,5,50),levels=(1,0.66,0.6,0)),M(ratio=7.04,level=0.3,vel=0.75,rates=(200,14,11,62),levels=(1,0.12,0.08,0))],3,True),
-      ('Midnight Tine','Keys',7,0.3,[C(level=0.82,rates=(55,4.5,3.5,32),levels=(1,0.76,0.7,0)),C(fine=-0.0025,level=0.76,rates=(48,4,3,30),levels=(1,0.72,0.66,0)),M(ratio=1,level=0.36,vel=0.65,rates=(75,6,5,30),levels=(1,0.4,0.35,0)),M(ratio=2.01,level=0.26,vel=0.6,rates=(65,5.5,4.5,28),levels=(1,0.28,0.24,0))],2,True),
+      ('DX Tine Classic','Keys',4,0.25,[C(fine=0.003,rates=(110,7,0.22,60),levels=(1,0.55,0,0)),C(fine=-0.003,level=0.75,rates=(95,6.5,0.2,55),levels=(1,0.5,0,0)),M(ratio=1,level=0.5,vel=0.8,rates=(140,9,0.9,45),levels=(1,0.3,0,0)),M(ratio=14.02,level=0.22,vel=0.75,rates=(220,16,0.35,70),levels=(1,0.1,0,0))],2,True),
+      ('Suitcase 77','Keys',5,0.2,[C(rates=(70,5.5,0.17,45),levels=(1,0.6,0,0)),C(fine=0.002,level=0.8,rates=(65,5,0.16,42),levels=(1,0.56,0,0)),M(ratio=1,level=0.42,vel=0.7,rates=(85,7,0.7,38),levels=(1,0.4,0,0)),M(ratio=2,level=0.3,vel=0.65,rates=(60,6,0.55,32),levels=(1,0.3,0,0))],2,True),
+      ('Stage Bark','Keys',2,0.4,[M(ratio=1,level=0.5,vel=0.85,rates=(130,10,1.1,42),levels=(1,0.32,0,0)),M(ratio=1,level=0.45,rates=(115,9,0.9,40),levels=(1,0.34,0,0)),M(ratio=2.99,level=0.32,vel=0.8,rates=(180,12,1.4,55),levels=(1,0.14,0,0)),C(level=0.9,rates=(120,7.5,0.3,58),levels=(1,0.6,0,0))],0,True),
+      ('Glass Hammer EP','Keys',6,0.3,[M(ratio=1,level=0.48,vel=0.8,rates=(150,11,0.9,48),levels=(1,0.3,0,0)),C(level=0.85,rates=(105,6.5,0.24,52),levels=(1,0.62,0,0)),C(fine=-0.0035,level=0.78,rates=(88,6,0.22,50),levels=(1,0.58,0,0)),M(ratio=7.04,level=0.3,vel=0.75,rates=(200,14,1.1,62),levels=(1,0.12,0,0))],3,True),
+      ('Midnight Tine','Keys',7,0.3,[C(level=0.82,rates=(55,4.5,0.15,32),levels=(1,0.6,0,0)),C(fine=-0.0025,level=0.76,rates=(48,4,0.14,30),levels=(1,0.56,0,0)),M(ratio=1,level=0.36,vel=0.65,rates=(75,6,0.5,30),levels=(1,0.38,0,0)),M(ratio=2.01,level=0.26,vel=0.6,rates=(65,5.5,0.45,28),levels=(1,0.26,0,0))],2,True),
+      # Owner order 24 Sep 2026: five "DX7 …" pure EP variants — strictly electric piano
+      # (single FM layer, L3=0 natural decay, velocity→index), no pad/texture/brass/string
+      # mixing; layering is the owner's job via the future dual-patch. Category 'FM EP'.
+      ('DX7 E.Piano 1','Keys',4,0.25,[C(fine=0.002,rates=(105,7,0.24,58),levels=(1,0.58,0,0)),C(fine=-0.002,level=0.78,rates=(95,6.5,0.22,54),levels=(1,0.54,0,0)),M(ratio=1,level=0.5,vel=0.8,rates=(135,9,0.85,44),levels=(1,0.3,0,0)),M(ratio=14,level=0.2,vel=0.7,rates=(210,15,0.4,66),levels=(1,0.1,0,0))],2,True),
+      ('DX7 E.Piano 2','Keys',2,0.35,[M(ratio=1,level=0.52,vel=0.85,rates=(140,10,1.0,44),levels=(1,0.34,0,0)),M(ratio=1,level=0.46,rates=(118,9,0.9,40),levels=(1,0.36,0,0)),M(ratio=3.01,level=0.3,vel=0.8,rates=(190,13,1.5,56),levels=(1,0.13,0,0)),C(level=0.9,rates=(125,7.5,0.26,58),levels=(1,0.6,0,0))],0,True),
+      ('DX7 Hard Tine','Keys',8,0.3,[M(ratio=1,level=0.55,vel=0.9,rates=(190,16,1.6,60),levels=(1,0.22,0,0)),M(ratio=2.99,level=0.4,vel=0.85,rates=(220,18,1.8,68),levels=(1,0.12,0,0)),C(level=0.88,rates=(160,12,0.3,70),levels=(1,0.5,0,0)),C(fine=0.003,level=0.8,rates=(150,11,0.28,66),levels=(1,0.46,0,0))],0,True),
+      ('DX7 Mellow Tine','Keys',7,0.25,[C(level=0.84,rates=(44,3.8,0.16,30),levels=(1,0.6,0,0)),C(fine=-0.002,level=0.78,rates=(38,3.4,0.15,28),levels=(1,0.56,0,0)),M(ratio=1,level=0.3,vel=0.55,rates=(58,4.5,0.4,24),levels=(1,0.3,0,0)),M(ratio=2,level=0.2,vel=0.5,rates=(52,4,0.38,22),levels=(1,0.22,0,0))],2,True),
+      ('DX7 Bell Piano','Keys',6,0.28,[M(ratio=1,level=0.46,vel=0.8,rates=(145,10,0.9,46),levels=(1,0.3,0,0)),C(level=0.86,rates=(100,6.5,0.22,52),levels=(1,0.6,0,0)),C(fine=-0.003,level=0.8,rates=(90,6,0.2,48),levels=(1,0.56,0,0)),M(ratio=7.02,level=0.38,vel=0.78,rates=(200,13,0.6,62),levels=(1,0.2,0,0))],0,True),
     ]
     pure_details={
-      'DX Tine Classic':'Play with touch; A: classic DX7-style tine piano — bell attack, warm sustain. Velocity opens the tine bite. X: Color; Y: Ensemble.',
-      'Suitcase 77':'Play with touch; A: round suitcase-style FM piano — soft attack, long warm body. Velocity adds gentle bite. X: Color; Y: Ensemble.',
-      'Stage Bark':'Dig in; A: punchy stage FM piano — tidy when soft, barks when played hard. Velocity drives the bark. X: Color; Y: Ensemble.',
-      'Glass Hammer EP':'Play with touch; A: glassy hammer FM piano — bright top over a round body. Velocity brings the sparkle. X: Color; Y: Ensemble.',
-      'Midnight Tine':'Play softly; A: dark late-night FM tine — mellow, close, velvety. Velocity gently wakes the top. X: Color; Y: Ensemble.',
+      'DX Tine Classic':'Play with touch; A: classic DX7-style tine piano — bell attack, natural decay to silence while held. Velocity opens the tine bite. X: Color; Y: Ensemble.',
+      'Suitcase 77':'Play with touch; A: round suitcase-style FM piano — soft attack, long warm body that decays naturally. Velocity adds gentle bite. X: Color; Y: Ensemble.',
+      'Stage Bark':'Dig in; A: punchy stage FM piano — tidy when soft, barks when played hard, decays like a real stage piano. Velocity drives the bark. X: Color; Y: Ensemble.',
+      'Glass Hammer EP':'Play with touch; A: glassy hammer FM piano — bright top over a round body, natural decay. Velocity brings the sparkle. X: Color; Y: Ensemble.',
+      'Midnight Tine':'Play softly; A: dark late-night FM tine — mellow, close, velvety, long natural decay. Velocity gently wakes the top. X: Color; Y: Ensemble.',
+      'Rhodes Hybrid':'Play with touch; A: pure FM Rhodes-style piano — round tine body that decays to silence while held. Velocity adds bite. X: Color; Y: Ensemble.',
+      'Glass House EP':'Play with touch; A: pure glassy FM piano — shimmering attack, body decays naturally. Velocity adds glass. X: Color; Y: Ensemble.',
+      'Glass Marimba':'Strike and release; A: pure FM marimba — hard glassy mallet hit, fast woody decay to silence. Velocity brightens the bar. X: Color; Y: Ensemble.',
+      'Nylon Harp':'Pluck and let ring; A: pure FM nylon harp — soft pluck, strings decay naturally while held. Velocity adds edge. X: Color; Y: Ensemble.',
+      'DX7 E.Piano 1':'Play with touch; A: the classic DX7 factory-style EP — bright bell attack, tine body, natural decay to silence. Velocity opens the bite. X: Color; Y: Ensemble.',
+      'DX7 E.Piano 2':'Dig in; A: sharper DX7 factory-style EP — more metallic edge and bark, natural decay. Velocity drives the bite. X: Color; Y: Ensemble.',
+      'DX7 Hard Tine':'Hit it hard; A: hard-struck DX7 tine — percussive hammer, short punchy tail. Velocity slams the tine. X: Color; Y: Ensemble.',
+      'DX7 Mellow Tine':'Play softly; A: mellow DX7 tine — soft felt-like attack, dark warm body, long slow decay. Velocity gently wakes the top. X: Color; Y: Ensemble.',
+      'DX7 Bell Piano':'Play with touch; A: bell-forward DX7 piano — glassy chime over a warm body, natural decay. Velocity lifts the chime. X: Color; Y: Ensemble.',
     }
+    ep_names={'DX Tine Classic','Suitcase 77','Stage Bark','Glass Hammer EP','Midnight Tine','Rhodes Hybrid','Glass House EP','DX7 E.Piano 1','DX7 E.Piano 2','DX7 Hard Tine','DX7 Mellow Tine','DX7 Bell Piano'}
     out=[]
     for n,spec in enumerate(specs):
         name,base,alg,fb,ops,velop=spec[:6];pure=len(spec)>6 and spec[6]
         p=make_patch(base,n%10,name)
-        p['category']='FM';p['id']='fm-'+re.sub('[^a-z0-9]+','-',name.lower())
+        p['category']='FM EP' if name in ep_names else 'FM';p['id']='fm-'+re.sub('[^a-z0-9]+','-',name.lower())
         p['layers'][0]['fm']=fm_layer(alg,fb,ops)
         p['soundMatrix'][0][2]=route(9,37+velop,0.5)  # velocity→index rides slot 2 (spec §6/§8)
         if pure:
             for l in range(1,4):p['layers'][l]['values']['0']=0
             p['detail']=pure_details[name]
         out.append(p)
-    assert len(out)==20 and len({p['name'] for p in out})==20 and len({p['id'] for p in out})==20
+    assert len(out)==25 and len({p['name'] for p in out})==25 and len({p['id'] for p in out})==25
     assert len({s[2] for s in specs})>=10,'spec §8: >=10 of 16 algorithms exercised'
+    for s in specs:
+        if len(s)>6 and s[6]:
+            assert all(op['env']['levels'][2]==0 for op in s[4]),'pure EP: op sustain level (L3) must be 0 — real pianos decay to silence while held'
     for p in out:
         fm=p['layers'][0]['fm']
-        assert fm['enabled'] and 0<=fm['algorithm']<=15 and p['category']=='FM'
+        assert fm['enabled'] and 0<=fm['algorithm']<=15 and p['category'] in ('FM','FM EP')
         assert any(r['source']==9 and 37<=r['destination']<=46 and r['amount']>0 for r in p['soundMatrix'][0])
         for op in fm['ops'].values():
             assert 0.25<=op['ratio']<=16 and 0<=op['level']<=1 and 0<=op['vel']<=1

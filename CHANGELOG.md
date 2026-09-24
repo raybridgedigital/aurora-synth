@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.24.3 — 2026-09-24
+
+### Electric-piano behavior fix
+
+- The pure FM EPs now **decay naturally like real pianos** instead of holding a pad-like sustain while keys are held (DX7 practice: op sustain level L3=0, tail rate on stage 3). Applies to the 5 v0.24.2 EPs plus **Rhodes Hybrid**, **Glass House EP**, **Glass Marimba** (fast woody bar decay), and **Nylon Harp** (~1.4 s string cascade) — the latter three were hybrids whose extra subtractive layers were sustaining under the FM layer; they are now pure single-layer FM. Regression assert: pure-flag patches must have L3=0 on every operator.
+
+### New sounds
+
+- New **FM EP** category — all 12 electric-piano patches now live there (DX Tine Classic, Suitcase 77, Stage Bark, Glass Hammer EP, Midnight Tine, Rhodes Hybrid, Glass House EP, plus the five below).
+- Five more strictly-pure **DX7 …** electric pianos (no pad/texture/brass/string mixed in — layering is done via dual-patch): **DX7 E.Piano 1**, **DX7 E.Piano 2**, **DX7 Hard Tine**, **DX7 Mellow Tine**, **DX7 Bell Piano**. Factory bank grows to **125 patches** (FM EP: 12, FM: 13).
+
+### Favorites
+
+- New standard gold-ring **★ star favorite button** in the patch header next to **Save** / **Save As…** — tap to favorite the current patch.
+- The **Save As…** dialog now has an **"Add to favorites"** star toggle: save and star in one step (confirmation: "Saved … Added to favorites.").
+
 ## 0.24.2 — 2026-09-24
 
 ### New sounds
