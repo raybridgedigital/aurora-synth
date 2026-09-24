@@ -534,7 +534,7 @@ void aurora_note_off(int note) { if (state().running) state().engine.midi(0, 0x8
 void aurora_panic() { state().engine.panic(); }
 int aurora_copy_modulation(float *values,int capacity) {
     if(!values||capacity<=0)return 0;
-    if(!state().running){int count=std::min(capacity,46);std::fill_n(values,count,0.f);return count;}
+    if(!state().running){int count=std::min(capacity,50);std::fill_n(values,count,0.f);return count;}
     return state().engine.copyModulation(values,capacity);
 }
 int aurora_copy_scope(float *samples,int capacity) {
@@ -543,6 +543,7 @@ int aurora_copy_scope(float *samples,int capacity) {
     return state().engine.copyScope(samples,capacity);
 }
 float aurora_output_peak() { return state().running ? state().engine.peak() : 0; }
+float aurora_comp_gr(){ return state().running ? state().engine.gainReduction() : 0; }
 float aurora_cpu_load() { return state().cpu.load(std::memory_order_relaxed); }
 int aurora_active_voices() { return state().running ? state().engine.activeVoices() : 0; }
 uint64_t aurora_midi_event_count() { return state().midiEvents.load(std::memory_order_relaxed); }

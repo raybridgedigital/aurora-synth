@@ -40,7 +40,7 @@ static bool validPatch(NSDictionary* p){
     if(p[@"sends"]){if(!arraySize(p[@"sends"],4))return false;for(id s in p[@"sends"])if(!numericFields(s,@[@"delay",@"reverb"]))return false;}
     if(p[@"motion"]){if(!arraySize(p[@"motion"],4))return false;for(id m in p[@"motion"]){float packet[85];if(!motionPacket(m,packet))return false;}}
     if(p[@"soundMatrix"]&&!arraySize(p[@"soundMatrix"],4))return false;
-    for(int b=0;b<5;b++){id rows=b==4?p[@"performanceMatrix"]:p[@"soundMatrix"]?p[@"soundMatrix"][b]:nil;if(rows){if(b==4?!arraySize(rows,6):(!arraySize(rows,6)&&!arraySize(rows,10)))return false;for(id row in rows)if(!numericFields(row,@[@"enabled",@"source",@"destination",@"target",@"cc",@"amount"]))return false;}}
+    for(int b=0;b<5;b++){id rows=b==4?p[@"performanceMatrix"]:p[@"soundMatrix"]?p[@"soundMatrix"][b]:nil;if(rows){if(!arraySize(rows,6)&&!arraySize(rows,10))return false;for(id row in rows)if(!numericFields(row,@[@"enabled",@"source",@"destination",@"target",@"cc",@"amount"]))return false;}}
     if(p[@"xy"]){if(!dictionary(p[@"xy"]))return false;for(NSString* axis in @[@"x",@"y"])if(!numericFields(p[@"xy"][axis],@[@"macro",@"start",@"end"]))return false;}
     if(p[@"customMacros"]){if(!dictionary(p[@"customMacros"]))return false;for(id k in p[@"customMacros"]){id m=p[@"customMacros"][k];if(!dictionary(m)||![m[@"routes"] isKindOfClass:NSArray.class]||[m[@"routes"] count]>16)return false;for(id row in m[@"routes"])if(!numericFields(row,@[@"from",@"to"])||!numericFields(row[@"target"],@[@"layer",@"parameter"]))return false;}}
     if(p[@"importedWavetables"]){if(!dictionary(p[@"importedWavetables"]))return false;for(id k in p[@"importedWavetables"]){id w=p[@"importedWavetables"][k];if(!dictionary(w)||!number(w[@"frameSize"])||![w[@"data"] isKindOfClass:NSString.class])return false;int size=[w[@"frameSize"] intValue];if(!(size==256||size==512||size==1024||size==2048))return false;NSData* bytes=[[NSData alloc] initWithBase64EncodedString:w[@"data"] options:0];if(!bytes||bytes.length<size*4||bytes.length>64*size*4||bytes.length%(size*4))return false;const float* samples=(const float*)bytes.bytes;for(NSUInteger i=0;i<bytes.length/4;i++)if(!std::isfinite(samples[i]))return false;}}
@@ -257,7 +257,7 @@ bool Core::setPatchJSON(const char* json,bool apply){
             }
             for(int i=0;i<AGGlobalCount;i++){
                 if(i==AGOutputGain)continue; // managed via outputGainID / saveState revision
-                double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4};
+                double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4,0,0.23,0.55,0.35,0,3,0.6,0,0,8,1,0,0.4,0,2,5,120,0,0,0,0.5,0.5,0};
                 id v=i<6?p[@"globals"][i]:i==6?p[@"phaserMix"]:p[@"fx"][key(i)];
                 setActual(globalBase+i,[v isKindOfClass:NSNumber.class]?[v doubleValue]:fallback[i]);
             }

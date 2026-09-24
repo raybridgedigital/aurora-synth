@@ -369,7 +369,7 @@ struct MatrixAssignment:Codable,Equatable {
     var cc=1
     var amount=0.0
     static let soundEmpty=Array(repeating:MatrixAssignment(),count:10)
-    static let performanceEmpty=Array(repeating:MatrixAssignment(),count:6)
+    static let performanceEmpty=Array(repeating:MatrixAssignment(),count:10)
     func valid(performance:Bool)->Bool {
         let sourceOK=performance ? (0...5).contains(source):(0...10).contains(source)
         let destinationOK=performance ? (0...20).contains(destination):((0...7).contains(destination)||(12...46).contains(destination))
@@ -377,7 +377,7 @@ struct MatrixAssignment:Codable,Equatable {
     }
 }
 struct SoundPreset: Identifiable, Codable {
-    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4]
+    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4,37:0,38:0.23,39:0.55,40:0.35,41:0,42:3,43:0.6,44:0,45:0,46:8,47:1,48:0,49:0.4,50:0,51:2,52:5,53:120,54:0,55:0,56:0,57:0.5,58:0.5,59:0]
     var fx: [Int:Double]? = nil
     func globalValue(_ id:Int)->Double {id<6 ? globals[id] : id==6 ? (phaserMix ?? 0) : (fx?[id] ?? Self.fxDefaults[id] ?? 0)}
     var id: String
@@ -626,9 +626,9 @@ struct OutputScope:View {
 }
 @MainActor final class ModulationTelemetry:ObservableObject {
     var backend=AuroraBackend()
-    @Published private(set) var values=Array(repeating:Float(0),count:46)
+    @Published private(set) var values=Array(repeating:Float(0),count:50)
     func update() {
-        var next=Array(repeating:Float(0),count:46)
+        var next=Array(repeating:Float(0),count:50)
         _=next.withUnsafeMutableBufferPointer{backend.aurora_copy_modulation($0.baseAddress,Int32($0.count))}
         next=next.map{($0*100).rounded()/100}
         if next != values{values=next}
@@ -646,6 +646,27 @@ struct ModulationIndicator:View {
                 Capsule().fill(palette.accent).frame(width:3).offset(x:CGFloat((value+1)/2)*max(0,g.size.width-3))
             }
         }.frame(height:3).accessibilityLabel("Live matrix modulation").help("Matrix modulation · position shows the combined offset for the most recently rendered note")
+    }
+}
+@MainActor final class CompGRTelemetry:ObservableObject {
+    var backend=AuroraBackend()
+    @Published private(set) var gr:Double=0
+    func update(){let v=Double(backend.aurora_comp_gr());let clamped=v.isFinite ? max(0,min(48,v)) : 0;if clamped != gr{gr=clamped}}
+}
+struct CompGRMeter:View {
+    @Environment(\.auroraPalette) private var palette
+    @ObservedObject var telemetry:CompGRTelemetry
+    var body:some View {
+        HStack(spacing:6){
+            GeometryReader{g in
+                let clipped=min(telemetry.gr,24)/24
+                ZStack(alignment:.trailing){
+                    Capsule().fill(palette.accent.opacity(0.17))
+                    Capsule().fill(palette.graphPink).frame(width:3).offset(x:-CGFloat(clipped)*max(0,g.size.width-3))
+                }
+            }.frame(height:3)
+            Text(telemetry.gr<0.05 ? "GR off" : String(format:"−%.1f dB",telemetry.gr)).font(.system(size:11,weight:palette.weight(.regular))).monospacedDigit().foregroundStyle(palette.muted).frame(width:58,alignment:.trailing)
+        }.accessibilityLabel("Compressor gain reduction").help("Gain reduction · how much the compressor is pulling down")
     }
 }
 struct MatrixFeedback:ViewModifier {
@@ -761,6 +782,7 @@ struct VoiceStatus:View {
     let telemetry = AudioTelemetry()
     let scope=ScopeTelemetry()
     let modulation=ModulationTelemetry()
+    let compGR=CompGRTelemetry()
     @Published var sampleRate = 0.0
     @Published var actualFrames: UInt32 = 0
     @Published var pressed: Set<Int> = []
@@ -987,7 +1009,7 @@ struct VoiceStatus:View {
     private var redoPatches: [SoundPreset] = []
     static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8]
     private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98,99,102,103,104,108,111,112,113,117,120,121,122]
-    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12]
+    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12,0...1,0.03...5,0...1,0...0.9,0...1,0.03...8,0...1,0...2,0...1,1...16,1...64,0...1,0...1,-60...0,1...12,0.1...100,5...1000,0...18,0...1,0...1,0...1,0...1,0...1]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
@@ -1006,11 +1028,17 @@ struct VoiceStatus:View {
         }
         if let motion=input.motion{guard motion.count==4,motion.allSatisfy(\.valid) else{return nil}}
         if let sends=input.sends{guard sends.count==4,sends.allSatisfy(\.valid) else{return nil}}
-        if let matrix=input.performanceMatrix {guard matrix.count==6,matrix.allSatisfy({$0.valid(performance:true)}) else{return nil}}
+        var paddedPerf:[MatrixAssignment]?=nil
+        if var matrix=input.performanceMatrix {
+            if matrix.count==6 {matrix.append(contentsOf:Array(repeating:MatrixAssignment(),count:4))}
+            guard matrix.count==10,matrix.allSatisfy({$0.valid(performance:true)}) else{return nil}
+            paddedPerf=matrix
+        }
         if let macros=input.customMacros{guard macros.count<=8,macros.allSatisfy({(0..<8).contains($0.key) && $0.value.valid}) else{return nil}}
         if let xy=input.xy{guard xy.valid else{return nil}}
         var result=input
         if let paddedSound {result.soundMatrix=paddedSound}
+        if let paddedPerf {result.performanceMatrix=paddedPerf}
         if let tables=input.importedWavetables{guard tables.count<=8,tables.allSatisfy({(0..<8).contains($0.key)&&$0.value.valid}) else{return nil}}
         for slot in 0..<8 where input.layers[slot/2][45+(slot%2)*7]==24 {
             guard input.importedWavetables?[slot] != nil else{return nil}
@@ -1018,7 +1046,7 @@ struct VoiceStatus:View {
         if let fx=input.fx {
             // 20–22 are session EQ (Play), not patch — drop if present in older files
             let patchFX=fx.filter{!($0.key==20 || $0.key==21 || $0.key==22)}
-            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...36).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
+            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...59).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
             result.fx=patchFX.mapValues{$0}
             for (p,v) in patchFX {
                 let r=globalRanges[p]
@@ -1127,7 +1155,7 @@ struct VoiceStatus:View {
         backend.aurora_set_global(15,Float(outputGain))
         backend.aurora_set_global(6,Float(patch.phaserMix ?? 0))
         for p in 7...14{backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
-        for p in 16...36 where p < 20 || p > 22 {
+        for p in 16...59 where p < 20 || p > 22 {
             backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))
         }
         applySessionEQ() // house EQ stays session-sticky across patch loads
@@ -1154,7 +1182,7 @@ struct VoiceStatus:View {
     }
     func updateMatrix(performance:Bool,slot:Int,change:(inout MatrixAssignment)->Void) {
         finishComparison()
-        guard (0..<(performance ? 6:10)).contains(slot) else{return}
+        guard (0..<10).contains(slot) else{return}
         var rows=matrixRows(performance:performance);change(&rows[slot])
         if performance && (8...11).contains(rows[slot].destination){rows[slot].target=4}
         guard rows[slot].valid(performance:performance) else{return}
@@ -1284,8 +1312,12 @@ struct VoiceStatus:View {
         }
     }
     func poll() {
-        syncPlugin()
-        performanceTelemetry.update()
+        // P3: defer main-thread pull/telemetry work during live scroll & drag tracking; resumes on release.
+        let tracking=RunLoop.main.currentMode == .eventTracking
+        if !tracking {
+            syncPlugin()
+            performanceTelemetry.update()
+        }
         if recording&&backend.aurora_recording()==0{finishRecording()}
         ticks += 1
         // Keep disk work and device-list updates out of live scroll/drag tracking.
@@ -1298,11 +1330,14 @@ struct VoiceStatus:View {
         if running != nextRunning { running=nextRunning;if !running{holding=false} }
         if sampleRate != nextRate { sampleRate=nextRate }
         if actualFrames != nextFrames { actualFrames=nextFrames }
-        scope.update()
-        modulation.update()
-        wavetableTelemetry.update()
-        motionTelemetry.update()
-        telemetry.update(peak:backend.aurora_output_peak(),load:backend.aurora_cpu_load(),voices:Int(backend.aurora_active_voices()),midiEvents:backend.aurora_midi_event_count())
+        if !tracking {
+            scope.update()
+            modulation.update()
+            compGR.update()
+            wavetableTelemetry.update()
+            motionTelemetry.update()
+            telemetry.update(peak:backend.aurora_output_peak(),load:backend.aurora_cpu_load(),voices:Int(backend.aurora_active_voices()),midiEvents:backend.aurora_midi_event_count())
+        }
         if let p=backend.aurora_status() {
             let nextStatus=String(cString:p)
             if status != nextStatus { status=nextStatus }
@@ -2055,6 +2090,19 @@ struct ArpEffectsView:View {
         ParameterSlider(title:title,value:m.globalBinding(id),range:range,format:format,onBegin:{m.checkpoint()})
             .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:-1,parameter:id)))
     }
+    func globalPicker(_ label:String,_ parameter:Int,_ options:[String])->some View {
+        HStack(spacing:8){
+            Text(label).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
+            HStack(spacing:3){
+                ForEach(Array(options.enumerated()),id:\.offset){index,name in
+                    let selected=Int(m.patch.globalValue(parameter).rounded())==index
+                    Button{m.checkpoint();m.global(parameter,Double(index))}label:{
+                        Text(name).font(.system(size:12,weight:selected ? .bold:.regular)).lineLimit(1).frame(maxWidth:.infinity).frame(height:22).background(selected ? palette.buttonSelected:palette.buttonSurface,in:RoundedRectangle(cornerRadius:4)).foregroundStyle(selected ? palette.selectedText:Color.white).contentShape(Rectangle())
+                    }.buttonStyle(AuroraFlatButtonStyle(selected:selected)).help(name).accessibilityLabel("\(label) \(name)").accessibilityAddTraits(selected ? [.isSelected]:[])
+                }
+            }
+        }.frame(height:22)
+    }
     func divisionButtons()->some View {
         let options=["1/4","1/8","1/8T","1/16","1/16T","1/32"]
         return HStack(spacing:8){
@@ -2183,24 +2231,54 @@ struct ArpEffectsView:View {
                 }
             }
 
-            // Row 2 — Delay | Chorus | Phaser | Reverb
+            // Row 2 — Delay | Compressor
             EqualHeightRow(spacing:16){
                 Panel(title:"Delay"){
-                    delaySyncButtons()
-                    if m.patch.globalValue(16) >= 0.5 {
-                        Picker("Timing",selection:Binding(get:{Int(m.patch.globalValue(14))},set:{m.checkpoint();m.global(14,Double($0))})){
-                            ForEach(Array(["1/4","1/8","1/16","1/2","1/8 dotted","1/4 dotted","1/8 triplet","1/4 triplet"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                    VStack(alignment:.leading,spacing:10){
+                        delaySyncButtons()
+                        HStack(alignment:.center,spacing:12){
+                            if m.patch.globalValue(16) >= 0.5 {
+                                Picker("Timing",selection:Binding(get:{Int(m.patch.globalValue(14))},set:{m.checkpoint();m.global(14,Double($0))})){
+                                    ForEach(Array(["1/4","1/8","1/16","1/2","1/8 dotted","1/4 dotted","1/8 triplet","1/4 triplet"].enumerated()),id:\.offset){i,name in Text(name).tag(i)}
+                                }
+                            } else {
+                                control("Time",17,1...2000,{String(format:"%.0f ms",$0)})
+                            }
+                            ParameterSlider(title:"Mix",value:m.globalBinding(2),range:0...0.6).modifier(MatrixFeedback(model:m,destination:11))
                         }
-                    } else {
-                        control("Time",17,1...2000,{String(format:"%.0f ms",$0)})
+                        HStack(alignment:.center,spacing:12){
+                            ParameterSlider(title:"Feedback",value:m.globalBinding(3),range:0...0.75)
+                            control("Ping-pong",18)
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Tone",19)
+                            control("Duck",48,0...1,{String(format:"%.0f%%",$0*100)})
+                        }
+                        HStack(alignment:.center,spacing:12){
+                            control("Duck release",49,0...1,{String(format:"%.0f ms",$0*1500)})
+                            ParameterSlider(title:"Delay send",value:m.sendBinding(.delay),onBegin:{m.checkpoint()})
+                        }
+                        Text("Layer send into shared delay return.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     }
-                    ParameterSlider(title:"Mix",value:m.globalBinding(2),range:0...0.6).modifier(MatrixFeedback(model:m,destination:11))
-                    ParameterSlider(title:"Feedback",value:m.globalBinding(3),range:0...0.75)
-                    control("Ping-pong",18)
-                    control("Tone",19)
-                    ParameterSlider(title:"Delay send",value:m.sendBinding(.delay),onBegin:{m.checkpoint()})
-                    Text("Layer send into shared delay return.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
+                Panel(title:"Compressor"){
+                    control("Threshold",50,-60...0,{String(format:"%.0f dB",$0)})
+                    control("Ratio",51,1...12,{String(format:"%.1f:1",$0)})
+                    HStack(alignment:.center,spacing:12){
+                        control("Attack",52,0.1...100,{String(format:"%.1f ms",$0)})
+                        control("Release",53,5...1000,{String(format:"%.0f ms",$0)})
+                    }
+                    HStack(alignment:.center,spacing:12){
+                        control("Makeup",54,0...18,{String(format:"%.1f dB",$0)})
+                        globalPicker("Auto",55,["Off","On"])
+                    }
+                    CompGRMeter(telemetry:m.compGR)
+                    Text("Master glue before the limiter · Threshold 0 dB = off.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+            }
+
+            // Row 3 — Chorus | Phaser | Reverb
+            EqualHeightRow(spacing:16){
                 Panel(title:"Chorus"){
                     ParameterSlider(title:"Mix",value:m.globalBinding(5),range:0...0.6).modifier(MatrixFeedback(model:m,destination:8))
                     control("Rate",10,0.03...5,{String(format:"%.2f Hz",$0)})
@@ -2218,6 +2296,37 @@ struct ArpEffectsView:View {
                     control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
                     ParameterSlider(title:"Reverb send",value:m.sendBinding(.reverb),onBegin:{m.checkpoint()})
                     Text("Layer send into shared room.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+            }
+
+            // Row 4 — Flanger | Tremolo | Bitcrusher | Auto-wah
+            EqualHeightRow(spacing:16){
+                Panel(title:"Flanger"){
+                    control("Mix",37,0...0.8)
+                    control("Rate",38,0.03...5,{String(format:"%.2f Hz",$0)})
+                    control("Depth",39)
+                    control("Feedback",40,0...0.9)
+                    Text("Short modulated comb · the classic jet swoosh.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Tremolo"){
+                    control("Mix",41,0...0.8)
+                    control("Rate",42,0.03...8,{String(format:"%.1f Hz",$0)})
+                    control("Depth",43)
+                    globalPicker("Mode",44,["Tremolo","Pan","Rotary"])
+                    Text("Tremolo = amp wobble · Pan = left/right sweep · Rotary = spinning speaker.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Bitcrusher"){
+                    control("Mix",45,0...1)
+                    control("Bits",46,1...16,{String(format:"%.0f bit",$0)})
+                    control("Downsample",47,1...64,{String(format:"%dx",Int($0))})
+                    Text("Lo-fi grit · Downsample 1x = clean.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                }
+                Panel(title:"Auto-wah"){
+                    control("Mix",56,0...1)
+                    control("Sensitivity",57)
+                    control("Range",58)
+                    globalPicker("Filter",59,["Low-pass","Band-pass"])
+                    Text("Envelope filter that follows your playing.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }
 
@@ -2241,7 +2350,7 @@ struct MatrixView:View {
             }
             Panel(title:"Performance Matrix · this patch"){
                 Text("Use your wheels, playing dynamics, pedals, or any MIDI CC. Layer routes follow each note’s keyboard and channel. Shared FX follow the latest received source value across keyboards.").font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
-                ForEach(0..<6){row in routeRow(true,row)}
+                ForEach(0..<10){row in routeRow(true,row)}
             }
             Text("Amount is an offset: ±100% gives up to 4 octaves of cutoff movement, 12 semitones of pitch, or the full normalized range of other destinations. Multiple slots add together; the final value is bounded. Existing wheel vibrato, expression, sustain, and MIDI Learn remain active.").font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
         }
@@ -2507,6 +2616,32 @@ struct SetPadButton: View {
     @Published var userSavedOnly=false
     @Published var headerWidth:CGFloat=0
     @Published var trailingWidth:CGFloat=0
+    /// P1: top-row tracking lives here (browser-local) instead of SynthModel, so a row
+    /// crossing no longer invalidates the whole app; mirrored back to the model debounced.
+    @Published var row=0
+    var mirrorRow:((Int)->Void)?=nil
+    private var mirrorGeneration=0
+    func setRow(_ value:Int,immediate:Bool=false) {
+        row=value
+        mirrorGeneration+=1
+        if immediate { mirrorRow?(value); return }
+        let generation=mirrorGeneration
+        Task{[weak self] in
+            try? await Task.sleep(nanoseconds:600_000_000)
+            guard let self,self.mirrorGeneration==generation else{return}
+            self.mirrorRow?(self.row)
+        }
+    }
+    /// P2: memoized filter+sort cache keyed on every input of `PatchBrowser.sounds`.
+    var soundsCache:(PatchBrowserSoundsKey,[SoundPreset])?=nil
+}
+struct PatchBrowserSoundsKey:Equatable {
+    var userOnly:Bool
+    var category:String?
+    var favoritesOnly:Bool
+    var favorites:Set<String>
+    var userFingerprint:String
+    var query:String
 }
 struct UserPatchBadge:View {
     @Environment(\.auroraPalette) private var palette
@@ -2572,9 +2707,9 @@ struct PatchBrowserCard:View {
         }
     }
 }
-private struct PatchRowKey:PreferenceKey {
-    static var defaultValue:[Int:CGFloat]=[:]
-    static func reduce(value:inout [Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{$1})}
+private struct PatchScrollYKey:PreferenceKey {
+    static var defaultValue:CGFloat=0
+    static func reduce(value:inout CGFloat,nextValue:()->CGFloat){value=nextValue()}
 }
 struct PatchBrowser:View {
     @Environment(\.auroraPalette) private var palette
@@ -2584,7 +2719,10 @@ struct PatchBrowser:View {
     var category:String?{get{m.patchBrowserCategory} nonmutating set{m.patchBrowserCategory=newValue}}
     var sounds:[SoundPreset]{
         let query=m.search.trimmingCharacters(in:.whitespacesAndNewlines)
-        return (m.patchBrowserUserOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
+        let key=PatchBrowserSoundsKey(userOnly:m.patchBrowserUserOnly,category:category,favoritesOnly:m.favoritesOnly,favorites:m.favorites,
+            userFingerprint:m.userPresets.map{$0.id+"|"+$0.name+"|"+$0.category+"|"+$0.detail}.joined(separator:";"),query:query)
+        if let cached=state.soundsCache,cached.0==key{return cached.1}
+        let list=(key.userOnly ? m.userPresets:m.userPresets+FactoryBank.all).filter{
             (category==nil || $0.category==category) &&
             (!m.favoritesOnly || m.favorites.contains($0.id)) &&
             (query.isEmpty || ($0.name+" "+$0.category+" "+$0.detail).localizedCaseInsensitiveContains(query))
@@ -2592,6 +2730,8 @@ struct PatchBrowser:View {
             let order=$0.name.localizedStandardCompare($1.name)
             return order == .orderedSame ? $0.id<$1.id:order == .orderedAscending
         }
+        state.soundsCache=(key,list)
+        return list
     }
     @ViewBuilder private var browserMaster:some View {
         let searchRight=state.headerWidth/2+160
@@ -2682,25 +2822,30 @@ struct PatchBrowser:View {
                                     }else{Color.clear.frame(height:104).accessibilityHidden(true)}
                                 }
                             }
-                            .background{GeometryReader{geo in Color.clear.preference(key:PatchRowKey.self,value:[row:geo.frame(in:.named("patchGrid")).minY])}}
                         }
                         if patches.isEmpty{Text(m.search.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? (m.patchBrowserUserOnly ? "No user-saved patches yet. Save or import a sound to add it here.":"No patches in this view.") : "No patches match this search.").font(.system(size:16)).foregroundStyle(palette.muted).padding(.vertical,40)}
-                    }.padding(2)
+                    }.background{GeometryReader{geo in Color.clear.preference(key:PatchScrollYKey.self,value:geo.frame(in:.named("patchGrid")).minY)}}.padding(2)
                 }
                 .coordinateSpace(name:"patchGrid")
-                .onPreferenceChange(PatchRowKey.self){offsets in
-                    guard let top=offsets.min(by:{abs($0.value)<abs($1.value)})?.key,m.patchBrowserRow != top else{return}
-                    m.patchBrowserRow=top
+                .onPreferenceChange(PatchScrollYKey.self){y in
+                    // P4: one reader on the stack + row arithmetic (row = card 104 + spacing 12).
+                    let rows=max(1,(patches.count+6)/7)
+                    let row=max(0,min(rows-1,Int((-y/116).rounded())))
+                    guard state.row != row else{return}
+                    state.setRow(row)
                 }
                 .onAppear{
+                    // P1: restore from the model's debounced mirror; row tracking stays browser-local.
+                    state.mirrorRow={row in m.patchBrowserRow=row}
                     let rows=max(1,(patches.count+6)/7)
                     let row=min(max(0,m.patchBrowserRow),rows-1)
+                    state.setRow(row,immediate:true)
                     let index=row*7
                     if patches.indices.contains(index){proxy.scrollTo(patches[index].id,anchor:.top)}
                 }
-                .onChange(of:category){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
-                .onChange(of:m.patchBrowserUserOnly){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
-                .onChange(of:m.search){_,_ in m.patchBrowserRow=0;if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:category){_,_ in state.setRow(0,immediate:true);if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.patchBrowserUserOnly){_,_ in state.setRow(0,immediate:true);if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:m.search){_,_ in state.setRow(0,immediate:true);if let first=patches.first{proxy.scrollTo(first.id,anchor:.top)}}
                 .onChange(of:m.patch.id){_,id in withAnimation(.easeOut(duration:0.18)){proxy.scrollTo(id,anchor:.center)}}
             }
             HStack{Text("\(patches.count) patches · A–Z");Spacer();Text(m.patch.name).lineLimit(1);Image(systemName:"waveform").foregroundStyle(palette.accent)}.font(.system(size:13,weight:palette.weight(.regular))).foregroundStyle(palette.muted)

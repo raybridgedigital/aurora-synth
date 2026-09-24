@@ -80,7 +80,19 @@ float parameterValue(int p,float v) {
 }
 float globalValue(int p,float v) {
     if(p==AGOutputGain)return bounded(v,0,24);
-    if(p==AGPhaserRate||p==AGChorusRate)return bounded(v,.03f,5,.23f);
+    if(p==AGPhaserRate||p==AGChorusRate||p==AGFlangerRate)return bounded(v,.03f,5,.23f);
+    if(p==AGFlangerFeedback)return bounded(v,0,.9f,.35f);
+    if(p==AGTremRate)return bounded(v,.03f,8,3);
+    if(p==AGTremMode)return bounded(v,0,2)>=1.5f?2.f:(bounded(v,0,2)>=.5f?1.f:0.f);
+    if(p==AGCrushBits)return bounded(v,1,16,8);
+    if(p==AGCrushDownsample)return bounded(v,1,64,1);
+    if(p==AGDuckRelease)return bounded(v,0,1,.4f);
+    if(p==AGCompThreshold)return bounded(v,-60,0,0);
+    if(p==AGCompRatio)return bounded(v,1,12,2);
+    if(p==AGCompAttack)return bounded(v,.1f,100,5);
+    if(p==AGCompRelease)return bounded(v,5,1000,120);
+    if(p==AGCompMakeup)return bounded(v,0,18,0);
+    if(p==AGCompAuto||p==AGWahMode)return bounded(v,0,1)>=.5f?1.f:0.f;
     if(p==AGPhaserFeedback)return bounded(v,-.85f,.85f);
     if(p==AGReverbDecay)return bounded(v,.2f,8,1);
     if(p==AGShimmerDecay||p==AGShimmerLateDecay)return bounded(v,.2f,12,3);
@@ -251,7 +263,7 @@ struct SynthEngine::Impl {
     std::array<std::atomic<float>,8> previewPosition{},previewAmount{};
     std::atomic<unsigned> previewActiveLayers{0};
     uint32_t phaseRandom=0x17253819,modulationRandom=0x936a8d21;
-    static constexpr int kMatrixSlots=10, kFeedbackCount=46;
+    static constexpr int kMatrixSlots=10, kFeedbackCount=50;
     std::array<std::atomic<float>,kFeedbackCount> modulationFeedback{};
     std::array<float,kFeedbackCount> frameFeedback{};
     std::array<std::array<std::atomic<uint64_t>,kMatrixSlots>,5> matrix{};
@@ -284,6 +296,17 @@ struct SynthEngine::Impl {
     std::array<float,2> phaserCoefficient{};
     std::array<float,2> phaserFeedback{};
     float phaserPhase=0,phaserMix=0;
+    // 0.25.0 effects: flanger / tremolo / bitcrusher / delay duck / compressor / auto-wah
+    std::array<float,4096> flangerBufL{},flangerBufR{};
+    size_t flangerPos=0;
+    float flangerPhase=0,flangerFBL=0,flangerFBR=0,flangerMix=0;
+    float tremPhase=0;
+    float wahEnv=0,wahMixS=0;
+    std::array<float,2> wahLP{},wahBP{};
+    float crushHoldL=0,crushHoldR=0; int crushCounter=0;
+    float duckEnv=0;
+    float compEnv=0;
+    std::atomic<float> gainReduction{0};
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
     size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1,outputLimiter=1;
     // Mute-bus panic: fade FINAL stereo only; wipe large FX rings only under true silence.
@@ -652,7 +675,7 @@ struct SynthEngine::Impl {
         extraLFO.fill(0);
         for(int bank=0;bank<5;bank++){
             matrixCount[bank]=0;
-            int slotLimit=bank==4?6:kMatrixSlots;
+            int slotLimit=kMatrixSlots;
             for(int routeSlot=0;routeSlot<slotLimit;routeSlot++){
                 uint64_t bits=matrix[bank][routeSlot].load(std::memory_order_relaxed);
                 if(bits&1){MatrixRoute r;r.slot=routeSlot;r.source=int((bits>>1)&15);r.destination=int((bits>>5)&63);r.target=int((bits>>11)&7);r.cc=int((bits>>14)&127);r.amount=float(int((bits>>21)&65535)-32768)/32767.f;activeMatrix[bank][matrixCount[bank]++]=r;if(bank<4&&r.source>=6&&r.source<=8)extraLFO[bank]|=uint8_t(1u<<(r.source-6));}
@@ -980,6 +1003,15 @@ struct SynthEngine::Impl {
         float masterTarget=global[AGMaster];
         float gainTarget=std::pow(10.f,global[AGOutputGain]/20.f);
         float limiterRelease=1-std::exp(-1.f/float(sampleRate*.1));
+        // 0.25.0 effect envelope coefficients (per-block from current globals).
+        const float wahAttCoef=1-std::exp(-1.f/float(sampleRate*.005));
+        const float wahRelCoef=1-std::exp(-1.f/float(sampleRate*.15));
+        const float compAttCoef=1-std::exp(-1.f/(float(sampleRate)*std::max(.00005f,global[AGCompAttack]*.001f)));
+        const float compRelCoef=1-std::exp(-1.f/(float(sampleRate)*std::max(.005f,global[AGCompRelease]*.001f)));
+        const float duckAttCoef=1-std::exp(-1.f/float(sampleRate*.001));
+        const float duckRelSec=.02f*std::pow(75.f,std::clamp(global[AGDuckRelease],0.f,1.f));
+        const float duckRelCoef=1-std::exp(-1.f/(float(sampleRate)*duckRelSec));
+        float blockMaxGR=0;
         for(uint32_t frame=0;frame<frames;frame++,sampleCounter++) {
             // Advance panic envelope first so this sample's bus multiply is already correct.
             float pg=1.f;
@@ -1229,6 +1261,69 @@ struct SynthEngine::Impl {
             outL+=phaserMix*.5f*(phased[0]-outL);
             outR+=phaserMix*.5f*(phased[1]-outR);
             phaserPhase+=global[AGPhaserRate]/float(sampleRate);if(phaserPhase>=1)phaserPhase-=1;
+            // ---- 0.25.0 inserts: flanger → tremolo/pan/rotary → auto-wah → bitcrusher ----
+            {
+                flangerMix+=smooth*(global[AGFlangerMix]-flangerMix);
+                if(flangerMix>1e-3f) {
+                    float dep=std::clamp(global[AGFlangerDepth],0.f,1.f);
+                    float fb=panicFxStarved?0.f:std::clamp(global[AGFlangerFeedback],0.f,.9f);
+                    float dL=float(sampleRate)*(.0009f+.0041f*dep*(.5f+.5f*std::sin(tau*flangerPhase)));
+                    float dR=float(sampleRate)*(.0009f+.0041f*dep*(.5f+.5f*std::sin(tau*(flangerPhase+.25f))));
+                    float inL=outL+flangerFBL,inR=outR+flangerFBR;
+                    if(!std::isfinite(inL))inL=outL; if(!std::isfinite(inR))inR=outR;
+                    flangerBufL[flangerPos]=inL;flangerBufR[flangerPos]=inR;
+                    float fL=delayed(flangerBufL,flangerPos,dL),fR=delayed(flangerBufR,flangerPos,dR);
+                    if(!std::isfinite(fL))fL=0; if(!std::isfinite(fR))fR=0;
+                    flangerFBL=std::tanh(fL)*fb;flangerFBR=std::tanh(fR)*fb;
+                    if(++flangerPos>=flangerBufL.size())flangerPos=0;
+                    outL+=fL*flangerMix;outR+=fR*flangerMix;
+                    flangerPhase+=global[AGFlangerRate]/float(sampleRate);if(flangerPhase>=1)flangerPhase-=1;
+                }
+                float tMix=std::clamp(global[AGTremMix],0.f,1.f);
+                if(tMix>1e-3f) {
+                    tremPhase+=global[AGTremRate]/float(sampleRate);if(tremPhase>=1)tremPhase-=1;
+                    float d=std::clamp(global[AGTremDepth],0.f,1.f)*tMix;
+                    float s=std::sin(tau*tremPhase);
+                    int mode=int(std::lround(std::clamp(global[AGTremMode],0.f,2.f)));
+                    if(mode==1){outL*=1.f-d*(.5f+.5f*s);outR*=1.f-d*(.5f-.5f*s);}
+                    else if(mode==2){outL*=1.f-d*(.5f+.5f*s);outR*=1.f-d*(.5f+.5f*std::sin(tau*tremPhase+pi*.5f));}
+                    else {float g=1.f-d*(.5f+.5f*s);outL*=g;outR*=g;}
+                }
+                float wMix=std::clamp(global[AGWahMix],0.f,1.f);
+                if(wMix>1e-3f) {
+                    wahMixS+=smooth*(wMix-wahMixS);
+                    float envIn=std::abs(outL+outR)*.5f;
+                    wahEnv+=(envIn>wahEnv?wahAttCoef:wahRelCoef)*(envIn-wahEnv);
+                    float sens=std::clamp(global[AGWahSensitivity],0.f,1.f),range=std::clamp(global[AGWahRange],0.f,1.f);
+                    float drive=std::clamp(wahEnv*(sens*10.f),0.f,1.f);
+                    float hz=120.f*std::exp2(drive*range*5.5f);
+                    bool band=global[AGWahMode]>=.5f;
+                    float wet[2];
+                    for(int ch=0;ch<2;ch++) {
+                        float inCh=ch==0?outL:outR;
+                        float g=std::tan(pi*std::min(hz,float(sampleRate)*.45f)/float(sampleRate));
+                        float hp=inCh-wahLP[ch]-1.2f*wahBP[ch];
+                        wahBP[ch]+=g*hp;wahLP[ch]+=g*wahBP[ch];
+                        if(!std::isfinite(wahLP[ch])||!std::isfinite(wahBP[ch])){wahLP[ch]=0;wahBP[ch]=0;}
+                        wet[ch]=band?wahBP[ch]:wahLP[ch];
+                    }
+                    outL+=wahMixS*(wet[0]-outL);outR+=wahMixS*(wet[1]-outR);
+                }
+                float cMix=std::clamp(global[AGCrushMix],0.f,1.f);
+                if(cMix>1e-3f) {
+                    float bits=std::clamp(global[AGCrushBits],1.f,16.f);
+                    float levels=std::exp2(bits-1.f);
+                    float wetL=outL,wetR=outR;
+                    float holdAmt=std::clamp(global[AGCrushDownsample],1.f,64.f);
+                    if(holdAmt>=1.5f) {
+                        if(++crushCounter>=int(holdAmt)){crushCounter=0;crushHoldL=outL;crushHoldR=outR;}
+                        wetL=crushHoldL;wetR=crushHoldR;
+                    } else crushCounter=0;
+                    wetL=std::round(wetL*levels)/levels;wetR=std::round(wetR*levels)/levels;
+                    if(!std::isfinite(wetL))wetL=outL; if(!std::isfinite(wetR))wetR=outR;
+                    outL+=cMix*(wetL-outL);outR+=cMix*(wetR-outR);
+                }
+            }
             constexpr float divisions[8]={1,.5f,.25f,2,.75f,1.5f,1.f/3,2.f/3};
             float delayTargetSamples;
             if(global[AGDelaySync]>=.5f){
@@ -1242,6 +1337,14 @@ struct SynthEngine::Impl {
             if(!std::isfinite(delaySamples)||delaySamples<1.f)delaySamples=std::max(1.f,delayTargetSamples);
             float dl=delayed(delayL,delayPosition,delaySamples),dr=delayed(delayR,delayPosition,delaySamples);
             if(!std::isfinite(dl))dl=0; if(!std::isfinite(dr))dr=0;
+            // Delay ducking: repeats step aside while you play (Amount>0), release sets the return time.
+            float duckGain=1.f;
+            if(global[AGDuckAmount]>1e-3f) {
+                float envIn=std::abs(outL)+std::abs(outR);
+                duckEnv+=(envIn>duckEnv?duckAttCoef:duckRelCoef)*(envIn-duckEnv);
+                duckGain=1.f-std::clamp(global[AGDuckAmount],0.f,1.f)*std::min(1.f,duckEnv*4.f);
+            } else duckEnv=0;
+            dl*=duckGain;dr*=duckGain;
             float ping=std::clamp(global[AGDelayPingPong],0.f,1.f);
             float fbInL=dr*ping+dl*(1.f-ping);
             float fbInR=dl*ping+dr*(1.f-ping);
@@ -1394,6 +1497,21 @@ struct SynthEngine::Impl {
                 outR=eqChan(outR,eqLowR,eqMidR,eqHighR);
             }
 
+            // ---- Master-bus compressor (feed-forward, zero lookahead) ----
+            {
+                float in=std::max(std::abs(outL),std::abs(outR));
+                if(!std::isfinite(in))in=0;
+                compEnv+=(in>compEnv?compAttCoef:compRelCoef)*(in-compEnv);
+                float envDb=20.f*std::log10(std::max(compEnv,1.0e-6f));
+                float thresh=std::clamp(global[AGCompThreshold],-60.f,0.f);
+                float ratio=std::max(1.f,std::clamp(global[AGCompRatio],1.f,12.f));
+                float over=envDb-thresh;
+                float gr=over>0 ? over*(1.f-1.f/ratio) : 0.f;
+                float makeDb=global[AGCompAuto]>=.5f ? std::clamp(-thresh*(1.f-1.f/ratio)*.7f,0.f,12.f) : std::clamp(global[AGCompMakeup],0.f,18.f);
+                float g=std::pow(10.f,(makeDb-gr)*.05f);
+                if(std::isfinite(g)&&g>0){outL*=g;outR*=g;}
+                if(gr>blockMaxGR)blockMaxGR=gr;
+            }
             master+=smooth*(masterTarget-master);
             float finalL=std::tanh(outL*master),finalR=std::tanh(outR*master);
             outputGain+=smooth*(gainTarget-outputGain);
@@ -1415,6 +1533,7 @@ struct SynthEngine::Impl {
             maximum=std::max(maximum,std::max(std::abs(left[frame]),std::abs(right[frame])));
         }
         scopePublished.store(scopePosition,std::memory_order_release);
+        gainReduction.store(blockMaxGR,std::memory_order_relaxed);
         for(int i=0;i<kFeedbackCount;i++)modulationFeedback[i].store(frameFeedback[i],std::memory_order_relaxed);
         int count=0;unsigned activeLayers=0;for(const auto& v:voices)if(v.active){++count;activeLayers|=1u<<v.layer;}
         previewActiveLayers.store(activeLayers);
@@ -1479,6 +1598,7 @@ void SynthEngine::disconnect(int32_t sourceID){impl->submit({Event::Disconnect,s
 void SynthEngine::panic(){impl->requestPanic();}
 void SynthEngine::render(float* left,float* right,uint32_t frames){impl->render(left,right,frames);}
 float SynthEngine::peak()const{return impl->outputPeak.load(std::memory_order_relaxed);}
+float SynthEngine::gainReduction()const{return impl->gainReduction.load(std::memory_order_relaxed);}
 int SynthEngine::activeVoices()const{return impl->voiceCount.load(std::memory_order_relaxed);}
 }
 
@@ -1491,7 +1611,7 @@ int aurora::SynthEngine::copyScope(float* samples,int capacity) const {
 }
 
 void aurora::SynthEngine::setMatrix(int bank,int slot,bool enabled,int source,int destination,int target,int cc,float amount) {
-    int slotLimit=bank==4?6:10;
+    int slotLimit=10;
     if(bank<0||bank>4||slot<0||slot>=slotLimit)return;
     bool soundBlocked=bank!=4 && ((source<0||source>10) || destination<0 || destination>46 || (destination>7 && destination<12));
     bool performanceBlocked=bank==4 && (source<0||source>5||destination<0||destination>20);
@@ -1502,7 +1622,7 @@ void aurora::SynthEngine::setMatrix(int bank,int slot,bool enabled,int source,in
 }
 int aurora::SynthEngine::copyModulation(float* values,int capacity) const {
     if(!values||capacity<=0)return 0;
-    int count=std::min(capacity,46);
+    int count=std::min(capacity,50);
     for(int i=0;i<count;i++)values[i]=impl->modulationFeedback[i].load(std::memory_order_relaxed);
     return count;
 }

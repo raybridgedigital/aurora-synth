@@ -1,6 +1,6 @@
 # Future proposal — Safari-class scroll smoothness (UI-only, P1–P4)
 
-**Status: PROPOSED — parked. The code is frozen; nothing in this document is implemented. This file is the proposal only.** Implementation requires an explicit, per-instance unfreeze from the owner that names this change.
+**Status: ✅ IMPLEMENTED 24 Sep 2026 — owner ("I believe there is one outstanding item to make the scrolling as smooth as safari… do that now") = the named unfreeze. P1 row-tracking moved to `PatchBrowserState` with 0.6 s debounced mirror to the model; P2 `sounds` memoized in `PatchBrowserState.soundsCache` keyed on a 6-input `PatchBrowserSoundsKey` (userPresets fingerprint covers save/delete/rename); P3 `syncPlugin` + `performanceTelemetry` + all six telemetry `.update()` calls now deferred while `RunLoop.main.currentMode == .eventTracking`; P4 per-row `GeometryReader` preference replaced with one `PatchScrollYKey` reader on the LazyVStack + `row = round(-y/116)` arithmetic (card 104 + spacing 12), `PatchRowKey` deleted. Validated: `build.sh` green, braces balanced, app relaunched. Instruments fling-verification still optional.** *(Original proposal below.)*
 
 **Scope: UI layer only** (`Sources/AuroraApp.swift`). No engine, DSP, plugin, audio-thread, timer-interval, or test-code changes. No new dependencies.
 

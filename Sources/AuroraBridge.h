@@ -49,6 +49,13 @@ enum AuroraGlobal { AGMaster=0, AGTempo, AGDelayMix, AGDelayFeedback,
     AGShimmerReverse,
     AGShimmerEarlyLevel, AGShimmerEarlySize,
     AGShimmerLateLevel, AGShimmerLateDecay,
+    /* 0.25.0 effect expansion */
+    AGFlangerMix, AGFlangerRate, AGFlangerDepth, AGFlangerFeedback,
+    AGTremMix, AGTremRate, AGTremDepth, AGTremMode,
+    AGCrushMix, AGCrushBits, AGCrushDownsample,
+    AGDuckAmount, AGDuckRelease,
+    AGCompThreshold, AGCompRatio, AGCompAttack, AGCompRelease, AGCompMakeup, AGCompAuto,
+    AGWahMix, AGWahSensitivity, AGWahRange, AGWahMode,
     AGGlobalCount };
 // Main-thread API; MIDI receive and audio rendering run on platform threads.
 void aurora_initialize(void);
@@ -93,6 +100,7 @@ void aurora_note_on(int note,int velocity); // on-screen source reserved ID=0
 void aurora_note_off(int note);
 void aurora_panic(void);
 float aurora_output_peak(void);
+float aurora_comp_gr(void); // compressor gain reduction in dB (0 = inactive)
 int aurora_copy_scope(float *samples, int capacity);
 int aurora_copy_modulation(float *values, int capacity);
 // Wavetable indices 0...23 are built-in; 24 selects the imported table.

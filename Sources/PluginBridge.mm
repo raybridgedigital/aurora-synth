@@ -44,6 +44,7 @@ void aurora_plugin_panic(void* p){core(p).engine.panic();core(p).setActual(2013,
 float aurora_plugin_output_peak(void* p){return core(p).engine.peak();}
 int aurora_plugin_copy_scope(void* p,float* data,int count){return core(p).engine.copyScope(data,count);}
 int aurora_plugin_copy_modulation(void* p,float* data,int count){return core(p).engine.copyModulation(data,count);}
+float aurora_plugin_comp_gr(void* p){return core(p).engine.gainReduction();}
 int aurora_plugin_set_custom_wavetable(void* p,int l,int o,const float* data,int frames,int size){return core(p).engine.setCustomWavetable(l,o,data,frames,size);}
 void aurora_plugin_clear_custom_wavetable(void* p,int l,int o){core(p).engine.clearCustomWavetable(l,o);}
 int aurora_plugin_copy_wavetable_preview(void* p,int l,int o,float* data,int count){return core(p).engine.copyWavetablePreview(l,o,data,count);}

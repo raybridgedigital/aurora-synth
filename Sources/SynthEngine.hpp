@@ -28,6 +28,7 @@ public:
     void panic();
     void render(float *left,float *right,uint32_t frames); // no allocation/locks
     float peak() const;
+    float gainReduction() const;
     int copyScope(float* samples,int capacity) const;
     int copyModulation(float* values,int capacity) const;
     bool setMotion(int layer,const float* data,int count);
