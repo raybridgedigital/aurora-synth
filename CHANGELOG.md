@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.25.0 — 2026-09-24
+
+### New effects (7)
+
+- **Flanger** — modulated comb (0.9–5 ms), quadrature stereo, feedback.
+- **Tremolo** — with three modes: Tremolo (classic amp wobble), Pan (left/right sweep), Rotary (spinning-speaker warble).
+- **Bitcrusher** — bit depth + sample-rate reduction for lo-fi grit.
+- **Compressor** — master-bus glue before the limiter: Threshold, Ratio, Attack, Release, Makeup, Auto, with a live gain-reduction meter. Defaults to 0 dB threshold (transparent until you pull it down).
+- **Auto-wah** — envelope filter (low-pass/band-pass) that follows your playing.
+- **Delay ducking** — repeats step aside while you play; Duck amount + release in the Delay panel.
+- All new effects default to off; parameters append after the existing globals so DAW automation IDs stay stable.
+
+### Performance matrix
+
+- Performance matrix grows from **6 to 10 slots** (engine already reserved slots 6–9; caps lifted, feedback buffers resized). Old presets load with the extra rows empty.
+
+### Interface
+
+- Effects page re-arranged: Delay is now a compact 2-column panel (Shimmer-style pairs) with **Compressor beside it**; Chorus/Phaser/Reverb on their own row; Flanger/Tremolo/Bitcrusher/Auto-wah below.
+
+### Performance (patch browser scrolling)
+
+- Safari-class scroll smoothness (P1–P4): row tracking moved off the global model (debounced), patch list filter+sort memoized, per-frame preference churn reduced to a single reader, and telemetry pauses during active scrolling (meters freeze mid-scroll, resume on release).
+
+### Plugins
+
+- AU/VST3 rebuilt: display name **KiMiA**, version 0.25.0, corrected stale AudioComponents version integer so hosts register the update. `auval` passes.
+
 ## 0.24.3 — 2026-09-24
 
 ### Electric-piano behavior fix
