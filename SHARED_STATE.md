@@ -145,6 +145,30 @@ that could not be reproduced.
   (55 patches) and the AuroraFX audio audit (55 patches, 0 failures) all green; the plug-in
   interface type-checks with `AURORA_PLUGIN`. Plug-ins not rebuilt (owner direction).
 
+## Work after 0.26.1 — branch `claude/0.27-reverb-and-patches` (local, not pushed)
+
+On top of the local 0.26.1 commits (`90b6f07`):
+
+- **Reverb (`67f2c25`):** Type Classic/Plate (global 70; Plate = Dattorro, level-matched to Classic
+  within ~2 dB by a Decay-dependent gain), Pre-delay 0–200 ms (71), Tone (72; 0.5 = the original
+  damping). Size/Pre-delay changes cross-fade over 50 ms (were +11 to +23 dB clicks on pure
+  tones). Defaults reproduce 0.26.1 bit-for-bit (170 patches, three A/B scenarios). The owner
+  approved the Plate ("just do it"); it ships in the main app, no separate test build.
+- **Tests (`0a5ef75`):** temporary files follow `$TMPDIR` (sandbox/CI friendly).
+- **Design rules (`0caf190`):** effects rule (only Reverb ships on; Sound FX exempt; the original
+  55 exempt), Dual Patch halves, batches, ` -CL` names, reference-based imitation.
+- **Patch job (in progress):** `scripts/claude_patches.py` (authoring DSL + definitions, appended by
+  `scripts/assemble_modx_bank.py` after the 55 originals, which stay byte-identical) and
+  `PATCH-ENGINE-REFERENCE.md` (how the engine behaves, for patch designers; appendix A = the 50-patch
+  plan and status). 4 of 50 drafted (FM EPs), measured once, not calibrated.
+- Version numbers still read 0.26.1; the owner decides release numbering and pushes.
+
+**Version 1 plan (owner, 26 September 2026):** v1 = the current software + 150 factory patches
+(55 originals + 50 Claude patches reviewed together + 45 more later), then a full stress test and
+optimisation assessment for real gigs (not commercial: no notarisation needed; no crackles, no
+crashes). v2 = Dual Patch. **FM engine improvements are welcome** ("if things go bad we can go
+back") — keep existing patches' sound unless the owner agrees otherwise.
+
 ## Validation status — read before making release claims
 
 ### v0.25.0 GitHub CI: NOT GREEN
@@ -195,6 +219,8 @@ Authoritative current documents:
 - `FUTURE-PROPOSAL-MODULATION-EXPANSION.md` — shipped design history
 - `FUTURE-PROPOSAL-FM-ENGINE.md` — shipped design history plus deferred wipe
 - `Dual-Patch-Specification.md` — locked, not implemented
+- `PATCH-DESIGN-RULES.md` — what a factory patch must be (owner's rules)
+- `PATCH-ENGINE-REFERENCE.md` — how the engine behaves, for patch designers (with the 50-patch plan)
 - `AURORA-*-TEST-*.md` — v0.22 reconstruction authority; current release must still pass the test contract before being called green
 
 ## Pending queue
@@ -215,12 +241,12 @@ Authoritative current documents:
    latency, memory, exact output/hub setup.
 6. **Public distribution:** Developer ID signing/notarization and clean-machine install.
 7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora.
-8. **Plate reverb — PAUSED by the owner (25 September 2026).** Do not resume without an explicit
-   go-ahead. State: local branch `claude/plate-reverb` (`f7cb142`, based on pre-0.26.0 code) adds a
-   Dattorro plate as reverb type 1 next to Classic (global 70, default Classic so no patch
-   changes). Not done: level match (about 14 dB quieter than Classic at the same Mix), glitch-free
-   Size changes, Reverb-panel selector, patch/plug-in parameter tables, tests, CPU measurement,
-   owner audition.
+8. **Plate reverb — done** on `claude/0.27-reverb-and-patches` (`67f2c25`). The old local branch
+   `claude/plate-reverb` (`f7cb142`) is superseded.
+9. **50 new patches (` -CL`):** continue from `PATCH-ENGINE-REFERENCE.md` appendix A with
+   `scripts/claude_patches.py` and `bench/patchcheck`; deliver all 50 for one owner review.
+10. **Version 1 assessment + stress test:** after the patches — full-system optimisation for
+   real gigs (crackle-free, crash-free); the owner prefers a fresh session with a handoff.
 
 The original specification's sampler/granular engine, sample import/library management, microtuning/MPE, and optional hardware-audio/Aggregate Device workflows remain later scope, not active queue items.
 

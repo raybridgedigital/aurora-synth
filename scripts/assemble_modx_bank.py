@@ -745,6 +745,7 @@ def build():
 def main():
     patches = build()
     assert len(patches) == 55, len(patches)
+    originals = list(patches)
     # Keep new ids/names distinct from the retired GB109 bank (archived, not shipped).
     gb = json.loads((ROOT / 'archive/factory-banks/v0.25.0/AuroraGB109.json').read_text())
     taken_ids = {x['id'] for x in gb}
@@ -771,6 +772,27 @@ def main():
     print('category counts:', cats)
     assert sum(v for k, v in cats.items() if k != 'FM EP') == 50
     assert cats.get('FM EP') == 5
+    # Claude-designed patches (" -CL" until approved) follow the 55 originals, which stay
+    # byte-identical. Base names (without the suffix) must be unique across the factory.
+    from claude_patches import build as build_claude, base_name
+    taken = seen_names | taken_names
+    for p in build_claude():
+        base = base_name(p['name']).lower()
+        assert p['name'].endswith(' -CL'), p['name']
+        assert p['id'] not in taken_ids and p['id'] not in seen_ids, f"id collision: {p['id']}"
+        assert base not in taken, f"name collision: {p['name']}"
+        taken.add(base)
+        seen_ids.add(p['id'])
+        live = [l for l in p['layers'] if l['values']['0'] == 1]
+        assert 1 <= len(live) <= 2 and p['layers'][2]['values']['0'] == 0 \
+            and p['layers'][3]['values']['0'] == 0, (p['name'], 'layers A/B only')
+        powered = [k for k in range(60, 70) if p['fx'][str(k)] >= .5]
+        if p['category'] != 'Sound FX':
+            assert set(powered) <= {62}, (p['name'], 'only Reverb may ship on', powered)
+        assert len(p['customMacros']) == 8
+        assert all(v['routes'] for v in p['customMacros'].values()), p['name']
+        patches.append(p)
+    print(f'Claude patches: {len(patches) - len(originals)}')
     (ROOT / 'Resources/AuroraFX.json').write_text(
         json.dumps(patches, indent=2) + '\n')
     print(f'AuroraFX: {len(patches)} patches written, '
