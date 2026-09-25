@@ -123,6 +123,7 @@ float aurora_cpu_load(void); // audio callback duration / deadline, 0...1
 // Core Audio processor overloads (audible dropouts) reported for the output device since audio
 // last started. The DSP meter is a smoothed average, and dropouts begin before it reads 100%.
 uint64_t aurora_audio_overloads(void);
+void aurora_reset_audio_overloads(void); // the player acknowledged the count; start again from zero
 int aurora_active_voices(void);
 uint64_t aurora_midi_event_count(void);
 // Last received CC packed: [source index unused][channel:8][cc:8][value:8].

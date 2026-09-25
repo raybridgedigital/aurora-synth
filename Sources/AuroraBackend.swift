@@ -312,6 +312,13 @@ final class AuroraBackend {
         return aurora_audio_overloadsStandalone()
 #endif
     }
+    func aurora_reset_audio_overloads() -> Void {
+#if AURORA_PLUGIN
+        return
+#else
+        return aurora_reset_audio_overloadsStandalone()
+#endif
+    }
     func aurora_active_voices() -> Int32 {
 #if AURORA_PLUGIN
         return aurora_plugin_active_voices(context)
@@ -400,6 +407,7 @@ private let aurora_clear_custom_wavetableStandalone = aurora_clear_custom_waveta
 private let aurora_copy_wavetable_previewStandalone = aurora_copy_wavetable_preview
 private let aurora_cpu_loadStandalone = aurora_cpu_load
 private let aurora_audio_overloadsStandalone = aurora_audio_overloads
+private let aurora_reset_audio_overloadsStandalone = aurora_reset_audio_overloads
 private let aurora_active_voicesStandalone = aurora_active_voices
 private let aurora_midi_event_countStandalone = aurora_midi_event_count
 private let aurora_last_ccStandalone = aurora_last_cc

@@ -563,6 +563,7 @@ float aurora_output_peak() { return state().running ? state().engine.peak() : 0;
 float aurora_comp_gr(){ return state().running ? state().engine.gainReduction() : 0; }
 float aurora_cpu_load() { return state().cpu.load(std::memory_order_relaxed); }
 uint64_t aurora_audio_overloads() { return state().running ? state().overloads.load(std::memory_order_relaxed) : 0; }
+void aurora_reset_audio_overloads() { state().overloads.store(0, std::memory_order_relaxed); }
 int aurora_active_voices() { return state().running ? state().engine.activeVoices() : 0; }
 uint64_t aurora_midi_event_count() { return state().midiEvents.load(std::memory_order_relaxed); }
 int64_t aurora_last_cc() { const auto value = state().lastCC.load(std::memory_order_acquire); return value == UINT64_MAX ? -1 : int64_t(value & 0xffffff); }

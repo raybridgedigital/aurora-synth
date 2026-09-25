@@ -529,13 +529,39 @@ struct MeterSnapshot: Equatable {
     var voices:Int=0
     var midiEvents:UInt64=0
     var overloads:UInt64=0
+    var dropAlert=false // triangle shown: dropouts now, or within the last 5 s
+    var dropFlash=true  // triangle phase; it blinks only while dropouts keep arriving
 }
 @MainActor final class AudioTelemetry:ObservableObject {
+    var backend=AuroraBackend()
     @Published private(set) var snapshot=MeterSnapshot()
+    private var lastOverloads:UInt64=0
+    private var lastDrop:TimeInterval = -.infinity
+    private var blinkTicks=0
     func update(peak:Float,load:Float,voices:Int,midiEvents:UInt64,overloads:UInt64=0) {
         let safePeak=peak.isFinite ? max(0,min(1,peak)):0
         let safeLoad=load.isFinite ? max(0,min(100,load)):0
-        let next=MeterSnapshot(peak:(safePeak*1000).rounded()/1000,cpuPercent:Int(safeLoad*100),voices:voices,midiEvents:midiEvents,overloads:overloads)
+        // Dropout warning: while dropouts keep arriving the triangle blinks five times a second
+        // (two 50 ms polls lit, two dark; a new burst starts lit), stays lit for 5 s after the
+        // last one, then hides. The count stays until the player clicks it.
+        let now=ProcessInfo.processInfo.systemUptime
+        if overloads>lastOverloads{
+            if now-lastDrop>=0.5{blinkTicks=0}
+            lastDrop=now
+        }
+        lastOverloads=overloads
+        let since=now-lastDrop,dropping=since<0.5
+        let lit = !dropping || (blinkTicks/2)%2==0
+        blinkTicks&+=1
+        let next=MeterSnapshot(peak:(safePeak*1000).rounded()/1000,cpuPercent:Int(safeLoad*100),voices:voices,midiEvents:midiEvents,overloads:overloads,
+                               dropAlert:overloads>0 && since<5.5,dropFlash:lit)
+        if snapshot != next { snapshot=next }
+    }
+    /// The player clicked the count: clear it and watch again from zero.
+    func clearDropouts() {
+        backend.aurora_reset_audio_overloads()
+        lastOverloads=0;lastDrop = -.infinity
+        var next=snapshot;next.overloads=0;next.dropAlert=false;next.dropFlash=true
         if snapshot != next { snapshot=next }
     }
 }
@@ -687,14 +713,22 @@ struct EngineReadout:View {
                 .monospacedDigit()
                 .accessibilityLabel("\(telemetry.snapshot.voices) active voices")
                 .help("Active voices")
-            // Core Audio dropouts since audio started. Hidden until the first one: each is an
-            // audible click, and they begin before the smoothed DSP figure reaches 100%.
+            // Core Audio dropouts. Hidden until the first one; each is an audible click, and they
+            // begin before the smoothed DSP figure reaches 100%. The triangle blinks while they
+            // happen and stays 5 s; the count stays until clicked, which clears it to zero.
             if telemetry.snapshot.overloads>0 {
-                Label("\(min(999, telemetry.snapshot.overloads))",systemImage:"exclamationmark.triangle.fill")
-                    .monospacedDigit()
-                    .foregroundStyle(Color(red:1,green:0.36,blue:0.3))
-                    .accessibilityLabel("\(telemetry.snapshot.overloads) audio dropouts")
-                    .help("Audio dropouts since audio started — each is an audible click. Try a lighter sound or a larger buffer in Audio output; restarting audio resets the count.")
+                Button{telemetry.clearDropouts()}label:{
+                    HStack(spacing:4){
+                        Image(systemName:"exclamationmark.triangle.fill")
+                            .foregroundStyle(Color(red:1,green:0.36,blue:0.3))
+                            .opacity(telemetry.snapshot.dropAlert && telemetry.snapshot.dropFlash ? 1:0)
+                        Text("\(min(999, telemetry.snapshot.overloads))").monospacedDigit()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(telemetry.snapshot.overloads) audio dropouts. Click to clear.")
+                .help("Audio dropouts (audible clicks) since audio started or since you last cleared the count. Click to clear. If it keeps growing, use a lighter sound or a larger buffer in Audio output.")
             }
         }
         .accessibilityElement(children:.combine)
@@ -1115,7 +1149,7 @@ struct VoiceStatus:View {
     }
     init(storageDirectory:URL? = nil,backend:AuroraBackend=AuroraBackend()) {
         self.backend=backend
-        scope.backend=backend;modulation.backend=backend;performanceTelemetry.backend=backend
+        scope.backend=backend;modulation.backend=backend;performanceTelemetry.backend=backend;telemetry.backend=backend
         motionTelemetry.backend=backend;wavetableTelemetry.backend=backend
         self.storageDirectory=storageDirectory
         if let data=try? Data(contentsOf:folder.appendingPathComponent("appearance.json")),let saved=try? JSONDecoder().decode(AuroraTheme.self,from:data){theme=saved}
