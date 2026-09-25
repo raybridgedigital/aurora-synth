@@ -4,6 +4,15 @@
 creating or editing patches. Enforced where noted by
 `scripts/assemble_modx_bank.py`; everything else is review-checked.
 
+**Why these rules exist (owner, 25 September 2026).** KiMiA is a gigging
+instrument. The owner would rather have 100 good patches than 400 that never
+get played: 765 earlier patches were retired for exactly that reason (heavy,
+samey, unused). The goal is a self-sufficient instrument for synth sounds — soon a
+Dual Patch will combine two different characters, so the CK88's own sounds are
+no longer needed for anything synth-based (its sampled grand piano stays on the
+CK88). Every rule below serves that: a patch must be worth playing on stage on
+its own and as one half of a Dual Patch.
+
 ## 1. Zero sustain for single-energy-attack instruments (ENFORCED)
 
 A plucked, struck, or hammered string receives all its energy at the attack —
@@ -27,17 +36,28 @@ pads/choirs/drones, sustained horns, evolving clouds, and held-synth voices
 (sub goblin, acid line, fretless song, mono synth leads). Ebow is a guitar
 but bowed — it sustains. When in doubt, ask what excites the string.
 
-## 2. Delay ships OFF by default; only Reverb may ship ON — except FX-flavored sounds
+## 2. Effects: all set up, only Reverb switched on (owner's rule)
 
-Delay is part of the sound design — patches that call for it carry fully
-authored delay parameters (mix, feedback, timing, tone, ducking) — but the
-delay power toggle ships OFF by default in every category. If the player
-wants delay, one toggle restores the factory-designed delay for that patch.
+When the player picks a patch they hear the **dry sound, plus its reverb where
+that helps**. Every effect is still part of the design: each patch carries
+settings for all ten effects, tuned for that sound (a chorus rate and depth
+that suit it, a delay time, feedback and tone that suit its tempo and register,
+a phaser or flanger speed that fits), but **every effect except Reverb ships
+switched OFF**. Switching any of them on must make the sound better, because it
+was set up for it.
 
-Exception: **Sound FX** and **Musical FX** may ship delay ON, where the
-echo is inseparable from the designed character (e.g. Laser Drawer,
-Arp Botanica). Everywhere else, Reverb is the only insert FX that may ship
-powered ON. Rule 5 still applies: everything not featured stays off.
+- Reverb is the only effect that may ship ON. On or off is the designer's
+  call per patch (a dry bass or a tight lead may ship with it off).
+- Reverb Pre-delay and Tone belong to the reverb, not to the Delay effect.
+- Width and movement come from the voice itself (unison spread, detune,
+  stereo LFOs, motion envelopes), never from an effect that ships on.
+- **Exception — Sound FX only.** Non-musical sound effects (risers, impacts,
+  sweeps, textures) may ship any effects ON; creativity is limited only by
+  the hardware. They must still stay clean, never crackle, and fit the CPU
+  budget (rule 8). Musical FX follows the normal rule.
+- **The original 55 AuroraFX patches (made before 25 September 2026) are
+  exempt and stay exactly as they are** — the owner's decision. Do not "fix"
+  their effect settings.
 
 ## 3. One character per patch; AI uses layers 1 and 2 only
 
@@ -60,6 +80,17 @@ own exceptional designs. The retired 3–4 layer banks (archive/factory-banks)
 show what happens otherwise: at a 24 September 2026 gig their pedalled 4-layer
 sounds needed 82–91% of the 128-frame budget on an M3 MacBook Air and crackled.
 
+**Design every patch as a good half of a Dual Patch.** Dual Patch will combine
+two different characters (keys + pad, bass + keys split, lead over strings), so:
+
+- **Matching loudness:** a patch's held-chord level sits close to its
+  neighbours' (rule 6), so any two combine without one burying the other.
+- **Controlled low end:** only basses (and deliberate sub layers) carry
+  strong content below ~120 Hz; pads, keys, strings and leads keep it light so
+  layers do not turn to mud.
+- **Natural register:** voice the sound for the range it is played in, so it
+  also works as one side of a split.
+
 ## 4. Categories
 
 15 Yamaha MODX mains (Drum/Perc intentionally skipped — hits don't fit a
@@ -69,12 +100,20 @@ Pad/Choir, Syn Comp, Chromatic Perc, Sound FX, Musical FX, Ethnic, FM EP.
 New `SoundPreset.category` strings outside `FactoryBank.categoryOrder` sort
 after the known ones — no app change needed for new categories.
 
-## 5. FX power discipline
+## 5. Effect settings discipline
 
-Every patch features 1–3 insert FX with explicit power toggles; all other
-FX powers are OFF. A closed gate must be exact silence (see rule 6), so
-unused FX cost nothing and leak nothing. All ten insert FX should be
-featured somewhere across the bank.
+- A switched-off effect costs no DSP and keeps its settings in the patch, so
+  there is no reason to leave one unconfigured: set up all ten for the sound
+  (rule 2). A closed gate is exact silence (rule 6).
+- Delay uses tempo sync by default; rates of tremolo, phaser and flanger
+  should suit the tempo the sound is usually played at.
+- **Reverb type:** Classic is a small, fast room with a slightly grainy
+  tail — good for tight keys, organs, comps and anything that must stay out of
+  the way. Plate is a dense, smooth studio plate — the classic choice for EPs,
+  pads, vocal-style leads, strings and bells. Size, Decay, Pre-delay and Tone
+  apply to both. Use Pre-delay (10–40 ms) to keep piano, EP and pluck attacks
+  clear in front of a long tail; use Tone to match the tail to the sound (dark
+  pads darker, bells brighter).
 
 ## 6. Every patch must be audible AND panic-clean
 
@@ -157,3 +196,25 @@ note's RMS); a pure tone should stay below about -60 dB.
 5. **Tell sound-design clicks from dropouts.** If the header's triangle blinks, the Mac missed
    an audio deadline (CPU); see rule 8. If it stays dark and a sound still clicks, it is the
    sound: check 1-4.
+
+## 10. Quality over quantity: how new patches are made and reviewed
+
+- **Every patch has a musical job** you can say in a few words ("ballad EP for
+  verses", "80s power-brass stab", "dark pad under a piano") and earns its place:
+  no near-duplicates of an existing patch.
+- **Batches.** New patches arrive in batches (about 25). The owner plays each
+  batch and marks every patch keep, tweak or drop before the next batch starts;
+  what is learned goes into the next batch.
+- **AI-made patches are marked.** A patch designed by Claude carries the name
+  suffix ` -CL` (for example `Velvet Tine -CL`) until the owner approves it; the
+  suffix is removed in the next build and the patch ID never changes. The base
+  name (without the suffix) must be unique in the whole factory.
+- **Imitations work from a reference.** When a patch imitates a specific
+  instrument or classic synth sound (a DX7 electric piano, a Juno pad, a Minimoog
+  bass), design from what that sound actually is — its structure and measured
+  spectrum, envelopes and velocity response — not from a vague memory. When a
+  published reference is not enough, ask the owner for a short dry recording
+  (a few notes, soft to hard, low to high).
+- **Measure before handing over:** held-chord level (rule 6), clicks (rule 9),
+  CPU with the pedal (rule 8), and a dry listen-through of the settings
+  (every effect but Reverb off, rule 2).
