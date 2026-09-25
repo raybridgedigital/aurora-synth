@@ -56,6 +56,8 @@ struct State {
     UInt32 bufferFrames = 128;
     double secondsPerTick = 0;
     std::atomic<float> cpu{0};
+    std::atomic<uint64_t> overloads{0};
+    std::atomic<uint64_t> overloadGraceUntil{0}; // mach time; the HAL reports a start-up overload
     std::string audioJSON = "[]", midiJSON = "[]";
     std::string status = "Audio is stopped. Choose an output and enable audio.";
 };
@@ -127,6 +129,15 @@ OSStatus activeAudioChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddr
     static_cast<State *>(context)->audioChanged.store(true, std::memory_order_release);
     return noErr;
 }
+// The HAL posts this on its notification thread whenever an I/O cycle missed its deadline.
+// Device start-up typically reports one miss with nothing playing; the first half second after
+// starting is ignored so the counter only shows dropouts a player could hear.
+OSStatus processorOverload(AudioObjectID, UInt32, const AudioObjectPropertyAddress *, void *context) {
+    auto &s = *static_cast<State *>(context);
+    if (mach_absolute_time() >= s.overloadGraceUntil.load(std::memory_order_relaxed))
+        s.overloads.fetch_add(1, std::memory_order_relaxed);
+    return noErr;
+}
 void listenToDevice(State &s, AudioDeviceID device, bool add) {
     for (auto selector : std::initializer_list<AudioObjectPropertySelector>{kAudioDevicePropertyDeviceIsAlive,
                           kAudioDevicePropertyNominalSampleRate,
@@ -136,6 +147,10 @@ void listenToDevice(State &s, AudioDeviceID device, bool add) {
         if (add) AudioObjectAddPropertyListener(device, &address, activeAudioChanged, &s);
         else AudioObjectRemovePropertyListener(device, &address, activeAudioChanged, &s);
     }
+    AudioObjectPropertyAddress overload{kAudioDeviceProcessorOverload, kAudioObjectPropertyScopeGlobal,
+                                        kAudioObjectPropertyElementMain};
+    if (add) AudioObjectAddPropertyListener(device, &overload, processorOverload, &s);
+    else AudioObjectRemovePropertyListener(device, &overload, processorOverload, &s);
 }
 void stopAudio(State &s) {
     s.acceptNotes.store(false, std::memory_order_release);
@@ -461,6 +476,8 @@ int aurora_start_audio(uint32_t deviceID, uint32_t requestedFrames) {
     result = AudioOutputUnitStart(s.output);
     if (result) return fail("Could not start the selected audio output", result);
     s.currentDevice = deviceID;
+    s.overloads.store(0, std::memory_order_relaxed);
+    s.overloadGraceUntil.store(mach_absolute_time() + uint64_t(0.5 / s.secondsPerTick), std::memory_order_relaxed);
     s.running = true;
     s.acceptNotes.store(true, std::memory_order_release);
     listenToDevice(s, deviceID, true);
@@ -545,6 +562,7 @@ int aurora_copy_scope(float *samples,int capacity) {
 float aurora_output_peak() { return state().running ? state().engine.peak() : 0; }
 float aurora_comp_gr(){ return state().running ? state().engine.gainReduction() : 0; }
 float aurora_cpu_load() { return state().cpu.load(std::memory_order_relaxed); }
+uint64_t aurora_audio_overloads() { return state().running ? state().overloads.load(std::memory_order_relaxed) : 0; }
 int aurora_active_voices() { return state().running ? state().engine.activeVoices() : 0; }
 uint64_t aurora_midi_event_count() { return state().midiEvents.load(std::memory_order_relaxed); }
 int64_t aurora_last_cc() { const auto value = state().lastCC.load(std::memory_order_acquire); return value == UINT64_MAX ? -1 : int64_t(value & 0xffffff); }

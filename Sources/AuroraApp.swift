@@ -528,13 +528,14 @@ struct MeterSnapshot: Equatable {
     var cpuPercent:Int=0
     var voices:Int=0
     var midiEvents:UInt64=0
+    var overloads:UInt64=0
 }
 @MainActor final class AudioTelemetry:ObservableObject {
     @Published private(set) var snapshot=MeterSnapshot()
-    func update(peak:Float,load:Float,voices:Int,midiEvents:UInt64) {
+    func update(peak:Float,load:Float,voices:Int,midiEvents:UInt64,overloads:UInt64=0) {
         let safePeak=peak.isFinite ? max(0,min(1,peak)):0
         let safeLoad=load.isFinite ? max(0,min(100,load)):0
-        let next=MeterSnapshot(peak:(safePeak*1000).rounded()/1000,cpuPercent:Int(safeLoad*100),voices:voices,midiEvents:midiEvents)
+        let next=MeterSnapshot(peak:(safePeak*1000).rounded()/1000,cpuPercent:Int(safeLoad*100),voices:voices,midiEvents:midiEvents,overloads:overloads)
         if snapshot != next { snapshot=next }
     }
 }
@@ -686,6 +687,15 @@ struct EngineReadout:View {
                 .monospacedDigit()
                 .accessibilityLabel("\(telemetry.snapshot.voices) active voices")
                 .help("Active voices")
+            // Core Audio dropouts since audio started. Hidden until the first one: each is an
+            // audible click, and they begin before the smoothed DSP figure reaches 100%.
+            if telemetry.snapshot.overloads>0 {
+                Label("\(min(999, telemetry.snapshot.overloads))",systemImage:"exclamationmark.triangle.fill")
+                    .monospacedDigit()
+                    .foregroundStyle(Color(red:1,green:0.36,blue:0.3))
+                    .accessibilityLabel("\(telemetry.snapshot.overloads) audio dropouts")
+                    .help("Audio dropouts since audio started — each is an audible click. Try a lighter sound or a larger buffer in Audio output; restarting audio resets the count.")
+            }
         }
         .accessibilityElement(children:.combine)
     }
@@ -1328,7 +1338,7 @@ struct VoiceStatus:View {
             compGR.update()
             wavetableTelemetry.update()
             motionTelemetry.update()
-            telemetry.update(peak:backend.aurora_output_peak(),load:backend.aurora_cpu_load(),voices:Int(backend.aurora_active_voices()),midiEvents:backend.aurora_midi_event_count())
+            telemetry.update(peak:backend.aurora_output_peak(),load:backend.aurora_cpu_load(),voices:Int(backend.aurora_active_voices()),midiEvents:backend.aurora_midi_event_count(),overloads:backend.aurora_audio_overloads())
         }
         if let p=backend.aurora_status() {
             let nextStatus=String(cString:p)

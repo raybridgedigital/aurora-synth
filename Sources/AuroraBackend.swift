@@ -305,6 +305,13 @@ final class AuroraBackend {
         return aurora_cpu_loadStandalone()
 #endif
     }
+    func aurora_audio_overloads() -> UInt64 {
+#if AURORA_PLUGIN
+        return 0 // the host owns the audio device and reports its own overloads
+#else
+        return aurora_audio_overloadsStandalone()
+#endif
+    }
     func aurora_active_voices() -> Int32 {
 #if AURORA_PLUGIN
         return aurora_plugin_active_voices(context)
@@ -392,6 +399,7 @@ private let aurora_set_custom_wavetableStandalone = aurora_set_custom_wavetable
 private let aurora_clear_custom_wavetableStandalone = aurora_clear_custom_wavetable
 private let aurora_copy_wavetable_previewStandalone = aurora_copy_wavetable_preview
 private let aurora_cpu_loadStandalone = aurora_cpu_load
+private let aurora_audio_overloadsStandalone = aurora_audio_overloads
 private let aurora_active_voicesStandalone = aurora_active_voices
 private let aurora_midi_event_countStandalone = aurora_midi_event_count
 private let aurora_last_ccStandalone = aurora_last_cc
