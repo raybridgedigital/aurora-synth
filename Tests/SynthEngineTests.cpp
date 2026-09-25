@@ -402,6 +402,21 @@ void masterFxPower() {
     auto allStruck=capture(0x3ffu,0x3ffu);assert(difference(allStruck,neutral)<1e-7);
     std::puts("PASS: all ten master FX power toggles are true switches; a struck effect renders the dry bus exactly, alone and with every effect struck together");
 }
+void silentVoiceRelease() {
+    // A natural-decay note (sustain 0) held by the pedal renders exact silence once decayed.
+    // In poly mode its voice is freed, so pedalled playing cannot fill the pool with silence.
+    SynthEngine e;dry(e);e.setParameter(0,APSustain,0);e.setParameter(0,APDecay,.05f);e.setParameter(0,APRelease,.3f);
+    cc(e,0,64,127);
+    for(int k=40;k<100;k++){note(e,0,k);render(e,240);off(e,0,k);}
+    render(e,rate/2);assert(e.activeVoices()==0);assert(render(e,4800)==0);
+    note(e,0,60);assert(render(e,2400)>.01f);        // a new note still speaks normally
+    cc(e,0,64,0);render(e,rate);assert(e.activeVoices()==0);
+    // Mono/legato keeps its single voice so a legato note does not re-attack after the decay.
+    SynthEngine m;dry(m);m.setParameter(0,APVoiceMode,2);m.setParameter(0,APSustain,0);m.setParameter(0,APDecay,.05f);
+    note(m,0,60);render(m,rate/2);assert(m.activeVoices()==1);note(m,0,64);render(m,2400);assert(m.activeVoices()==1);
+    off(m,0,64);off(m,0,60);render(m,rate);assert(m.activeVoices()==0);
+    std::puts("PASS: decayed pedal-held poly voices are freed with exact silence; mono legato keeps its voice");
+}
 void performanceTools() {
     SynthEngine e;dry(e);e.hold(true);note(e,9,60);render(e);off(e,9,60);render(e,rate);assert(e.activeVoices()==1);
     e.hold(false);render(e,rate);assert(e.activeVoices()==0);
@@ -443,4 +458,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();silentVoiceRelease();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

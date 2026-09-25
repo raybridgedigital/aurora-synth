@@ -1,6 +1,7 @@
 #include "FmEngine.hpp"
 #include "Wavetable.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 // 4-operator FM / phase-modulation core — FUTURE-PROPOSAL-FM-ENGINE.md (LOCKED v1.0) §4, §5, §10.
 // 16 algorithms, per-operator rate/level envelopes (ADSR alternate), one algorithm-designated
@@ -38,6 +39,30 @@ constexpr Algo kAlgos[16]={
     {"Twin Feedback", {-1,-1, 0, 1}, 3},
     {"Loopback",      { 1, 2, 3,-1}, 3},
 };
+// The order in which each algorithm evaluates its operators within one modulator tick:
+// an operator runs once every operator modulating it has run, lowest index first within
+// a round. It depends only on the algorithm, so it is resolved at compile time instead
+// of re-deriving it twice per sample per voice.
+struct AlgoOrder { int8_t op[4]{}; int8_t count=0; };
+constexpr std::array<AlgoOrder,16> kOrders=[]{
+    std::array<AlgoOrder,16> out{};
+    for(int a=0;a<16;a++){
+        const Algo& A=kAlgos[a];bool done[4]={};int n=0;
+        for(int round=0;round<4;round++){
+            bool progress=false;
+            for(int o=0;o<4;o++){
+                if(done[o])continue;
+                bool ready=true;
+                for(int k=0;k<4;k++)if(A.target[k]==o&&!done[k]){ready=false;break;}
+                if(!ready)continue;
+                out[size_t(a)].op[n++]=int8_t(o);done[o]=true;progress=true;
+            }
+            if((done[0]&&done[1]&&done[2]&&done[3])||!progress)break;
+        }
+        out[size_t(a)].count=int8_t(n);
+    }
+    return out;
+}();
 float polyBlep(float phase,float step){
     if(phase<step){float t=phase/step;return 2*t-t*t-1.f;}
     if(phase>1-step){float t=(phase-(1-step))/step;return (t-2)*t+1.f;}
@@ -92,15 +117,15 @@ float FmEngine::renderSample(const FmParams& params,FmVoiceState& st,float baseH
     if(st.pitchClock>=0.f){
         float amount=std::clamp(g[FmPitchEnvAmount]+mm[6],-1.f,1.f)*12.f;
         float time=std::clamp(g[FmPitchEnvTime],.001f,4.f);
-        float power=std::exp2(-2.f+4.f*std::clamp(g[FmPitchEnvCurve],0.f,1.f)); // 0.25...4
+        float power=amount==0.f?1.f:std::exp2(-2.f+4.f*std::clamp(g[FmPitchEnvCurve],0.f,1.f)); // 0.25...4
         float t=st.pitchClock/sr;
         if(t<time){
             float x=1.f-t/time;
-            st.pitchEnv=amount*std::pow(std::max(x,0.f),power);
+            st.pitchEnv=amount==0.f?amount:amount*std::pow(std::max(x,0.f),power);
             st.pitchClock+=1.f/sr;
         } else { st.pitchEnv=0.f; st.pitchClock=-1.f; }
     }
-    baseHz*=std::exp2(st.pitchEnv/12.f);
+    if(st.pitchEnv!=0.f)baseHz*=std::exp2(st.pitchEnv/12.f);
     int alg=std::clamp(int(std::round(g[FmAlgorithm])),0,15);
     const Algo& A=kAlgos[alg];
     float feedback=std::clamp(g[FmFeedback]+mm[4],0.f,1.f);
@@ -145,7 +170,8 @@ float FmEngine::renderSample(const FmParams& params,FmVoiceState& st,float baseH
         float hz=opP(o,FmFixedMode)>.5f
             ?std::clamp(opP(o,FmFixedHz),1.f,20000.f)
             :baseHz*std::clamp(opP(o,FmRatio),.25f,16.f);
-        hz*=std::exp2(std::clamp(opP(o,FmRatioFine)+mm[7],-1.f,1.f)); // fine ±100¢ (+ matrix)
+        const float fine=std::clamp(opP(o,FmRatioFine)+mm[7],-1.f,1.f);
+        if(fine!=0.f)hz*=std::exp2(fine); // fine ±100¢ (+ matrix)
         if(!std::isfinite(hz))hz=1.f;
         opHz[o]=std::clamp(hz,0.01f,float(sr)*.45f);
         opWaveId[o]=opP(o,FmWave);
@@ -161,15 +187,11 @@ float FmEngine::renderSample(const FmParams& params,FmVoiceState& st,float baseH
     // trapezoid average of the two ticks. Feedback = 1-sample delay at this internal rate.
     float outs[4],inner[4],innerAvg[4]={};
     float fbDelay=st.feedbackDelay;
+    const AlgoOrder& order=kOrders[size_t(alg)];
     for(int tick=0;tick<2;tick++){
-        bool done[4]={};
-        for(int round=0;round<4;round++){
-            bool progress=false;
-            for(int o=0;o<4;o++){
-                if(done[o])continue;
-                bool ready=true;
-                for(int k=0;k<4;k++)if(A.target[k]==o&&!done[k]){ready=false;break;}
-                if(!ready)continue;
+        {
+            for(int step=0;step<order.count;step++){
+                const int o=order.op[step];
                 float modIn=0.f;
                 for(int k=0;k<4;k++)if(A.target[k]==o)modIn+=outs[k]*kIndexCycles;
                 float ph=float(st.phase[o]);
@@ -183,10 +205,7 @@ float FmEngine::renderSample(const FmParams& params,FmVoiceState& st,float baseH
                     st.phase[o]+=double(halfStep[o]);
                     st.phase[o]-=std::floor(st.phase[o]);
                 }
-                done[o]=true;progress=true;
             }
-            bool all=done[0]&&done[1]&&done[2]&&done[3];
-            if(all||!progress)break;
         }
         if(A.feedbackOp>=0)fbDelay=outs[A.feedbackOp];
         for(int o=0;o<4;o++)if(A.target[o]<0)innerAvg[o]=tick==0?inner[o]:.5f*(innerAvg[o]+inner[o]);

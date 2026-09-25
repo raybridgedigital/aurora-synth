@@ -17,7 +17,9 @@ struct MotionEnvelope {
         for(int i=1;i<count;i++)if(phase<=data[4+i*3]){
             int a=4+(i-1)*3,b=a+3;
             float t=std::clamp((phase-data[a])/(data[b]-data[a]),0.f,1.f);
-            t=std::pow(t,std::exp2(data[a+2]*3));
+            // A straight segment (curve 0) has exponent exp2(0) == 1, and pow(t,1) == t for
+            // every t in [0,1] (checked exhaustively), so it skips both calls.
+            if(data[a+2]!=0.f)t=std::pow(t,std::exp2(data[a+2]*3));
             return data[a+1]+(data[b+1]-data[a+1])*t;
         }
         return data[4+(count-1)*3+1];
