@@ -1,8 +1,23 @@
 # Aurora v1 Test Contract
 
-> **Current-status note (24 September 2026):** this document defines the intended baseline gates; it is not a claim that v0.25.0 currently passes them. The release's GitHub CI is red because native test links omit FM-engine symbols. See `SHARED_STATE.md`.
+> **Current-status note (25 September 2026):** this document defines the intended baseline gates. The FM-engine link failure of v0.25.0 is fixed, and the baseline passes locally on 0.26.1. GitHub CI was still red on the `v0.26.0` push because the deprecated `macos-14` runners' Xcode 15.4 could not compile the interface; 0.26.1 moves CI to `macos-26`. See `SHARED_STATE.md` before calling CI green.
 
 This suite is a clean baseline for the current Aurora architecture. It is intentionally separate from the historical regression suite.
+
+## Owner's rule: the tests adapt to the software
+
+> "I don't want to make the software worse just to comply with an outdated test. It's wrong. The
+> test needs to adapt. The test only needs to catch bad errors, not make the software worse."
+> — Reza, owner, 25 September 2026
+
+When a test or CI job fails, first decide what it caught:
+
+- **A real defect in KiMiA** (a crash, wrong or broken sound, clicks or dropouts, lost or corrupted
+  data, a control that does nothing, a plug-in that fails in a host): fix the software.
+- **An outdated expectation** (old counts or layouts, retired banks, an old toolchain or CI runner,
+  timing that depends on the machine): update the test or the CI, and say why in the commit.
+
+Never make the sound, performance, stage reliability or usability worse to make a test pass.
 
 ## Authority order
 
@@ -83,4 +98,4 @@ AU/VST3 build and host validation remain a separate product gate using the repos
 
 ## Maintenance rule
 
-When Aurora behavior intentionally changes, update this contract first, then update the test that represents it. Do not change production code merely to satisfy an obsolete test.
+When Aurora behavior intentionally changes, update this contract first, then update the test that represents it. Do not change production code merely to satisfy an obsolete test, an outdated toolchain or a CI runner; see the owner's rule at the top of this document.

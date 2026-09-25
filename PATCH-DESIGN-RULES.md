@@ -39,19 +39,26 @@ echo is inseparable from the designed character (e.g. Laser Drawer,
 Arp Botanica). Everywhere else, Reverb is the only insert FX that may ship
 powered ON. Rule 5 still applies: everything not featured stays off.
 
-## 3. One character per patch, 1–2 layers max
+## 3. One character per patch; AI uses layers 1 and 2 only
 
 Each patch is exactly one instrument/character — never Piano+Pad or
 Bass+Lead hybrids. Layering two characters is the future dual-patch's job.
 A second layer is allowed only as same-character support (sub octave, octave
 shimmer, noise attack transient, sympathetic drone, octave double).
 
-The engine has four layers so that a future Dual Patch (two 2-layer patches)
-runs four layers in total. Three- and four-layer factory patches are reserved
-for rare, explicitly exceptional designs — never the default for a category.
-The retired 3–4 layer banks (archive/factory-banks) are the cautionary
-example: at a 24 September 2026 gig their pedalled 4-layer sounds needed
-82–91% of the 128-frame budget on an M3 MacBook Air and crackled.
+**Layers 3 and 4 are reserved for the owner (owner's rule, 25 September
+2026).** Every AI — and anyone else designing sounds for KiMiA — uses **one or
+two layers only: layer A, or A + B.** Layers C and D belong to Reza, the owner.
+An AI must never switch on, fill, paste into or edit layer C or D, must never
+propose a three- or four-layer design, and must leave any C/D content the
+owner has made exactly as it is. If a sound seems to need a third layer,
+simplify it to two, or describe the idea to the owner instead.
+
+Why the engine has four layers at all: a future Dual Patch plays two 2-layer
+patches together (four layers in total), and C/D stay free for the owner's
+own exceptional designs. The retired 3–4 layer banks (archive/factory-banks)
+show what happens otherwise: at a 24 September 2026 gig their pedalled 4-layer
+sounds needed 82–91% of the 128-frame budget on an M3 MacBook Air and crackled.
 
 ## 4. Categories
 
@@ -116,3 +123,37 @@ or single-layer leads. Give natural-decay sounds sustain 0 (rule 1) — once suc
 a note has decayed under the pedal its voice is freed, which is what keeps
 pedalled pianos, plucks and FM EPs cheap. Aim for a Dual Patch pair at 16 held
 keys to stay under ~50%, leaving headroom for effects, the UI and a warm laptop.
+
+## 9. Clicks and crackle: causes and how to design around them
+
+Learned from the 0.26.0 field test (Sub Marine clicked on every note, Black Moss crackled at
+64 voices). Measured with `bench/clickfind` (loudest 1 ms burst above 1.5 kHz, relative to the
+note's RMS); a pure tone should stay below about -60 dB.
+
+1. **A pure tone exposes every corner of the envelope.** A linear attack meets the decay in a
+   sharp corner, and a corner is broadband. On a sine or triangle sound (sub-basses, flutes,
+   soft pads) nothing else masks it, so it becomes the loudest treble in the note. Sub Marine
+   (sine an octave down, 4 ms attack) clicked at -44 dB on every note, worst when two keys
+   alternate detached, because each note re-attacks. Since 0.26.1 the engine smooths voice gain
+   (two 0.7 ms stages), which brings that click to -74 dB, but design for it anyway:
+   pure-tone basses and pads get an attack of at least 5 ms unless the click is the point, and
+   mono basses use legato voice mode so trills and repeated lines do not re-attack.
+2. **Voices add up; Output boost must not live in the limiter.** One note of a pad is quiet;
+   64 of them are not. Black Moss peaks at 0.64 at 0 dB boost with a full pool, so +9 dB
+   drives it to 1.8 and the old limiter clamped every peak (hard clipping, 5th harmonic at
+   -40 dB, heard as crackle). 0.26.1 limits cleanly (-54 dB), but a patch should still leave
+   room: at the house master, the 8-note velocity-127 stress chord should peak around 0.5 at
+   0 dB boost so a normal +6 to +12 dB boost only touches the limiter on the loudest moments.
+3. **Pedal + long release fills the 64-voice pool, and a full pool steals.** Black Moss
+   (1.1 s attack, 3 s release) reaches 64 voices within eight pedalled chords. 0.26.1 fades a
+   stolen voice over 6 ms (up to 16 at once, 32 oscillator lanes) instead of cutting it
+   (-26 dB), and anything beyond that still clicks. For pedalled playing keep pad releases
+   near 3 s or less, and avoid two layers x long release x unison on the same pad.
+4. **Keep sub-bass inside the rig's range.** An octave-down sine puts C1 at 33 Hz, below what
+   keyboard speakers and guitar amps (CK88, Katana) reproduce. The fundamental disappears on
+   stage, the player turns up, and every click and speaker limit is exposed. Keep the lowest
+   played fundamentals near 40 Hz or above for small rigs, or add a little upper content
+   (a touch of saw, Character or a second oscillator) so the bass is heard, not just felt.
+5. **Tell sound-design clicks from dropouts.** If the header's triangle blinks, the Mac missed
+   an audio deadline (CPU); see rule 8. If it stays dark and a sound still clicks, it is the
+   sound: check 1-4.

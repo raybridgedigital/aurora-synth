@@ -1,6 +1,8 @@
 # Aurora v1 Specialized Regression Contract
 
-> **Current-status note (24 September 2026):** this remains the reconstructed behavioral contract, but it is not a claim that v0.25.0 CI is green. Current v0.25.0 baseline/regression jobs fail to link because FM-engine symbols are absent from their native test links. Historical suite results below describe the build on which they were recorded; see `SHARED_STATE.md`.
+> **Current-status note (25 September 2026):** this remains the reconstructed behavioral contract. The v0.25.0 FM-engine link failure is fixed and the suite passes locally on 0.26.1; GitHub CI on the `v0.26.0` push was still red because of the deprecated `macos-14` runners' Xcode 15.4, and 0.26.1 moves CI to `macos-26`. Historical suite results below describe the build on which they were recorded; see `SHARED_STATE.md`.
+
+**Owner's rule (25 September 2026):** "I don't want to make the software worse just to comply with an outdated test. It's wrong. The test needs to adapt. The test only needs to catch bad errors, not make the software worse." Fix KiMiA when a test catches a real defect; otherwise update the test or the CI. Details in [AURORA-TEST-CONTRACT-v1.md](AURORA-TEST-CONTRACT-v1.md).
 
 This suite reconstructs Aurora's specialized regression coverage from the current working product, current production architecture, and the intent of the historical tests.
 
