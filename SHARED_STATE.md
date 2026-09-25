@@ -19,7 +19,7 @@ KiMiA (internal project lineage: Aurora) — native macOS synthesizer for Apple 
 
 ## Freeze / approval rules
 
-- **CODE FROZEN since 24 September 2026 after v0.25.0.** Do not edit `Sources/`, scripts, tests, resources, plug-in code, or build configuration until the owner gives an explicit named unfreeze.
+- **The code freeze of 24 September 2026 (after v0.25.0) was lifted by the owner on 25 September 2026** for the Claude Code work described under "Owner direction in effect". Outside that direction, do not edit `Sources/`, scripts, tests, resources, plug-in code, or build configuration without an explicit owner request.
 - Documentation-only corrections require a documentation-only request. This file was refreshed on that basis after the v0.25.0 tag.
 - `.grok/` is owner-managed and must remain untracked. Never stage or commit it.
 - Do not infer approval to tag, push, install plug-ins, or alter local support data from an implementation or documentation request.
@@ -35,9 +35,21 @@ owner request. Other local folders (`~/Desktop/Aurora Source`, older builds, pat
 history/reference only; the uncommitted bypass edits in `~/Desktop/Aurora Source` (another
 model's work in progress, which did not compile) are superseded by this branch — do not apply them.
 
-**Owner patch policy:** regular patches use at most two layers, so a future Dual Patch runs four
-layers in total. Three- and four-layer patches are for rare, exceptional designs only
-(PATCH-DESIGN-RULES.md rule 3; CPU budget in rule 8).
+**Tests adapt to the software (owner's rule).** "I don't want to make the software worse just to
+comply with an outdated test. It's wrong. The test needs to adapt. The test only needs to catch
+bad errors, not make the software worse." (Reza, 25 September 2026.) When a test or CI job fails,
+fix KiMiA only if it caught a real defect; otherwise update the test or the CI and say why in the
+commit. See the owner's rule in `AURORA-TEST-CONTRACT-v1.md`.
+
+**Live gigging first; plug-ins only on request.** KiMiA is used as the standalone app for live
+gigs and not in a DAW at the moment. Do not rebuild, install or revalidate the AU/VST3 plug-ins
+unless the owner asks (owner, 25 September 2026); keep plug-in source compiling and its tests
+green.
+
+**Owner patch policy:** every AI (and anyone else designing sounds) uses one or two layers only —
+layer A, or A + B — so a future Dual Patch runs four layers in total. Layers C and D are reserved
+for the owner: AI never switches them on, fills or edits them, and leaves the owner's C/D content
+untouched (PATCH-DESIGN-RULES.md rule 3; CPU budget in rule 8; clicks in rule 9).
 
 ## Release 0.26.0 work (branch `claude/dsp-bypass-and-performance`, merged to `main`)
 
@@ -98,10 +110,40 @@ validator, auval (plug-in build tooling), GitHub CI.
   single-bank factory library (AuroraFX, 55 patches) with the retired banks archived.
 - The older annotated tag `v0.26` (`f4d645c`, "FX-only factory + 55-patch MODX bank") is left
   untouched; it predates the version bump and that build still reported 0.25.0.
-- **Installed plug-ins:** 0.24.3 until the 0.26.0 AU/VST3 are built, installed and validated
-  (owner approved on 25 September; see the pending queue).
+- **Installed plug-ins:** still 0.24.3 (checked 25 September). The owner deferred plug-in
+  rebuilds until asked; the standalone app is the gig instrument.
 - **Not in 0.26.0:** the Dattorro Plate reverb (second reverb type, Classic stays default) is
   work in progress on local branch `claude/plate-reverb`, not pushed.
+
+## Next release — v0.26.1 (branch `claude/0.26.1-click-fixes`, not pushed)
+
+From the owner's first play-test of 0.26.0: Sub Marine clicked on single notes (worst when two
+keys alternate), Black Moss crackled with a full 64-voice pool, and one run showed 267 dropouts
+that could not be reproduced.
+
+- **Causes found (offline click scan + real Core Audio runs):** Sub Marine — the corner where a
+  4 ms linear attack turns into the decay, at -44 to -48 dB on a pure sine sub-bass (not the
+  speakers, not the limiter). Black Moss — the old Output-boost limiter clamped every sample above
+  0.98 (hard clipping, 1,905 samples at +12.3 dB), plus voice-steal clicks at the full pool.
+- **Fixes:** two-stage 0.7 ms voice-gain declick (-74 dB), 16 ghost slots that fade stolen voices
+  over 6 ms with their real waveform (steal clicks +42 → +16 dB over the chord's treble),
+  peak-hold soft-knee limiter (ceiling 0.98; 0 dB boost unchanged). Heavy Dual Patch cost
+  33.0 % → 33.8 %. Tests: `envelopeDeclick`, `cleanVoiceSteal`, `cleanOutputLimiter`.
+- **Dropout indicator:** count in the DSP colour, stays until clicked (click = reset to zero);
+  triangle blinks at 5 Hz while dropouts arrive, stays lit 5 s, then hides.
+- **267 dropouts:** not reproducible on this Mac; the likeliest explanation is heavy benchmark
+  and build jobs from this session running at the same time on the fanless Air (the repo is on
+  the iCloud-synced Desktop, so iCloud was also syncing their output). Heavy jobs now run under
+  `taskpolicy -b` (efficiency cores). Watch the counter.
+- **CI:** all workflows move from the deprecated `macos-14` (Xcode 15.4) to `macos-26`
+  (Xcode 26.6); the interface code that Xcode 15.4 could not type-check is unchanged (owner's
+  rule: tests adapt to the software). `scripts/build.sh` retries signing when iCloud re-tags
+  the bundle.
+- **Docs:** PATCH-DESIGN-RULES rule 3 (layers C/D reserved for the owner) and rule 9 (clicks);
+  the owner's test rule in both test contracts.
+- **Local validation:** `scripts/test.sh`, baseline, specialized regression, A/B, PluginCoreChecks
+  (55 patches) and the AuroraFX audio audit (55 patches, 0 failures) all green; the plug-in
+  interface type-checks with `AURORA_PLUGIN`. Plug-ins not rebuilt (owner direction).
 
 ## Validation status — read before making release claims
 
@@ -117,9 +159,16 @@ All four jobs associated with the v0.25.0 push failed:
 Do not describe v0.25.0 CI as passing. These failures are recorded validation debt; code remediation is frozen pending an explicit unfreeze.
 
 **Remediation status (25 September 2026).** The "missing FM-engine symbols" link failures are
-fixed in `main` (`842ff85`). 0.26.0 additionally makes the baseline and specialized-regression
-suites pass locally. The Product Smoke Swift `ContentView.body` timeout is **not** addressed.
-Check the workflow runs for the `v0.26.0` push before describing CI as green.
+fixed in `main` (`842ff85`). CI on the `v0.26.0` push (`6b51a31`): Native Sanitizers **green**;
+Product Smoke, v1 Baseline and v1 Specialized Regression **red**, all three from one error —
+`AuroraApp.swift:261:25`, "unable to type-check this expression in reasonable time". Line 261 is
+`FmEnvCurve.body` (the FM operator envelope mini-curve), not `ContentView.body` as recorded above.
+The runners were `macos-14` (deprecated by GitHub) with Xcode 15.4 (Swift 5.10); this Mac builds
+with Swift 6.4, which compiles that code without trouble, so the error only showed on GitHub.
+**Owner direction (25 September 2026): the CI serves the software.** When a stale test or an
+outdated CI toolchain fails, update the test or the CI; never make the software worse to satisfy
+it. 0.26.1 therefore moves every workflow to `macos-26` (Xcode 26.6) and leaves the interface
+code unchanged. Confirm on the next CI run before calling CI green.
 
 ### Factory-bank inventory
 
@@ -150,13 +199,15 @@ Authoritative current documents:
 
 ## Pending queue
 
-1. **Owner play-test of 0.26.0** on the CK88 rig (pedalled pianos/EPs, Dual-Patch-style
-   layering, toggling effects live, Matrix screen, dropout counter).
-2. **CI remediation:** the Swift `ContentView.body` type-check timeout (Product Smoke) is untouched.
-   `FmEngine.o` links are in `main` since `842ff85`. No CI run has happened on the branch.
-3. **Plug-in rebuild/install/revalidation (owner-approved):** build 0.26.0 AU/VST3 with the pinned
-   SDKs (`PluginDependencies.lock`, checkouts in `build/deps`), install with
-   `scripts/install_plugins.sh` (backs up the old bundles), validate with `scripts/check_plugins.sh`.
+1. **Owner play-test of 0.26.1** on the CK88 rig (Sub Marine alternating notes, Black Moss full
+   pool, pedalled pianos/EPs, toggling effects live, dropout indicator), then push/tag on request.
+2. **CI remediation:** 0.26.1 moves all workflows from `macos-14` (Xcode 15.4, which failed to
+   type-check `FmEnvCurve.body`) to `macos-26` (Xcode 26.6). Confirm on the first CI run after it
+   is pushed; fix whatever fails there in the CI or the tests unless it is a real product bug.
+3. **Plug-in rebuild/install/revalidation — only when the owner asks** (deferred 25 September:
+   standalone gig use). How: build AU/VST3 with the pinned SDKs (`PluginDependencies.lock`,
+   checkouts in `build/deps`), install with `scripts/install_plugins.sh` (backs up the old
+   bundles), validate with `scripts/check_plugins.sh`.
 4. **Dual Patch live:** locked design, not implemented. The engine now leaves headroom for it
    (see PATCH-DESIGN-RULES.md rule 8).
 5. **Hardware validation:** owner-deferred. Gates: three-controller operation, pedals/ownership,
@@ -164,10 +215,12 @@ Authoritative current documents:
    latency, memory, exact output/hub setup.
 6. **Public distribution:** Developer ID signing/notarization and clean-machine install.
 7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora.
-8. **Plate reverb (owner-approved, in progress on local branch `claude/plate-reverb`):** Dattorro
-   plate as reverb type 1 next to Classic (global 70, default Classic so no patch changes). Still
-   to do: level match to Classic, Reverb-panel selector, plug-in parameter/fallback tables, tests.
-   Then the owner auditions it before any factory patch switches.
+8. **Plate reverb — PAUSED by the owner (25 September 2026).** Do not resume without an explicit
+   go-ahead. State: local branch `claude/plate-reverb` (`f7cb142`, based on pre-0.26.0 code) adds a
+   Dattorro plate as reverb type 1 next to Classic (global 70, default Classic so no patch
+   changes). Not done: level match (about 14 dB quieter than Classic at the same Mix), glitch-free
+   Size changes, Reverb-panel selector, patch/plug-in parameter tables, tests, CPU measurement,
+   owner audition.
 
 The original specification's sampler/granular engine, sample import/library management, microtuning/MPE, and optional hardware-audio/Aggregate Device workflows remain later scope, not active queue items.
 

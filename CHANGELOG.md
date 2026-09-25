@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.26.1 — 2026-09-25
+
+### Clicks and crackle (from the first play-test of 0.26.0)
+
+- **Declicked voice envelopes.** Voice gain now passes through two 0.7 ms one-pole stages, so a fast linear attack no longer clicks where it turns into the decay. On a pure tone (Sub Marine, 4 ms attack) the note-on click fell from -44 dB to -74 dB relative to the note, and note-off clicks by about 10 dB. Very short percussive spikes (3 ms attack into a 50 ms decay) peak about 1 dB lower.
+- **Click-free voice stealing.** When all 64 voices are busy, the stolen voice keeps rendering its real waveform through a 6 ms S-curve fade in one of 16 ghost slots (capped at 32 oscillator lanes) instead of being replaced by its frozen last sample. On a held 64-voice sine chord, steal clicks fell from +42 dB to +16 dB over the chord's own treble.
+- **Clean Output-boost limiter.** The previous limiter took its gain from each sample's own peak, so every sample above the ceiling was clamped: hard clipping, heard as crackle on loud chords. The new one follows a 25 ms peak hold with a 1 ms attack and 150 ms release, and a soft knee that never exceeds 0.98. A loud chord at +18 dB: 5th harmonic -39.9 dB → -54 dB. Black Moss with a full voice pool at +12.3 dB: 1,905 → 23 samples near full scale. At 0 dB boost the output is unchanged.
+- Cost of all three on the heaviest Dual Patch load: 33.0% → 33.8% of the 128-frame budget (within measurement noise).
+
+### Dropout indicator
+
+- The count uses the DSP readout's colour and stays after the first dropout until you click it; clicking clears it to zero. The red triangle blinks five times a second while dropouts are happening, stays lit for five seconds after the last one, then hides — so a dropout you missed still leaves its number behind.
+
+### Sound design guide
+
+- PATCH-DESIGN-RULES rule 9 explains what caused the clicks (pure tones expose envelope corners, voices add up into the limiter, pedal + long release fills the pool, sub-bass below the rig's range) and how to design around them.
+- PATCH-DESIGN-RULES rule 3: AI (and anyone else designing sounds) uses one or two layers only — layer A, or A + B. Layers C and D are reserved for the owner.
+
+### Build
+
+- GitHub CI runs on `macos-26` with Xcode 26.6 instead of the deprecated `macos-14` image. Its Xcode 15.4 could not type-check the FM envelope mini-curve in time, which failed the Product Smoke, Baseline and Specialized Regression workflows on every push since 0.25.0. The app code is unchanged; the CI now matches the toolchain KiMiA is built with.
+- `scripts/build.sh` signs the app again if iCloud Drive re-tags the bundle during signing (seen on a synced Desktop folder).
+
 ## 0.26.0 — 2026-09-25
 
 ### Real-time DSP (gig reliability)
