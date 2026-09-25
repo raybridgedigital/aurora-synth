@@ -41,7 +41,7 @@ layers in total. Three- and four-layer patches are for rare, exceptional designs
 
 ## Branch `claude/dsp-bypass-and-performance` (25 September 2026, unpushed)
 
-Six commits on top of `63c0cc4`, each with its tests green:
+Commits on top of `63c0cc4` (`git log --oneline 63c0cc4..`), each with its tests green:
 
 1. **Voices (bit-identical).** Per-sample math that cannot change the result is skipped or hoisted
    (exp2 of zero, sub sine at level 0, wheel vibrato at rest, tanh(Character gain) per lane,
