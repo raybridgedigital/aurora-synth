@@ -39,7 +39,7 @@ model's work in progress, which did not compile) are superseded by this branch �
 layers in total. Three- and four-layer patches are for rare, exceptional designs only
 (PATCH-DESIGN-RULES.md rule 3; CPU budget in rule 8).
 
-## Branch `claude/dsp-bypass-and-performance` (25 September 2026, unpushed)
+## Release 0.26.0 work (branch `claude/dsp-bypass-and-performance`, merged to `main`)
 
 Commits on top of `63c0cc4` (`git log --oneline 63c0cc4..`), each with its tests green:
 
@@ -87,14 +87,21 @@ patch to 1 overload; the heaviest new-bank Dual Patch pair runs 41 % mean / 56 %
 `Tests/V1FactoryAudioAudit.mm` on AuroraFX: 55 patches, 0 failures. Not run: AU/VST3 build,
 validator, auval (plug-in build tooling), GitHub CI.
 
-## Current release — v0.25.0
+## Current release — v0.26.0
 
-- HEAD: `b29e88319ec69dbbccbba3d93b11f7dca6d60a5a` (`b29e883`), tagged `v0.25.0`, pushed to `origin/main` and `origin/v0.25.0` on 24 September 2026.
-- Source metadata: app `0.25.0` build `37`; AU/VST3 source metadata `0.25.0`.
-- Local standalone 0.25.0 release build completed successfully before tagging. A current local `build/Aurora.app` artifact is not guaranteed to remain present.
-- **Installed plug-in boundary:** the locally installed AU and VST3 bundles are `0.24.3`. The v0.25.0 plug-in source has not been rebuilt/installed/revalidated after the final version bump.
-- v0.25.0 features: flanger; tremolo with Tremolo/Pan/Rotary modes; bitcrusher; master compressor with gain-reduction meter; auto-wah; delay ducking; Performance Matrix 6→10; compact Delay + Compressor effects row; P1–P4 scroll-smoothness work.
-- v0.24 line: four-operator FM engine with 16 visual algorithms; FM/EP factory expansion; natural-decay EP fixes; favorites-on-save; KiMiA display-name pass.
+- Tag `v0.26.0` on `main` (25 September 2026): fast-forward of branch
+  `claude/dsp-bypass-and-performance` plus the version bump. App `0.26.0` build `38`; AU/VST3
+  source metadata `0.26.0` (AU component version 6656; the VST3 class version string was stale
+  at "0.24.0" and now reads 0.26.0).
+- Contents: true FX bypass and the Reverb re-clear fix, faster voice rendering (bit-identical)
+  with silent pedal-held voices freed, the Matrix screen crash fix, the dropout counter, and the
+  single-bank factory library (AuroraFX, 55 patches) with the retired banks archived.
+- The older annotated tag `v0.26` (`f4d645c`, "FX-only factory + 55-patch MODX bank") is left
+  untouched; it predates the version bump and that build still reported 0.25.0.
+- **Installed plug-ins:** 0.24.3 until the 0.26.0 AU/VST3 are built, installed and validated
+  (owner approved on 25 September; see the pending queue).
+- **Not in 0.26.0:** the Dattorro Plate reverb (second reverb type, Classic stays default) is
+  work in progress on local branch `claude/plate-reverb`, not pushed.
 
 ## Validation status — read before making release claims
 
@@ -110,10 +117,9 @@ All four jobs associated with the v0.25.0 push failed:
 Do not describe v0.25.0 CI as passing. These failures are recorded validation debt; code remediation is frozen pending an explicit unfreeze.
 
 **Remediation status (25 September 2026).** The "missing FM-engine symbols" link failures are
-fixed in `main` (`842ff85`). Branch `claude/dsp-bypass-and-performance` additionally makes the
-baseline and specialized-regression suites pass locally (see the branch section). The Product
-Smoke Swift `ContentView.body` timeout is **not** addressed and no CI run has been triggered:
-treat all four jobs as red until a run proves otherwise.
+fixed in `main` (`842ff85`). 0.26.0 additionally makes the baseline and specialized-regression
+suites pass locally. The Product Smoke Swift `ContentView.body` timeout is **not** addressed.
+Check the workflow runs for the `v0.26.0` push before describing CI as green.
 
 ### Factory-bank inventory
 
@@ -144,13 +150,13 @@ Authoritative current documents:
 
 ## Pending queue
 
-1. **Owner review of branch `claude/dsp-bypass-and-performance`** — play-test on the CK88 rig
-   (pedalled pianos/EPs, Dual-Patch-style layering, toggling effects live), then decide on
-   merge/push. Nothing is pushed.
+1. **Owner play-test of 0.26.0** on the CK88 rig (pedalled pianos/EPs, Dual-Patch-style
+   layering, toggling effects live, Matrix screen, dropout counter).
 2. **CI remediation:** the Swift `ContentView.body` type-check timeout (Product Smoke) is untouched.
    `FmEngine.o` links are in `main` since `842ff85`. No CI run has happened on the branch.
-3. **Plug-in rebuild/install/revalidation:** installed AU/VST3 bundles are 0.24.3 and carry the
-   Matrix crash and the old bypass; rebuild after owner approval.
+3. **Plug-in rebuild/install/revalidation (owner-approved):** build 0.26.0 AU/VST3 with the pinned
+   SDKs (`PluginDependencies.lock`, checkouts in `build/deps`), install with
+   `scripts/install_plugins.sh` (backs up the old bundles), validate with `scripts/check_plugins.sh`.
 4. **Dual Patch live:** locked design, not implemented. The engine now leaves headroom for it
    (see PATCH-DESIGN-RULES.md rule 8).
 5. **Hardware validation:** owner-deferred. Gates: three-controller operation, pedals/ownership,
@@ -158,9 +164,10 @@ Authoritative current documents:
    latency, memory, exact output/hub setup.
 6. **Public distribution:** Developer ID signing/notarization and clean-machine install.
 7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora.
-8. **Effects sound quality (proposal, needs owner audition):** the Schroeder reverb and grain
-   shimmer are the oldest DSP in the chain; any algorithm change alters every patch that uses
-   them, so it must be auditioned before it replaces the current sound.
+8. **Plate reverb (owner-approved, in progress on local branch `claude/plate-reverb`):** Dattorro
+   plate as reverb type 1 next to Classic (global 70, default Classic so no patch changes). Still
+   to do: level match to Classic, Reverb-panel selector, plug-in parameter/fallback tables, tests.
+   Then the owner auditions it before any factory patch switches.
 
 The original specification's sampler/granular engine, sample import/library management, microtuning/MPE, and optional hardware-audio/Aggregate Device workflows remain later scope, not active queue items.
 

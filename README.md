@@ -4,15 +4,9 @@
 
 **System requirements:** KiMiA runs only on Apple silicon Macs with macOS 14 or newer. There is no plan to support other systems — no Intel Mac, Windows, or Linux versions are planned.
 
-## Current release · 0.25.0
+## Current release · 0.26.0
 
-The current tagged source release is `v0.25.0` (`b29e883`, 24 September 2026). It adds flanger, tremolo/pan/rotary, bitcrusher, master-bus compression, auto-wah, and delay ducking; expands the Performance Matrix from 6 to 10 slots; rearranges the effects panels; and implements the P1–P4 patch-browser scrolling work. The v0.24 line added the four-operator FM engine, natural-decay FM electric pianos, the FM EP category, favorites-on-save, and the KiMiA display-name pass.
-
-**Current validation boundary:** the local standalone 0.25.0 release build completed successfully before tagging. The locally installed AU and VST3 bundles remain **0.24.3**; the 0.25.0 plug-in source has not yet been rebuilt, reinstalled, and revalidated. GitHub CI for the 0.25.0 tag is not green: the app/plug-in jobs hit a Swift compiler type-check timeout, while native test jobs are missing FM-engine link symbols. See [SHARED_STATE.md](SHARED_STATE.md) and [DAW-INTEGRATION.md](DAW-INTEGRATION.md).
-
-## In development · lean factory library and real-time DSP fixes
-
-Unreleased work on top of 0.25.0 (see [CHANGELOG.md](CHANGELOG.md)):
+The current release is `v0.26.0` (25 September 2026): gig-reliability fixes and a lean factory library (details in [CHANGELOG.md](CHANGELOG.md)).
 
 - **Factory library:** KiMiA now ships one bank, `Resources/AuroraFX.json` — 55 patches in 16 keyboard-first categories (Piano, Keyboard, Organ, Guitar, Bass, Strings, Brass, Woodwind, Syn Lead, Pad/Choir, Syn Comp, Chromatic Perc, Sound FX, Musical FX, Ethnic, FM EP). Regular patches use at most two layers so a future Dual Patch runs four layers in total; see [PATCH-DESIGN-RULES.md](PATCH-DESIGN-RULES.md).
 - **Archived, not deleted:** the earlier banks — Spectrum 300, Aurora 100 (with its FM sounds), Prism 100, Nova 100, Shimmer 29, GB109 and the two-patch reference set, 765 patches — are kept for history in [archive/factory-banks](archive/factory-banks/README.md) with their catalogs. They are no longer bundled or listed. Any archived bank can still be imported into **Your sounds** to audition it.
@@ -20,7 +14,15 @@ Unreleased work on top of 0.25.0 (see [CHANGELOG.md](CHANGELOG.md)):
 - **Stage safety:** the Matrix screen no longer crashes after loading a factory sound, and the header shows a red dropout count as soon as Core Audio drops a cycle (the smoothed DSP figure can look fine while audio is already clicking).
 - **Voices:** redundant per-sample math is gone (bit-identical output), and decayed notes held by the sustain pedal free their voices. In an 8-bar passage with the pedal held, pianos and FM EPs now use about a third of the DSP they did, and plucked guitars about a seventh.
 
-The sections below are a chronological release archive. Older feature counts and verification totals describe the release named in their section and are not claims about the current v0.25.0 binary or plug-in installation.
+**Validation boundary:** locally on an M3 MacBook Air the native DSP suite, the v1 baseline, specialized-regression and A/B suites, the plug-in core checks and the factory audio audit pass. GitHub CI for this tag, the AU/VST3 bundle build and host validation are recorded in [SHARED_STATE.md](SHARED_STATE.md). Older tag `v0.26` marks the FX-only factory milestone (`f4d645c`), which still reported app version 0.25.0.
+
+The sections below are a chronological release archive. Older feature counts and verification totals describe the release named in their section and are not claims about the current v0.26.0 binary or plug-in installation.
+
+## 0.25.0 · FX expansion
+
+Tagged `v0.25.0` (`b29e883`, 24 September 2026). It adds flanger, tremolo/pan/rotary, bitcrusher, master-bus compression, auto-wah, and delay ducking; expands the Performance Matrix from 6 to 10 slots; rearranges the effects panels; and implements the P1–P4 patch-browser scrolling work. The v0.24 line added the four-operator FM engine, natural-decay FM electric pianos, the FM EP category, favorites-on-save, and the KiMiA display-name pass.
+
+**Validation boundary at that release:** the local standalone 0.25.0 release build completed successfully before tagging. The locally installed AU and VST3 bundles remain **0.24.3**; the 0.25.0 plug-in source has not yet been rebuilt, reinstalled, and revalidated. GitHub CI for the 0.25.0 tag is not green: the app/plug-in jobs hit a Swift compiler type-check timeout, while native test jobs are missing FM-engine link symbols. See [SHARED_STATE.md](SHARED_STATE.md) and [DAW-INTEGRATION.md](DAW-INTEGRATION.md).
 
 ## Aurora 0.23 · five-LFO modulation
 

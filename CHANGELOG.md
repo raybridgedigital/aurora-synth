@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.26.0 — 2026-09-25
 
 ### Real-time DSP (gig reliability)
 

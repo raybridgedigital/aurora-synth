@@ -166,5 +166,5 @@ public:
 bool InitModule(){return true;}
 bool DeinitModule(){return true;}
 BEGIN_FACTORY_DEF("Ray Bridge Digital","https://github.com/raybridgedigital/aurora-synth","")
-DEF_CLASS2(INLINE_UID_FROM_FUID(auroraPlugin::processorUID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Aurora",0,"Instrument|Synth","0.24.0",kVstVersionString,auroraPlugin::Processor::createInstance)
+DEF_CLASS2(INLINE_UID_FROM_FUID(auroraPlugin::processorUID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Aurora",0,"Instrument|Synth","0.26.0",kVstVersionString,auroraPlugin::Processor::createInstance)
 END_FACTORY
