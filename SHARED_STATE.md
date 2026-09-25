@@ -41,7 +41,7 @@ layers in total. Three- and four-layer patches are for rare, exceptional designs
 
 ## Branch `claude/dsp-bypass-and-performance` (25 September 2026, unpushed)
 
-Five commits on top of `63c0cc4`, each with its tests green:
+Six commits on top of `63c0cc4`, each with its tests green:
 
 1. **Voices (bit-identical).** Per-sample math that cannot change the result is skipped or hoisted
    (exp2 of zero, sub sine at level 0, wheel vibrato at rest, tanh(Character gain) per lane,
@@ -66,16 +66,20 @@ Five commits on top of `63c0cc4`, each with its tests green:
    `Resources/AuroraFX.json`; retired-ID sessions fall back to the default sound (Felt & Timber);
    classic bank generators refuse to run.
 5. **Docs** (this file, README, CHANGELOG, PATCH-DESIGN-RULES rule 8 CPU budget).
+6. **Dropout counter.** `aurora_audio_overloads()` counts Core Audio processor overloads on the
+   running device (first 0.5 s after start ignored); the header shows a red count from the first
+   dropout on. Plug-ins return 0.
 
 **Measured on the owner's M3 MacBook Air (8 GB), 44.1 kHz/128 frames** (benchmark harness in
 `~/Desktop/KiMiA by Claude/bench`, outside the repo): idle with all FX off 27.7 % → 0.34 %;
 pedal-held 8-bar passage Stage Cedar 22 % → 6 %, Tine Stage 76 22 % → 8 %, Glass Twelve 27 % → 4 %;
 heaviest Dual Patch pair with 16 held keys ≈ 33 % mean / 50 % peak (was ≈ 65 %).
 
-**Gig reconstruction (v0.25.0 engine, set-list Spectrum patches, pedalled chords + melody):**
-Deepwater Pearls 82 % mean / 91 % median / 41 overrun blocks; effects were ~1 % of the load —
-four layers × unison × pedal filled the 64-voice pool. A 256-frame buffer does not help a
-sustained overload.
+**Gig reconstruction (v0.25.0 engine, set-list Spectrum patches, pedalled chords + melody, inside
+a real AUHAL callback on this Mac):** Deepwater Pearls 82 % mean / 91 % median load and **825
+Core Audio overloads in 27 s** at 128 frames, still 119 at 256 frames; effects were ~1 % of the
+load — four layers × unison × pedal filled the 64-voice pool. The new engine alone cuts that
+patch to 1 overload; the heaviest new-bank Dual Patch pair runs 41 % mean / 56 % max with none.
 
 **Local validation on the branch:** `scripts/test.sh` green; `scripts/test-baseline.sh` green
 (red on `63c0cc4`); `check-v1-specialized-regression.sh` green (crashed on `63c0cc4`);

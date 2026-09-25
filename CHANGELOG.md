@@ -11,6 +11,11 @@
 - Measured on an M3 MacBook Air, 44.1 kHz/128 frames, 8-bar passage with the pedal held: Stage Cedar 22% → 6% of the audio budget, Tine Stage 76 22% → 8%, Glass Twelve 27% → 4%, Stab Alley 54% → 1.4%.
 - New engine tests: `trueBypass` (clean re-enable, rapid toggling, click-free switching per effect), `bypassCost` (switched-off effects must cost under half of switched-on ones; skipped under sanitizers) and `silentVoiceRelease`.
 
+### Stage safety
+
+- **Matrix screen crash fixed.** Since 0.25.0 the Matrix screen draws ten Performance Matrix rows, but every factory patch stores six, so loading a factory sound and opening Matrix crashed the app (and the plug-in editor). Six-row matrices are now padded to ten everywhere, which also stops slots 7–10 of the previous patch staying active in the engine.
+- **Dropout counter.** Next to "DSP … Voices …" the header now shows a red warning with the number of Core Audio dropouts since audio started — each one an audible click. The smoothed DSP figure can sit well below 100% while cycles are already being dropped (825 dropouts in 27 s at an 82% average in the reconstructed 24 September gig). Restarting audio resets the count.
+
 ### Factory library
 
 - KiMiA ships one bank: `Resources/AuroraFX.json` (55 patches, 1–2 layers each). The library lists categories in the bank's keyboard-first order and the default sound is its first patch (Felt & Timber). The startup notice "A factory sound bank could not be loaded", which appeared on every launch once the legacy banks had been emptied, is gone.
