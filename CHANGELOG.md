@@ -26,7 +26,7 @@
 
 ### Plugins
 
-- AU/VST3 rebuilt: display name **KiMiA**, version 0.25.0, corrected stale AudioComponents version integer so hosts register the update. `auval` passes.
+- AU/VST3 source metadata and display name advanced to **KiMiA 0.25.0**, including correction of the stale `AudioComponents` version integer. The locally installed bundles remain **0.24.3**; the 0.25.0 plug-ins were not rebuilt/installed/revalidated after the final version bump. The installed 0.24.3 AU's earlier `auval` pass does not certify 0.25.0. Current v0.25.0 plug-in build CI also fails on the SwiftUI compiler type-check timeout described in `DAW-INTEGRATION.md` and `SHARED_STATE.md`.
 
 ## 0.24.3 — 2026-09-24
 
@@ -160,7 +160,7 @@
 - Added a clean Aurora v1 architecture baseline.
 - Added reconstructed model/UI regression coverage based on the current v1 behavioral contract.
 - Added an isolated A/B comparison regression to avoid shared-engine contamination.
-- Added full rendered-audio, stress, release, and Panic auditing for all **438 current factory presets**:
+- Added full rendered-audio, stress, release, and Panic auditing for all **438 then-current factory presets**:
   - Aurora100: 100
   - AuroraPrism100: 100
   - AuroraNova100: 100

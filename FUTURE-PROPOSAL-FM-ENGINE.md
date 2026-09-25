@@ -1,6 +1,8 @@
 # FUTURE-PROPOSAL-FM-ENGINE — Advanced FM Engine (Stage 4)
 
-**Status:** LOCKED v1.0 — owner order, 23 Sep 2026 (*"commit and push the spec to github"* = lock) · committed + pushed with SHARED_STATE sync · app/plugin code remains **FROZEN** (each build phase needs its own named unfreeze) · **Queue position: #1 — next to build**
+**Status: ✅ SHIPPED in v0.24.0 — design history.** The locked v1.0 design was owner-approved on 23 September 2026 and Phases 1–4 shipped in the v0.24.0 release. Later releases expanded and refined the FM EP library. This document is retained as the implementation contract and decision history; `CHANGELOG.md` and `README.md` are the current release authority. The optional full-library wipe/re-baseline remains deferred and owner-triggered. Dual-patch remains separately locked and not implemented.
+
+**Original proposal status at lock time:** code was frozen pending named phase unfreezes, and FM was queue position #1. Those statements below describe the proposal as it stood on 23 September 2026, not the current project queue.
 
 ## Standing owner directives (v0.2 rulings)
 
@@ -9,11 +11,11 @@
 - **Testing / CI / compliance: out of scope.** Red CI accepted; re-baseline later.
 - **Hardware validation: out of scope** for this work; stability confidence assumed.
 - North star: DX7-class electric piano = life blood; Aurora must stand alone as sound source on any MIDI controller.
-- Focus now: **FM engine + the 15 flagship FM patches** — the great new feature. EP-ish re-authors / ` (OLD)` pairs = **optional side quest, AI's call** (owner, 23 Sep: *"trivial… I don't give a shit about the old ones"*); pairs ride along only if re-authors happen. Scroll P1–P4 / dual-patch remain parked.
+- Original focus: **FM engine + the 15 flagship FM patches** — the great new feature. EP-ish re-authors / ` (OLD)` pairs = **optional side quest, AI's call** (owner, 23 Sep: *"trivial… I don't give a shit about the old ones"*); pairs ride along only if re-authors happen. At that time Scroll P1–P4 and dual-patch were parked; scroll later shipped in v0.25.0, while dual-patch remains parked.
 
 ## 1. Why
 
-Current engine can't reach DX-class EPs: no inharmonic operator ratios beyond 2-op osc modulation, no independent per-operator harmonic decay, no per-operator feedback, velocity only as performance-matrix source (`AuroraApp.swift:1845`). FM closes all four natively and is historically *the* electric-piano method.
+At proposal time, the engine could not reach DX-class EPs: it had no inharmonic operator ratios beyond 2-op oscillator modulation, no independent per-operator harmonic decay, and no per-operator feedback. Velocity was only a Performance Matrix source (`AuroraApp.swift:1844` at the time). FM closed all four natively and is historically the electric-piano method.
 
 ## 2. Goals / Non-goals
 
@@ -69,19 +71,21 @@ Layer card engine toggle `Subtractive | FM`. FM panel: **16-diagram picker grid*
 
 **24-note FM polyphony floor** on M3 (owner-set); 32 stretch. Double-precision phases, denormal guards. Stability: owner-confident, validation excluded by directive.
 
-## 11. Phases (named unfreeze per phase)
+## 11. Phases (original delivery plan)
 
-1. **C++ core** — ops, rate/level envelopes, 16 algorithms, feedback.
-2. **Swift integration** — layer engine mode, JSON load/save, bridge, matrix destinations, velocity source, checkpoint/undo + save-as/user-preset writers round-tripping `fm`, **PluginCore bank parser reads `fm`** (low priority per owner — live gigging is the target; included because it's cheap).
-3. **UX** — visual algorithms + FM panel.
-4. **15 flagship** (the deliverable) **+ optional side quest: EP-ish re-authors + their ` (OLD)` pairs — AI's call** — all category `FM`; flagship append into Aurora100.json (100 → **115**; → ≈126 only if the side quest runs), side-quest originals re-cat/renamed **in place** in their home banks — **plus the mandatory one-line loader-guard fix `AuroraApp.swift:233` (`count == 100` → `count >= 100`; without it the guard rejects the whole bank at runtime)** + owner audition.
-5. *(Deferred, owner-triggered)* full patch wipe + re-baseline — no earlier than when the owner decides the old library has served its purpose.
+1. **C++ core — SHIPPED v0.24.0:** ops, rate/level envelopes, 16 algorithms, feedback.
+2. **Swift integration — SHIPPED v0.24.0:** layer engine mode, JSON load/save, bridge, matrix destinations, velocity source, checkpoint/undo + save-as/user-preset writers round-tripping `fm`, and `PluginCore` bank parsing.
+3. **UX — SHIPPED v0.24.0:** visual algorithms + FM panel.
+4. **Flagship library — SHIPPED v0.24.0 and expanded in v0.24.2–v0.24.3:** the original 15 flagship FM patches, five pure DX-style EPs, and five additional `DX7 …` EP variants; loader guard fixed. The optional OLD A/B side quest was not required and was skipped.
+5. **Deferred, owner-triggered:** full patch wipe + test re-baseline — no earlier than when the owner decides the old library has served its purpose.
+
+The original 100→115 count describes the first FM delivery. The current `Aurora100.json` contains 125 sounds after the approved FM EP expansion; see `CHANGELOG.md`.
 
 ## 12. Decision log
 
 | # | Decision |
 |---|---|
-| 1 | FM = queue #1, next to build |
+| 1 | FM was queue #1 at proposal time and shipped in v0.24.0 |
 | 2 | Architecture A — per-layer `Subtractive \| FM` |
 | 3 | **16** algorithms v1 |
 | 4 | Dedicated pitch envelope |

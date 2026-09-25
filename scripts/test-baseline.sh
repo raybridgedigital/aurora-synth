@@ -55,7 +55,7 @@ s=(root/'Sources/AuroraApp.swift').read_text()
 (build/'InterfaceUnderTest.swift').write_text(s.split('@main struct AuroraApp:App')[0])
 PY
 
-for resource in Aurora100 AuroraPrism100 AuroraNova100 AuroraGB109 AuroraShimmer29 AuroraReference; do
+for resource in Aurora100 AuroraPrism100 AuroraNova100 AuroraGB109 AuroraFX AuroraShimmer29 AuroraReference; do
     cp "$ROOT_DIR/Resources/$resource.json" "$APP/Contents/Resources/$resource.json"
 done
 

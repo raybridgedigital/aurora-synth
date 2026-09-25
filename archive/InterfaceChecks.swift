@@ -117,13 +117,13 @@ import SwiftUI
         let browserView=NSHostingView(rootView:PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white))
         browserView.frame=NSRect(x:0,y:0,width:1380,height:760);browserView.layoutSubtreeIfNeeded()
         if let bitmap=browserView.bitmapImageRepForCachingDisplay(in:browserView.bounds){browserView.cacheDisplay(in:browserView.bounds,to:bitmap);try! bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/private/tmp/aurora-upgrade-browser.png"))}
-        precondition(model.collectionSounds.count == 438)
-        precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==438)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==438)
-        precondition(FactoryBank.nova.count==100)
+        precondition(model.collectionSounds.count == 60)
+        precondition(FactoryBank.prism.count == 0)
+        precondition(Set(FactoryBank.all.map(\.id)).count==60)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==60)
+        precondition(FactoryBank.nova.count==0)
         model.search=""
-        precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==300)
+        precondition(model.library.filter{$0.id.hasPrefix("spectrum-")}.count==0)
         for sound in FactoryBank.all {
             print("FACTORY AUDIT: \(sound.id)")
             model.loadPreset(sound, panic: false)

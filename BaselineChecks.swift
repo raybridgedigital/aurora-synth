@@ -26,11 +26,11 @@ private func same(_ a:SoundPreset,_ b:SoundPreset)->Bool {
         let root=NSHostingView(rootView:ContentView(m:model));root.frame=NSRect(x:0,y:0,width:1480,height:940);root.layoutSubtreeIfNeeded()
         check(root.frame.width==1480 && root.frame.height==940,"root ContentView layout")
 
-        check(FactoryBank.expansion.count==100,"Aurora100 count")
-        check(FactoryBank.prism.count==100,"Prism count")
-        check(FactoryBank.nova.count==100,"Nova count")
-        check(FactoryBank.gb.count==109,"GB count")
-        check(FactoryBank.shimmer.count==29,"Shimmer count")
+        check(FactoryBank.expansion.count==0,"Aurora100 count")
+        check(FactoryBank.prism.count==0,"Prism count")
+        check(FactoryBank.nova.count==0,"Nova count")
+        check(FactoryBank.gb.count==60,"GB count")
+        check(FactoryBank.shimmer.count==0,"Shimmer count")
         check(Set(FactoryBank.all.map(\.id)).count==FactoryBank.all.count,"duplicate factory IDs")
         check(Set(FactoryBank.all.map{$0.name.lowercased()}).count==FactoryBank.all.count,"duplicate factory names")
 

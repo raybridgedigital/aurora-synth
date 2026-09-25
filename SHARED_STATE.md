@@ -11,6 +11,7 @@ KiMiA (internal project lineage: Aurora) — native macOS synthesizer for Apple 
 - Tests: `./scripts/run-tests.sh` plus specialized suites under `scripts/`
 - Release record: `CHANGELOG.md`
 - Product/status overview: `README.md`
+- Patch design rules (mandatory for factory-sound work): `PATCH-DESIGN-RULES.md`
 
 ## Roles
 

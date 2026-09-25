@@ -12,6 +12,7 @@ cp Resources/Aurora100.json build/V1SpecializedRegression.app/Contents/Resources
 cp Resources/AuroraPrism100.json build/V1SpecializedRegression.app/Contents/Resources/AuroraPrism100.json
 cp Resources/AuroraNova100.json build/V1SpecializedRegression.app/Contents/Resources/AuroraNova100.json
 cp Resources/AuroraGB109.json build/V1SpecializedRegression.app/Contents/Resources/AuroraGB109.json
+cp Resources/AuroraFX.json build/V1SpecializedRegression.app/Contents/Resources/AuroraFX.json
 cp Resources/AuroraShimmer29.json build/V1SpecializedRegression.app/Contents/Resources/AuroraShimmer29.json
 cp Resources/AuroraReference.json build/V1SpecializedRegression.app/Contents/Resources/AuroraReference.json
 xcrun swiftc -parse-as-library -O -target arm64-apple-macosx14.0 -module-cache-path build/ModuleCache -import-objc-header Sources/AuroraBridge.h build/V1SpecializedInterfaceUnderTest.swift Sources/AuroraBackend.swift Sources/PluginEditor.swift Sources/WavetableViews.swift Sources/MotionViews.swift Sources/CreativeTools.swift V1SpecializedRegressionChecks.swift build/objects/SynthEngine.o build/objects/FmEngine.o build/objects/MacAudioMIDI.o -lc++ -framework SwiftUI -framework AppKit -framework Foundation -framework CoreAudio -framework AudioUnit -framework AudioToolbox -framework CoreMIDI -o build/V1SpecializedRegression.app/Contents/MacOS/V1SpecializedRegression

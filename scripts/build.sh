@@ -6,7 +6,9 @@ BUILD_DIR="$ROOT_DIR/build"
 APP_DIR="$BUILD_DIR/Aurora.app"
 MODULE_CACHE_DIR="$BUILD_DIR/ModuleCache"
 
-python3 "$ROOT_DIR/scripts/rebuild_factory_bank.py"
+# FX-only: checked-in Resources/*.json are the source of truth. Do NOT regenerate
+# factory banks here — rebuild_factory_bank.py would restore the wiped
+# non-FX banks. Run that script manually only if you intend to rebuild them.
 
 for source_file in Sources/AuroraApp.swift Sources/AuroraBridge.h Sources/SynthEngine.cpp Sources/FmEngine.cpp Sources/MacAudioMIDI.mm Resources/Info.plist Resources/Aurora100.json; do
     if [[ ! -f "$ROOT_DIR/$source_file" ]]; then
@@ -52,6 +54,7 @@ cp "$ROOT_DIR/Resources/AuroraPrism100.json" "$APP_DIR/Contents/Resources/Aurora
 cp "$ROOT_DIR/Resources/AuroraNova100.json" "$APP_DIR/Contents/Resources/AuroraNova100.json"
 cp "$ROOT_DIR/Resources/AuroraReference.json" "$APP_DIR/Contents/Resources/AuroraReference.json"
 cp "$ROOT_DIR/Resources/AuroraGB109.json" "$APP_DIR/Contents/Resources/AuroraGB109.json"
+cp "$ROOT_DIR/Resources/AuroraFX.json" "$APP_DIR/Contents/Resources/AuroraFX.json"
 cp "$ROOT_DIR/Resources/AuroraShimmer29.json" "$APP_DIR/Contents/Resources/AuroraShimmer29.json"
 plutil -lint "$APP_DIR/Contents/Info.plist"
 xattr -cr "$APP_DIR"

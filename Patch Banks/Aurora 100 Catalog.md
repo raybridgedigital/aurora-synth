@@ -1,12 +1,14 @@
 # Aurora 100 — patch catalog
 
-100 new performances in ten categories. The original 12 starter sounds are also retained in the app.
+This is the original 100-patch catalog from the 2026-09-14 release. The current `Aurora100.json` contains 125 sounds after the FM and FM EP expansions; see `CHANGELOG.md` for the appended patches.
+
+100 original performances in ten categories. The original 12 starter sounds were also retained in the app.
 
 Select **Aurora 100** in the sound library, then choose a category. Use the same moderate Master setting when comparing sounds; loading a patch preserves your listening level.
 
-Each patch uses Aurora's actual oscillators, filters, two LFOs, envelopes, arpeggiator, and shared effects. Keys, organs, brass, and strings are synthesized interpretations, not sampled acoustic instruments.
+Each original patch used Aurora's oscillators, filters, two LFOs, envelopes, arpeggiator, and shared effects. Keys, organs, brass, and strings are synthesized interpretations, not sampled acoustic instruments.
 
-The grouped ZIP contains individual `.aurora.json` files. Extract it and use **Sound library → More → Import preset** for an individual sound. The updated app includes all 100 automatically.
+The grouped ZIP contains the original 100 individual `.aurora.json` files. Extract it and use **Sound library → More → Import preset** for an individual sound. The current app includes the original 100 plus later FM/EP additions automatically.
 
 ## Pads · 10 patches
 

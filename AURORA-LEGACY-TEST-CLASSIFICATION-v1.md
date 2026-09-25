@@ -1,6 +1,8 @@
 # Aurora v1 Legacy Test Classification
 
-This document classifies the historical Aurora test suite against the current v1 architecture.
+This document classifies the historical Aurora test suite against the v1 architecture.
+
+> **Current-status note (24 September 2026):** the classification and v0.22 reconstruction remain valid methodology, but the original 438-preset and "suite is green" results are historical. The current five-bank inventory is 463 and v0.25.0 CI is red. See `SHARED_STATE.md` before treating any row below as a current pass.
 
 It does **not** delete any historical test. The old suite remains available as regression archaeology and future troubleshooting reference. As of 2026-09-21, the legacy InterfaceChecks path has been retired from CI authority but intentionally retained in the repository.
 
@@ -23,14 +25,14 @@ The current v1 baseline and reconstructed specialized regression suite were buil
 | --- | --- | --- | --- |
 | `archive/InterfaceChecks.swift` (moved from root 2026-09-22) | **RETIRED from CI authority / RETAIN as historical reference** | `V1SpecializedRegressionChecks.swift` + isolated A/B test | Contains useful model/UI regression history, but also obsolete macro-center equality, fixed-XY and old state-storage assumptions. Retained so future maintainers can see where the suite stopped matching the architecture and use it for regression archaeology/troubleshooting. |
 | `check-interface.sh` | **RETIRED from CI authority / RETAIN as historical runner** | `check-v1-specialized-regression.sh` | No longer invoked by Product Smoke. Retained so the historical InterfaceChecks path can still be reproduced manually when investigating old regressions or architectural history. |
-| `Tests/SynthEngineTests.cpp` | **KEEP** | Continue running under native sanitizer workflow | Deep current DSP/MIDI coverage: routing, ownership, Panic, transpose, arp, matrices, FX, mono/legato/glide, queue recovery and concurrency. Green under ASan/UBSan and TSan. |
+| `Tests/SynthEngineTests.cpp` | **KEEP** | Continue running under native sanitizer workflow | Deep DSP/MIDI coverage: routing, ownership, Panic, transpose, arp, matrices, FX, mono/legato/glide, queue recovery and concurrency. It was green under ASan/UBSan and TSan at the reconstruction baseline; current v0.25 sanitizer jobs are red because the native test link omits FM-engine symbols. |
 | `Tests/RecordingChecks.cpp` | **KEEP** | Continue running | Valid behavioral coverage for WAV recording and normalization. |
 | `Tests/WavetableTests.cpp` | **KEEP** | Continue running | Valid DSP/import/warp/phase/custom-table/concurrency coverage. |
 | `Tests/MotionTests.cpp` | **KEEP** | Continue running | Valid motion-envelope, tempo-sync, retrigger and publication coverage. |
 | `Tests/LayerToolsTests.cpp` | **KEEP** | Continue running | Valid layer-send and Solo DSP behavior. |
 | `Tests/SonicUpgrades.cpp` | **KEEP** | Continue running | Valid dual-filter, oscillator-modulation, character, modulation-envelope and stability coverage. |
 | `Tests/RefinementChecks.cpp` | **KEEP** | Continue running | Valid LFO/filter-route/unison/formant/tone regression coverage. |
-| `Tests/PatchBankAudit.mm` | **REPLACE as current factory-bank authority / RETAIN as reference** | `Tests/V1FactoryAudioAudit.mm` | Valuable original idea, but its loader encodes older layer-count assumptions and is not migration-equivalent to current `SynthModel.sanitized`. The v1 audit covers all five current banks and mirrors current legacy migration. |
+| `Tests/PatchBankAudit.mm` | **REPLACE as intended factory-bank authority / RETAIN as reference** | `Tests/V1FactoryAudioAudit.mm` | Valuable original idea, but its loader encodes older layer-count assumptions and is not migration-equivalent to current `SynthModel.sanitized`. The replacement is designed to cover all five banks and mirror current legacy migration; a clean 463-sound current pass remains pending. |
 | `Tests/SpectrumAudit.mm` | **KEEP** | Continue as specialized Spectrum calibration/audit | It covers calibrated Spectrum-specific level and macro-endpoint behavior not replaced by the general factory audio audit. Current Panic handling is already aligned with the async mute-bus architecture. |
 | `Tests/ReferenceLevels.mm` | **KEEP** | Continue running | Small focused loudness/reference-level safety gate. `prepare()` is a valid silent hard-reset boundary under current Panic architecture. |
 | `Tests/PluginCoreChecks.mm` | **KEEP** | Continue running | Valuable plug-in state, migration, stable parameter-ID, MIDI learn, finite-audio and instance-isolation coverage. |
@@ -66,13 +68,13 @@ Current A/B engine behavior is tested in a fresh process with one model and one 
 
 ### Exact stored layer-count assumptions
 
-Current Aurora has 99 layer parameters, but legacy factory presets may legitimately store fewer values.
+At the v0.22 reconstruction baseline, Aurora exposed 99 layer parameters. The current v0.25 architecture exposes 126, while legacy factory data is still allowed to store fewer values and receive documented defaults/migrations.
 
 `AuroraGB109` stores parameters 0...96. Current loading supplies defaults for parameters 97 and 98 and recognizes absence of 97 as the legacy arp-rate format, migrating old parameter 23 divisions before applying the patch.
 
 ## Current specialized v1 coverage
 
-The reconstructed v1 suite now provides independent coverage for:
+At the reconstruction baseline, the reconstructed v1 suite provided independent coverage for:
 
 - current factory schema and authored-data round-trip;
 - sparse custom macros and configurable XY;
@@ -83,11 +85,11 @@ The reconstructed v1 suite now provides independent coverage for:
 - layer copy/paste, solo, browsing and A/B workflow;
 - MIDI learn/pickup, variation locks, themes and creative tools;
 - isolated A/B engine behavior;
-- full audio/Panic/stress rendering of all 438 current factory presets.
+- full audio/Panic/stress rendering of the then-current 438 factory presets.
 
-## Current factory-bank audit
+## Historical v0.22 factory-bank audit
 
-The dedicated v1 audio audit covers:
+At the reconstruction baseline, the dedicated v1 audio audit covered:
 
 - Aurora100: 100 presets
 - AuroraPrism100: 100 presets
@@ -95,7 +97,7 @@ The dedicated v1 audio audit covers:
 - AuroraGB109: 109 presets
 - AuroraShimmer29: 29 presets
 
-Total: **438 presets**.
+Historical v0.22 total: **438 presets**. The current inventory is 463 and still requires a clean full audit/re-baseline; see `SHARED_STATE.md`.
 
 Each preset is loaded under current migration rules, rendered for useful signal, stressed at high velocity/master level, checked for finite/bounded output, released, and drained through the current Panic transition.
 

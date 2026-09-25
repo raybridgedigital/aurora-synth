@@ -124,11 +124,11 @@ import SwiftUI
         model.selectTheme(.copperOrange)
         renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:"/private/tmp/aurora-upgrade-editor.png")
         renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:"/private/tmp/aurora-upgrade-browser.png")
-        precondition(model.collectionSounds.count == 438)
-        precondition(FactoryBank.prism.count == 100)
-        precondition(Set(FactoryBank.all.map(\.id)).count==438)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==438)
-        precondition(FactoryBank.nova.count==100)
+        precondition(model.collectionSounds.count == 60)
+        precondition(FactoryBank.prism.count == 0)
+        precondition(Set(FactoryBank.all.map(\.id)).count==60)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==60)
+        precondition(FactoryBank.nova.count==0)
         print("CHECKPOINT: factory count preconditions passed")
         model.search=""
         // The Spectrum bank was replaced: its sounds now live inside the three

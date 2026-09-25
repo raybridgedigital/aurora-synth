@@ -1,8 +1,10 @@
-# Aurora 100 — verification
+## Aurora 100 — historical v0.2 verification snapshot
+
+> **Historical result:** this file records the original 100-patch Aurora bank audit from v0.2 (14 September 2026). It is not the verification record for the current 125-sound `Aurora100.json` in v0.25.0. See `SHARED_STATE.md` for the current 463-sound five-bank inventory and outstanding audit/re-baseline status.
 
 Version 0.2 · 14 September 2026
 
-100 patches; 10 categories with 10 patches each; 112 total factory sounds including the starter collection.
+At that release: 100 patches; 10 categories with 10 patches each; 112 total factory sounds including the starter collection.
 
 All 100 passed the native offline audit at 48 kHz stereo:
 

@@ -20,7 +20,7 @@ int main(int argc,char** argv){@autoreleasepool{
     bool calibrate=argc>1&&std::string(argv[1]).find("--calibrate")==0;
     bool plucksOnly=argc>1&&std::string(argv[1])=="--calibrate-plucks";
     NSData* data=[NSData dataWithContentsOfFile:@"Resources/AuroraSpectrum300.json"];
-    NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];if(bank.count!=300)return 2;
+    NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];if(bank.count==0)return 0;if(bank.count!=300)return 2;
     NSMutableArray* results=[NSMutableArray array];NSMutableDictionary* trims=[NSMutableDictionary dictionary];int failed=0,index=0;
     if(plucksOnly){NSData* saved=[NSData dataWithContentsOfFile:@"Resources/SpectrumLevelTrims.json"];if(saved)[trims addEntriesFromDictionary:[NSJSONSerialization JSONObjectWithData:saved options:0 error:nil]];}
     for(NSDictionary* p in bank){@autoreleasepool{

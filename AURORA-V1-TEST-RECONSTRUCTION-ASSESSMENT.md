@@ -1,6 +1,7 @@
 # Aurora v1 Test Reconstruction Assessment
 
-**Status:** documentation of the Aurora v1 regression reconstruction strategy  
+**Status at reconstruction (historical v0.22 baseline):** documentation of the Aurora v1 regression reconstruction strategy
+**Current-status note (24 September 2026):** this document remains the methodology and authority for the reconstructed v1 contract, but its original 438-preset green snapshot is historical. The current five-bank inventory is 463, and current v0.25.0 CI is not green. See `SHARED_STATE.md` for the live release/validation boundary.
 **Date:** 2026-09-21  
 **Scope:** tests, test architecture, regression authority, oracle quality, and maintenance rules  
 **Production-code impact:** none. No production/app/DSP/plugin code was changed as a result of the test reconstruction or reverse-engineering work.
@@ -67,7 +68,7 @@ That caused an apparent A/B engine failure. A fresh-process A/B test with one mo
 
 ### Exact layer-count assumptions
 
-Current Aurora exposes 99 layer parameters, but legacy factory data is allowed to store fewer values.
+At the v0.22 reconstruction baseline, Aurora exposed 99 layer parameters. The current v0.25 architecture exposes 126, while legacy factory data is still allowed to store fewer values and receive documented defaults/migrations.
 
 `AuroraGB109` stores parameters 0...96. Current loading supplies defaults for 97 and 98 and uses the absence of parameter 97 as the legacy arp-format marker. Parameter 23 is then migrated from the historical arp division encoding into the current one.
 
@@ -303,7 +304,7 @@ load current or legacy patch data
 → verify cleanup
 ```
 
-The audit covers:
+At the v0.22 reconstruction baseline, the audit covered:
 
 - Aurora100: 100
 - AuroraPrism100: 100
@@ -311,9 +312,11 @@ The audit covers:
 - AuroraGB109: 109
 - AuroraShimmer29: 29
 
-Total: **438 factory sounds**.
+Historical v0.22 total: **438 factory sounds**.
 
-This provides independent behavioral evidence because the final oracle is not simply "did `SynthModel.sanitized` return the same values?" The oracle includes actual audio, boundedness, useful signal, stress behavior, release behavior, and Panic recovery.
+The current `Aurora100.json` contains 125 sounds, so the current five-bank inventory is **463** (125 + 100 + 100 + 109 + 29). The original 438-pass result remains evidence for the reconstruction baseline only. A clean current 463-sound audit/re-baseline is still required, and the v0.25.0 CI jobs are currently red. Do not report the historical total as present certification.
+
+This methodology still provides independent behavioral evidence because the final oracle is not simply "did `SynthModel.sanitized` return the same values?" The oracle includes actual audio, boundedness, useful signal, stress behavior, release behavior, and Panic recovery.
 
 ### Important maintenance note
 
@@ -528,7 +531,7 @@ The decision is intentionally narrow:
 - Product Smoke no longer runs the historical InterfaceChecks path;
 - the files remain available to show where the historical suite stopped tracking architectural change;
 - they may still be run manually for regression archaeology, comparison with older releases, or troubleshooting;
-- Aurora v1 release authority now comes from the v1 baseline, native sanitizers, reconstructed specialized regression, factory audio audit, and current standalone/plugin validation.
+- When the required suites are green, Aurora v1 release authority comes from the v1 baseline, native sanitizers, reconstructed specialized regression, factory audio audit, and standalone/plugin validation. The v0.25.0 release does **not** currently satisfy that gate; see `SHARED_STATE.md`.
 
 No production code was changed to reach this decision or to make the new v1 test stack pass.
 

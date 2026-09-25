@@ -1,6 +1,16 @@
-# Aurora
+# KiMiA
 
-**System requirements:** Aurora runs only on Apple silicon Macs with macOS 14 or newer. There is no plan to support other systems — no Intel Mac, Windows, or Linux versions are planned.
+**Project lineage:** KiMiA is the current product name. Internal bundle identifiers, AU subtype, repository name, bank filenames, and support paths intentionally retain `Aurora` / `Auro` for compatibility.
+
+**System requirements:** KiMiA runs only on Apple silicon Macs with macOS 14 or newer. There is no plan to support other systems — no Intel Mac, Windows, or Linux versions are planned.
+
+## Current release · 0.25.0
+
+The current tagged source release is `v0.25.0` (`b29e883`, 24 September 2026). It adds flanger, tremolo/pan/rotary, bitcrusher, master-bus compression, auto-wah, and delay ducking; expands the Performance Matrix from 6 to 10 slots; rearranges the effects panels; and implements the P1–P4 patch-browser scrolling work. The v0.24 line added the four-operator FM engine, natural-decay FM electric pianos, the FM EP category, favorites-on-save, and the KiMiA display-name pass.
+
+**Current validation boundary:** the local standalone 0.25.0 release build completed successfully before tagging. The locally installed AU and VST3 bundles remain **0.24.3**; the 0.25.0 plug-in source has not yet been rebuilt, reinstalled, and revalidated. GitHub CI for the 0.25.0 tag is not green: the app/plug-in jobs hit a Swift compiler type-check timeout, while native test jobs are missing FM-engine link symbols. See [SHARED_STATE.md](SHARED_STATE.md) and [DAW-INTEGRATION.md](DAW-INTEGRATION.md).
+
+The sections below are a chronological release archive. Older feature counts and verification totals describe the release named in their section and are not claims about the current v0.25.0 binary or plug-in installation.
 
 ## Aurora 0.23 · five-LFO modulation
 
@@ -20,13 +30,14 @@ No production/app/DSP/plugin code was changed *as a consequence of the test reco
 
 Release notes are also tracked in [CHANGELOG.md](CHANGELOG.md).
 
-## Future upgrade proposals
+## Current and future work
 
-These are deliberately parked design proposals, **not active implementation work**.
+This index distinguishes shipped design history from work that remains parked.
 
-- **Scroll smoothness:** UI-only invalidation fixes (P1–P4) to make patch-browser and editor scrolling feel like Safari — no dropped frames while scrolling with audio running. **Proposal only — not implemented; the UI stays frozen until this specific change is explicitly unfrozen.** See [FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md](FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md).
-- **Modulation expansion — SHIPPED in v0.23 (not a proposal anymore):** 10 Sound Matrix slots per layer, expanded continuous destinations, and Matrix-only LFO 3/4/5 while preserving LFO 1/2 and Motion compatibility. Implemented and released; the proposal file is retained as design history (its header carries the same SHIPPED status). See [FUTURE-PROPOSAL-MODULATION-EXPANSION.md](FUTURE-PROPOSAL-MODULATION-EXPANSION.md).
-- **Dual-patch live:** design for stacking two full patches with dual FX buses is locked but **not implemented**. See [Dual-Patch-Specification.md](Dual-Patch-Specification.md).
+- **Scroll smoothness — SHIPPED in v0.25.0:** P1–P4 moved browser-row tracking out of the global model, memoized filtering/sorting, reduced per-frame preference work, and deferred non-essential telemetry during active scrolling. The proposal file is retained as design history. See [FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md](FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md).
+- **Modulation expansion — SHIPPED in v0.23:** 10 Sound Matrix slots per layer, expanded continuous destinations, and Matrix-only LFO 3/4/5 while preserving LFO 1/2 and Motion compatibility. The proposal file is retained as design history. See [FUTURE-PROPOSAL-MODULATION-EXPANSION.md](FUTURE-PROPOSAL-MODULATION-EXPANSION.md).
+- **Four-operator FM engine — SHIPPED in v0.24.0:** the locked FM architecture, 16 visual algorithms, per-layer FM state, matrix integration, and flagship library landed. Later v0.24 releases refined the EP category and natural-decay behavior. The proposal is retained as design history. See [FUTURE-PROPOSAL-FM-ENGINE.md](FUTURE-PROPOSAL-FM-ENGINE.md).
+- **Dual-patch live — NOT IMPLEMENTED:** the design for stacking two complete patches with independent FX buses is locked but remains parked pending an explicit unfreeze. See [Dual-Patch-Specification.md](Dual-Patch-Specification.md).
 
 ## Arps factory revamp · 0.21.5
 
@@ -63,13 +74,14 @@ Also per layer:
 
 ### Shared after all layers mix
 
-Bus order:
+Current shared-bus order:
 
-**chorus → phaser → delay return → reverb return → shimmer → EQ → master → output boost / limiter**
+**chorus → phaser → flanger → tremolo / pan / rotary → auto-wah → bitcrusher → delay return → reverb return → shimmer → EQ → compressor → master → output boost / limiter**
 
-- Chorus and phaser hear the **full dry mix** of all layers (no per-layer send).
-- Delay and reverb hear only what each layer sends; Mix knobs control the returns.
+- Chorus, phaser, flanger, tremolo/pan/rotary, auto-wah, and bitcrusher operate on the full dry mix of all layers.
+- Delay and reverb hear only what each layer sends; Mix controls their returns. Delay's Duck control acts on its repeats.
 - Shimmer is shared (fed from per-layer shimmer sends; never the wet bus).
+- Compressor follows final-bus EQ and precedes master/limiter.
 - EQ on Play is session-sticky (like Output boost). Master is patch/global. Output boost is session, not stored in the patch FX block.
 
 ### How layers meet the bus
@@ -80,8 +92,8 @@ Bus order:
 
 ### Mental model
 
-**Tone and articulation** (osc, drive, filter, character, amp, arp) = per layer.  
-**Space and post-mix movement** (chorus, phaser, delay/reverb returns, shimmer, EQ, master, output boost) = shared.
+**Tone and articulation** (oscillators/FM, drive, filter, character, amp, arp, flanger, tremolo/pan/rotary, auto-wah, bitcrusher) feed the shared movement stage.
+**Space and post-mix movement** (chorus, phaser, delay/reverb returns, shimmer, EQ, compressor, master, output boost/limiter) is shared.
 
 That is why loading two full patches at once is not a small Play-tab toggle: both would share one FX chain unless a second bus is added.
 
@@ -248,9 +260,9 @@ All three controllers can supply MIDI independently of the selected audio output
 
 The Oxygen Pro 25 has been detected by Aurora, and hardware MIDI events have reached the running app.
 
-## Aurora 100 sound bank
+## Historical Aurora 100 sound-bank catalog
 
-Choose **Aurora** in **Sound library**, then use the category menu to browse ten sounds in each of these groups:
+This section catalogs the original 100-patch bank. The current `Aurora100.json` contains **125** sounds after the approved FM and FM EP expansions; see `CHANGELOG.md` for the additions. At the original milestone, choosing **Aurora** exposed ten sounds in each of these groups:
 
 | Category | Character |
 | --- | --- |
@@ -265,13 +277,13 @@ Choose **Aurora** in **Sound library**, then use the category menu to browse ten
 | Brass & Strings | Synthesized brass attacks and bowed ensemble colors |
 | Splits | Left/right combinations divided at MIDI note 60 |
 
-All 300 Spectrum sounds are bundled under **Aurora**. **Your sounds** contains saved and imported copies, visibly marked User; **All sounds** brings the collections together. Search matches names, categories, and descriptions. Favorites apply within the selected collection and category. Saving or importing a sound keeps its category and opens Your sounds.
+At the original milestone, all 300 Spectrum sounds were bundled under **Aurora**. **Your sounds** contains saved and imported copies, visibly marked User; **All sounds** brings the collections together. Search matches names, categories, and descriptions. Favorites apply within the selected collection and category. Saving or importing a sound keeps its category and opens Your sounds.
 
-The [complete catalog](<Patch Banks/Aurora 100 Catalog.md>) describes every sound. The [grouped patch archive](<Patch Banks/Aurora 100 Patches.zip>) contains individual `.aurora.json` files for import or backup. It does not need to be imported into the updated app.
+The [original 100-patch catalog](<Patch Banks/Aurora 100 Catalog.md>) describes that release's sounds. The [grouped patch archive](<Patch Banks/Aurora 100 Patches.zip>) contains those individual `.aurora.json` files for import or backup. It does not need to be imported into the current app.
 
 Arps play while you hold notes. Splits use MIDI notes 0–59 for the lower voice and 60–127 for the upper voice. On the Oxygen Pro 25, use its octave controls to reach either side, or route another keyboard to the same layers. The CK88 and MODX7+ provide more space for two-hand split playing. These are synthesized sounds, not acoustic instrument samples or Yamaha internal voices. Patch loading preserves the current Master volume.
 
-## First milestone scope
+## Historical first milestone scope
 
 - Four sound layers with level, pan, transpose, and keyboard ranges.
 - Two oscillators per layer, sub oscillator, noise, filter, amplitude envelope, and drive.
@@ -284,7 +296,7 @@ Arps play while you hold notes. Splits use MIDI notes 0–59 for the lower voice
 - Eight musical macros with source-specific MIDI Learn and hardware pickup.
 - On-screen piano and typing-key auditioning.
 
-Aurora has two LFOs per layer, dual filters, wavetable scanning, per-layer effects sends and AU/VST3 plug-ins. The fifth classic oscillator shape is an original harmonic blend. Filter 1 retains its amplitude-envelope amount, alongside the independent Mod envelope. Standalone MIDI is applied at audio-block boundaries; VST3 MIDI honors host sample offsets. Hardware audio capture remains outside this build. Exact controller-panel mappings depend on the messages each keyboard sends.
+At that milestone, Aurora had two LFOs per layer. The current architecture has five, dual filters, wavetable scanning, per-layer effects sends, FM/subtractive layer modes, and AU/VST3 plug-ins. The fifth classic oscillator shape is an original harmonic blend. Filter 1 retains its amplitude-envelope amount alongside the independent Mod envelope. Standalone MIDI is applied at audio-block boundaries; VST3 MIDI honors host sample offsets. Hardware audio capture remains outside the build. Exact controller-panel mappings depend on the messages each keyboard sends.
 
 ## Verification
 

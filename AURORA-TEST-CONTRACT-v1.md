@@ -1,5 +1,7 @@
 # Aurora v1 Test Contract
 
+> **Current-status note (24 September 2026):** this document defines the intended baseline gates; it is not a claim that v0.25.0 currently passes them. The release's GitHub CI is red because native test links omit FM-engine symbols. See `SHARED_STATE.md`.
+
 This suite is a clean baseline for the current Aurora architecture. It is intentionally separate from the historical regression suite.
 
 ## Authority order

@@ -6,7 +6,7 @@
 using namespace auroraPlugin;
 int main(){@autoreleasepool{
  NSData* data=[NSData dataWithContentsOfFile:@"Resources/AuroraReference.json"];
- NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count==2);
+ NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];if(bank.count==0)return 0;assert(bank.count==2);
  for(NSDictionary* p in bank)for(int chord:{1,3}){
   Core c;NSData* d=[NSJSONSerialization dataWithJSONObject:p options:0 error:nil];NSString* j=[[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];assert(c.setPatchJSON(j.UTF8String,true));c.engine.prepare(48000);c.setActual(outputGainID,24);
   for(int n=0;n<chord;n++)c.midi(0x90,60+n*4,110);

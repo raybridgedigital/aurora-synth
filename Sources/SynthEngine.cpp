@@ -430,6 +430,14 @@ struct SynthEngine::Impl {
         phaserFeedback.fill(0);
         delayL.fill(0);delayR.fill(0);chorusL.fill(0);chorusR.fill(0);
         delayToneL=delayToneR=0;
+        // Wah / flanger / bitcrusher hold audio memory that outlives the
+        // mute-bus fade, so a panic wipe must empty them too — otherwise a
+        // featured wah or flanger keeps a nonzero tail past the drain and
+        // the post-panic bus never reaches exact silence.
+        flangerBufL.fill(0);flangerBufR.fill(0);flangerPos=0;
+        flangerFBL=flangerFBR=0;
+        wahEnv=0;wahLP.fill(0);wahBP.fill(0);
+        crushHoldL=crushHoldR=0;crushCounter=0;
         eqLowL=eqLowR=eqMidL=eqMidR=eqHighL=eqHighR=0;
         shimmerBufL.fill(0);shimmerBufR.fill(0);shimmerPreL.fill(0);shimmerPreR.fill(0);
         shimmerWrite=shimmerPreWrite=0;shimmerToneStateL=shimmerToneStateR=0;shimmerFbL=shimmerFbR=0;

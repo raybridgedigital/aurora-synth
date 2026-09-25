@@ -1,5 +1,7 @@
 # Aurora v1 Specialized Regression Contract
 
+> **Current-status note (24 September 2026):** this remains the reconstructed behavioral contract, but it is not a claim that v0.25.0 CI is green. Current v0.25.0 baseline/regression jobs fail to link because FM-engine symbols are absent from their native test links. Historical suite results below describe the build on which they were recorded; see `SHARED_STATE.md`.
+
 This suite reconstructs Aurora's specialized regression coverage from the current working product, current production architecture, and the intent of the historical tests.
 
 For the methodology behind that reconstruction, the limits of code-derived expectations, oracle-provenance categories, and guidance for distinguishing production bugs from stale tests, see [AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md](AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md).
@@ -35,7 +37,7 @@ For the methodology behind that reconstruction, the limits of code-derived expec
 
 ## Factory audio audit
 
-The current factory banks are rendered through a dedicated DSP audit, independently from the model/UI harness. Every preset is loaded, auditioned, stress-rendered and drained through Panic while checking finite output, useful signal level, bounded peak, release behavior and voice cleanup.
+The dedicated DSP audit is designed to render every factory preset independently from the model/UI harness. Each preset is loaded, auditioned, stress-rendered, and drained through Panic while checking finite output, useful signal level, bounded peak, release behavior, and voice cleanup.
 
 The audit follows the same migration rules as `SynthModel.sanitized`:
 - sparse/legacy layer dictionaries are accepted when all stored keys are valid;
@@ -43,23 +45,23 @@ The audit follows the same migration rules as `SynthModel.sanitized`:
 - legacy presets without parameter 97 use the historical rate-division migration for parameter 23;
 - session EQ globals 20...22 are not treated as patch FX.
 
-This matters for `AuroraGB109`, whose 109 presets intentionally store parameters 0...96. Parameters 97 and 98 are supplied by current defaults when the bank is loaded. The other current factory banks store all 99 layer parameters.
+This matters for `AuroraGB109`, whose 109 presets intentionally store parameters 0...96. Parameters 97 and 98 are supplied by defaults when the bank is loaded. At the v0.22 reconstruction baseline, the other four factory banks stored all 99 layer parameters; the current architecture defines 126 layer parameters.
 
-The five banks are audited independently in CI so one large bank cannot block the others.
+CI is structured to audit the five banks independently so one large bank cannot hide a failure in another. A current 463-sound pass still needs to be re-established; see `SHARED_STATE.md`.
 
 ## Isolated A/B contract
 
 A/B comparison engine behavior is tested in a fresh process with one `SynthModel` and one standalone engine. The long model/UI regression tests model state and persistence only, avoiding false failures from multiple model instances sharing the standalone test engine.
 
-## Native DSP areas currently validated
+## Historical native DSP validation and current boundary
 
-The existing native suite is green under ASan/UBSan and TSan. Its behavior-level coverage remains valuable evidence for recording/WAV normalization, wavetable generation and import, motion envelopes, layer sends/solo, dual filters, oscillator modulation, character processing, LFO refinements, MIDI ownership/routing, transpose, arp, matrices, FX, mono/legato/glide and queue recovery.
+At the reconstruction baseline, the native suite was green under ASan/UBSan and TSan. Its behavior-level coverage remains valuable evidence for recording/WAV normalization, wavetable generation and import, motion envelopes, layer sends/solo, dual filters, oscillator modulation, character processing, LFO refinements, MIDI ownership/routing, transpose, arp, matrices, FX, mono/legato/glide and queue recovery. Current v0.25 sanitizer jobs are not green because their native test link omits FM-engine symbols.
 
 Those tests remain untouched while this reconstructed suite recovers the model/UI workflows that had become unreachable behind stale factory assumptions.
 
-## Plugin areas currently validated
+## Historical plug-in validation and current boundary
 
-Current AU/VST3 build and validation are green. Existing plugin checks cover stable parameter IDs, state round-trip, finite audio, host lifecycle, sample-offset MIDI, 32/64-bit processing and editor attachment.
+Historical plug-in checks cover stable parameter IDs, state round-trip, finite audio, host lifecycle, sample-offset MIDI, 32/64-bit processing and editor attachment. The current v0.25.0 plug-in source is not green: its build CI hits the SwiftUI type-check timeout, and the installed bundles remain 0.24.3.
 
 ## Corrected factory contract
 

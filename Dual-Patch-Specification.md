@@ -2,7 +2,7 @@
 
 Status: **design locked — not implemented yet**  
 Date: 2026-09-20  
-Related: signal path in [README.md](README.md); current release `v0.21.6`
+Related: signal path in [README.md](README.md); current source release `v0.25.0` (dual-patch remains unimplemented)
 
 When ready to build, treat this document as the product contract. Do not invent a one-bus merge of two patches.
 

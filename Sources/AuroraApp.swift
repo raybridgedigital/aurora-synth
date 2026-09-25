@@ -489,7 +489,7 @@ enum FactoryBank {
     static let gb: [SoundPreset] = {
         guard let url=AuroraResources.bundle.url(forResource:"AuroraGB109",withExtension:"json"),
               let data=try? Data(contentsOf:url),
-              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==109 else{return []}
+              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==60 else{return []}
         return sounds
     }()
     static let shimmer: [SoundPreset] = {
@@ -502,7 +502,15 @@ enum FactoryBank {
         guard let url=AuroraResources.bundle.url(forResource:"AuroraReference",withExtension:"json"),let data=try? Data(contentsOf:url),let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = (expansion + prism + nova + gb + shimmer).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+    /// Brand-new bank (FX-only era). No strict count: it starts empty and grows
+    /// as new patches are authored. The 60 FX reference sounds live in `gb`.
+    static let fxBank: [SoundPreset] = {
+        guard let url=AuroraResources.bundle.url(forResource:"AuroraFX",withExtension:"json"),
+              let data=try? Data(contentsOf:url),
+              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
+        return sounds
+    }()
+    static let all: [SoundPreset] = (expansion + prism + nova + gb + shimmer + fxBank).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
