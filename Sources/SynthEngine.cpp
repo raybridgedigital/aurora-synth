@@ -95,6 +95,9 @@ float globalValue(int p,float v) {
     if(p==AGCompAuto||p==AGWahMode)return bounded(v,0,1)>=.5f?1.f:0.f;
     // Master FX power toggles are true switches, never partial: 0 = struck, 1 = in.
     if(p>=AGShimmerPower&&p<=AGCompPower)return bounded(v,0,1)>=.5f?1.f:0.f;
+    if(p==AGReverbType)return bounded(v,0,1)>=.5f?1.f:0.f;
+    if(p==AGReverbPredelay)return bounded(v,0,200,0);
+    if(p==AGReverbTone)return bounded(v,0,1,.5f);
     if(p==AGPhaserFeedback)return bounded(v,-.85f,.85f);
     if(p==AGReverbDecay)return bounded(v,.2f,8,1);
     if(p==AGShimmerDecay||p==AGShimmerLateDecay)return bounded(v,.2f,12,3);
@@ -233,14 +236,56 @@ struct Layer {
     bool fmActive=false;
 };
 struct Candidate { int source=0,channel=0,key=0,note=0; float velocity=0; uint64_t order=0; };
+// Feedback comb with a one-pole damper in the loop (Classic reverb and shimmer late field).
+// It reads the sample written `length` samples ago. A length change made with setLength
+// cross-fades from the old read point to the new one instead of jumping: jumping clicked
+// on pure tones (+11 to +23 dB over the tail on a sine chord). Settled, it is the plain comb.
 struct Comb {
-    float feedback=.77f;
-    std::array<float,16384> data{}; int position=0,length=1500; float damp=0;
-    float process(float input) {
-        float delayed=data[position]; damp+=.35f*(delayed-damp);
-        data[position]=input+feedback*damp; if(++position>=length)position=0; return delayed;
+    static constexpr int kSize=16384,kMask=kSize-1;
+    float feedback=.77f,dampCoef=.35f; // .35 = the damping every patch before 0.27 was voiced with
+    std::array<float,kSize> data{}; int position=0,length=1500,fromLength=1500; float damp=0;
+    float fade=1,fadeStep=0; // 0 = reading fromLength ... 1 = reading length
+    void snapLength(int target){length=fromLength=std::clamp(target,1,kSize);fade=1;fadeStep=0;}
+    void setLength(int target,int fadeSamples){
+        target=std::clamp(target,1,kSize);
+        if(target==length||fade<1.f)return; // a running cross-fade finishes first; the next block retries
+        fromLength=length;length=target;fade=0;fadeStep=1.f/float(std::max(1,fadeSamples));
     }
-    void clear() { data.fill(0);position=0;damp=0; }
+    float process(float input) {
+        float delayed=data[size_t((position-length)&kMask)];
+        if(fade<1.f){
+            const float old=data[size_t((position-fromLength)&kMask)];
+            delayed=old+(delayed-old)*fade;fade=std::min(1.f,fade+fadeStep);
+        }
+        damp+=dampCoef*(delayed-damp);
+        data[size_t(position)]=input+feedback*damp; position=(position+1)&kMask; return delayed;
+    }
+    void reset() { position=0;damp=0;fade=1;fadeStep=0;fromLength=length; }
+    void clear() { data.fill(0);reset(); }
+};
+// Reverb pre-delay: the reverb input waits `length` samples (0 = straight through, bit for
+// bit). Changes cross-fade between the old and new read points like the combs.
+struct PreDelay {
+    static constexpr int kSize=65536,kMask=kSize-1; // 200 ms at 192 kHz fits
+    std::array<float,kSize> data{}; int position=0,length=0,fromLength=0;
+    float fade=1,fadeStep=0;
+    void snapLength(int target){length=fromLength=std::clamp(target,0,kSize-1);fade=1;fadeStep=0;}
+    void setLength(int target,int fadeSamples){
+        target=std::clamp(target,0,kSize-1);
+        if(target==length||fade<1.f)return;
+        fromLength=length;length=target;fade=0;fadeStep=1.f/float(std::max(1,fadeSamples));
+    }
+    float process(float input) {
+        data[size_t(position)]=input;
+        float out=data[size_t((position-length)&kMask)];
+        if(fade<1.f){
+            const float old=data[size_t((position-fromLength)&kMask)];
+            out=old+(out-old)*fade;fade=std::min(1.f,fade+fadeStep);
+        }
+        position=(position+1)&kMask;return out;
+    }
+    void reset() { position=0;fade=1;fadeStep=0;fromLength=length; }
+    void clear() { data.fill(0);reset(); }
 };
 struct Allpass {
     std::array<float,4096> data{}; int position=0,length=200;
@@ -250,6 +295,145 @@ struct Allpass {
     }
     void clear() { data.fill(0);position=0; }
 };
+// Plate reverb after J. Dattorro, "Effect Design, Part 1", JAES 45(9), 1997: mono in,
+// stereo out. A band-limited input runs through four diffusers into a figure-eight tank of
+// two cross-coupled halves (modulated all-pass, delay, damping, decay, all-pass, delay);
+// each output is seven signed taps into the tank. Delays are the paper's values at 29761 Hz
+// scaled to the host rate, and the tank also scales with Size. A Size change cross-fades
+// every tank read from the old lengths to the new ones over 50 ms instead of jumping. Rings
+// are powers of two sized for 192 kHz at the largest Size: nothing is allocated after
+// construction.
+struct PlateReverb {
+    static constexpr double kRefRate=29761.0;
+    static constexpr float kFadeSeconds=.05f;
+    template<size_t N> struct Line {
+        static_assert((N&(N-1))==0,"ring sizes are powers of two");
+        static constexpr int kMask=int(N)-1;
+        std::array<float,N> data{}; int pos=0,length=2,from=2;
+        float at(int age) const {return data[size_t((pos-age)&kMask)];} // age 1 = newest
+        float fractional(float age) const {                             // linear interpolation
+            const float r=float(pos)-age,fl=std::floor(r);const int i0=int(fl);const float f=r-fl;
+            const float a=data[size_t(i0&kMask)],b=data[size_t((i0+1)&kMask)];return a+(b-a)*f;
+        }
+        void push(float x){data[size_t(pos)]=x;pos=(pos+1)&kMask;}
+    };
+    std::array<Line<4096>,4> diffuser{};
+    Line<8192> modL; Line<65536> delayL1; Line<32768> apL; Line<65536> delayL2;
+    Line<16384> modR; Line<65536> delayR1; Line<32768> apR; Line<32768> delayR2;
+    float bandwidthState=0,dampL=0,dampR=0,feedL=0,feedR=0,lfoCos=1,lfoSin=0;
+    // Per-configuration values (host rate, Size, Tone, Decay).
+    float bandwidth=.7f,damping=.5f,decay=.5f,excursion=16,lfoStepCos=1,lfoStepSin=0;
+    float modBaseL=672,modBaseR=908,modFromL=672,modFromR=908;
+    float fade=1,fadeStep=0; // tank reads: 0 = the `from` lengths ... 1 = the current ones
+    std::array<int,14> taps{},tapsFrom{};
+    double configuredRate=0;float configuredSize=-1,configuredTone=-1;
+    template<class F> void forTank(F&& f){f(modL);f(delayL1);f(apL);f(delayL2);f(modR);f(delayR1);f(apR);f(delayR2);}
+    // `cold`: the plate holds no audio (bypassed and wiped, or Classic is running), so new
+    // lengths apply at once instead of cross-fading.
+    void configure(double rate,float size,float tone,float decaySeconds,bool starved,bool cold) {
+        const bool rateChanged=rate!=configuredRate;
+        const double scale=rate/kRefRate;
+        if(rateChanged){
+            constexpr int inputs[4]={142,107,379,277};
+            for(int i=0;i<4;i++){auto& d=diffuser[size_t(i)];d.length=d.from=std::max(2,int(std::lround(inputs[i]*scale)));}
+            excursion=float(16*scale);
+            const double lfoHz=.8;
+            lfoStepCos=float(std::cos(tau*lfoHz/rate));lfoStepSin=float(std::sin(tau*lfoHz/rate));
+            configuredRate=rate;configuredTone=-1;
+        }
+        if(size!=configuredSize&&(fade>=1.f||rateChanged||cold)){
+            const double tank=scale*(.5+std::clamp(double(size),0.,1.));
+            auto len=[&](double reference){return std::max(2,int(std::lround(reference*tank)));};
+            const int lengths[6]={len(4453),len(1800),len(3720),len(4217),len(2656),len(3163)};
+            constexpr int reference[14]={266,2974,1913,1996,1990,187,1066, 353,3627,1228,2673,2111,335,121};
+            // Line each tap reads: 0 delayL1, 1 apL, 2 delayL2, 3 delayR1, 4 apR, 5 delayR2.
+            constexpr int tapLine[14]={3,3,4,5,0,1,2, 0,0,1,2,3,4,5};
+            std::array<int,14> next{};
+            for(int i=0;i<14;i++)next[size_t(i)]=std::clamp(int(std::lround(reference[i]*tank)),0,lengths[tapLine[i]]-1);
+            const bool snap=cold||rateChanged||configuredSize<0;
+            int* targets[6]={&delayL1.length,&apL.length,&delayL2.length,&delayR1.length,&apR.length,&delayR2.length};
+            int* froms[6]={&delayL1.from,&apL.from,&delayL2.from,&delayR1.from,&apR.from,&delayR2.from};
+            for(int i=0;i<6;i++){*froms[i]=snap?lengths[i]:*targets[i];*targets[i]=lengths[i];}
+            tapsFrom=snap?next:taps;taps=next;
+            modFromL=snap?float(672*tank):modBaseL;modFromR=snap?float(908*tank):modBaseR;
+            modBaseL=float(672*tank);modBaseR=float(908*tank);
+            fade=snap?1.f:0.f;fadeStep=float(1/(kFadeSeconds*rate));
+            configuredSize=size;
+        }
+        if(tone!=configuredTone){
+            // Tone 0.5 = the warm plate this was voiced as: input band-limited near 8 kHz, tank
+            // damped near 4.5 kHz. 0 darkens to 4 kHz / 1.6 kHz, 1 opens to 16 kHz / 12.7 kHz.
+            const double t=std::clamp(double(tone),0.,1.)-.5,nyquistGuard=.45*rate;
+            bandwidth=float(1-std::exp(-tau*std::min(nyquistGuard,8000.*std::exp2(2*t))/rate));
+            damping=float(1-std::exp(-tau*std::min(nyquistGuard,4500.*std::exp2(3*t))/rate));
+            configuredTone=tone;
+        }
+        // Decay is applied four times per trip round the tank; each segment averages 5397
+        // samples at the reference rate. RT60 = Decay seconds, as for the Classic combs.
+        const double segment=5397./kRefRate*(.5+std::clamp(double(size),0.,1.));
+        decay=starved?0.f:float(std::min(.93,std::pow(.001,segment/std::max(.2,double(decaySeconds)))));
+        renormalize();
+    }
+    void process(float input,float& left,float& right) {
+        // Quadrature LFO by rotation (no sine call per sample); configure() renormalises it each block.
+        const float c=lfoCos*lfoStepCos-lfoSin*lfoStepSin,s=lfoSin*lfoStepCos+lfoCos*lfoStepSin;lfoCos=c;lfoSin=s;
+        const bool fading=fade<1.f;const float g=fade;
+        auto read=[&](const auto& line){const float v=line.at(line.length);if(!fading)return v;const float o=line.at(line.from);return o+(v-o)*g;};
+        auto tap=[&](const auto& line,int i){const float v=line.at(taps[size_t(i)]+1);if(!fading)return v;const float o=line.at(tapsFrom[size_t(i)]+1);return o+(v-o)*g;};
+        auto modulated=[&](const auto& line,float base,float from,float offset){const float v=line.fractional(base+offset);if(!fading)return v;const float o=line.fractional(from+offset);return o+(v-o)*g;};
+        auto allpass=[&](auto& line,float x,float coefficient){const float d=read(line),w=x+coefficient*d;line.push(w);return d-coefficient*w;};
+        bandwidthState+=bandwidth*(input-bandwidthState);
+        float x=bandwidthState;
+        x=allpass(diffuser[0],x,.75f);x=allpass(diffuser[1],x,.75f);
+        x=allpass(diffuser[2],x,.625f);x=allpass(diffuser[3],x,.625f);
+        // Left half: modulated all-pass, delay, damping, decay, all-pass, delay.
+        {
+            const float in=x+feedR*decay;
+            const float d=modulated(modL,modBaseL,modFromL,excursion*s),w=in-.7f*d;modL.push(w);const float a=d+.7f*w;
+            const float b=read(delayL1);delayL1.push(a);
+            dampL+=damping*(b-dampL);
+            const float e=allpass(apL,dampL*decay,.5f);
+            feedL=read(delayL2);delayL2.push(e);
+        }
+        // Right half, fed by the left half's output (and vice versa above).
+        {
+            const float in=x+feedL*decay;
+            const float d=modulated(modR,modBaseR,modFromR,excursion*c),w=in-.7f*d;modR.push(w);const float a=d+.7f*w;
+            const float b=read(delayR1);delayR1.push(a);
+            dampR+=damping*(b-dampR);
+            const float e=allpass(apR,dampR*decay,.5f);
+            feedR=read(delayR2);delayR2.push(e);
+        }
+        left=.6f*(tap(delayR1,0)+tap(delayR1,1)-tap(apR,2)+tap(delayR2,3)-tap(delayL1,4)-tap(apL,5)-tap(delayL2,6));
+        right=.6f*(tap(delayL1,7)+tap(delayL1,8)-tap(apL,9)+tap(delayL2,10)-tap(delayR1,11)-tap(apR,12)-tap(delayR2,13));
+        if(fading)fade=std::min(1.f,fade+fadeStep);
+    }
+    void renormalize(){float n=std::sqrt(lfoCos*lfoCos+lfoSin*lfoSin);if(n>0){lfoCos/=n;lfoSin/=n;}else{lfoCos=1;lfoSin=0;}}
+    void resetState(){
+        bandwidthState=dampL=dampR=feedL=feedR=0;lfoCos=1;lfoSin=0;
+        for(auto& d:diffuser)d.pos=0;
+        forTank([](auto& line){line.pos=0;line.from=line.length;});
+        tapsFrom=taps;modFromL=modBaseL;modFromR=modBaseR;fade=1;
+    }
+    template<class F> void forEachLine(F&& f){
+        for(auto& d:diffuser)f(d.data.data(),d.data.size());
+        forTank([&](auto& line){f(line.data.data(),line.data.size());});
+    }
+    void clear(){forEachLine([](float* data,size_t size){std::fill_n(data,size,0.f);});resetState();}
+};
+// Plate output gain that matches its early tail (50-350 ms) to Classic's for the same Mix,
+// Size and Decay. Classic's combs build up far more energy as Decay grows, so the gap is a
+// function of Decay (Size moves it by about 1 dB): measured, averaged over Size 0.2/0.5/0.8,
+// interpolated in log(Decay).
+float plateLevel(float decaySeconds){
+    constexpr float decays[]={.2f,.3f,.45f,.6f,.8f,1.f,1.3f,1.6f,2.f,2.5f,3.2f,4.f,5.f,6.f,8.f};
+    constexpr float gainDb[]={4.74f,7.12f,9.90f,11.78f,13.41f,14.47f,15.49f,16.13f,16.67f,17.10f,17.46f,17.71f,17.90f,18.03f,18.18f};
+    constexpr int n=int(sizeof(decays)/sizeof(decays[0]));
+    const float d=std::clamp(decaySeconds,decays[0],decays[n-1]);
+    int i=0;while(i<n-2&&d>decays[i+1])i++;
+    const float t=std::log(d/decays[i])/std::log(decays[i+1]/decays[i]);
+    return std::pow(10.f,(gainDb[i]+(gainDb[i+1]-gainDb[i])*t)/20.f);
+}
 }
 struct SynthEngine::Impl {
     std::array<std::atomic<float>,4> delaySends{},reverbSends{},shimmerSends{};
@@ -338,6 +522,15 @@ struct SynthEngine::Impl {
     }
     std::atomic<float> gainReduction{0};
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
+    // Reverb algorithms share the Reverb power switch, sends, Mix, Size and Decay. Only the one
+    // selected by AGReverbType runs; changing type fades it out, wipes it, then opens the other.
+    PlateReverb plate; bool plateActive=false;
+    float plateGain=1;                       // plateLevel(Decay), refreshed per block
+    PreDelay reverbPredelay;                 // shared by both algorithms
+    static constexpr float kReverbFadeSeconds=.05f; // Size and Pre-delay changes cross-fade this long
+    static constexpr float kRoomTimes[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
+    int combLength(int i,float size) const {return std::clamp(int(sampleRate*kRoomTimes[i]*(.5f+size)),1,Comb::kSize);}
+    int predelaySamples(float ms) const {return std::clamp(int(std::lround(double(ms)*.001*sampleRate)),0,PreDelay::kSize-1);}
     size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1;
     // Output-boost limiter (only above 0 dB boost): peak hold -> envelope -> gain, then soft knee.
     // Held peaks settle at the threshold; the soft knee rounds what the attack lets through and
@@ -422,6 +615,8 @@ struct SynthEngine::Impl {
         // Every other effect starts off, so a patch only ever carries the FX it asked for.
         for(int p=AGShimmerPower;p<=AGCompPower;p++)globals[p].store(0);
         globals[AGDelayPower].store(1);globals[AGReverbPower].store(1);
+        // Reverb Classic, no pre-delay, Tone at the damping every earlier patch was voiced with.
+        globals[AGReverbType].store(0);globals[AGReverbPredelay].store(0);globals[AGReverbTone].store(.5f);
         prepare(48000);
     }
     void clearPerformance() {
@@ -471,6 +666,7 @@ struct SynthEngine::Impl {
         for(auto& c:combs)c.clear();for(auto& a:allpasses)a.clear();
         for(auto& c:shimmerCombs)c.clear();for(auto& a:shimmerAllpasses)a.clear();
         limiterHold=limiterEnv=0;limiterHoldLeft=0;
+        plate.clear();reverbPredelay.clear();
         delayPosition=chorusPosition=0;
         for(auto& f:fxPower){f.dirty=false;f.wipeStage=0;f.wipePos=0;}
     }
@@ -478,13 +674,13 @@ struct SynthEngine::Impl {
     void resetEffectState(int slot) {
         switch(slot){
             case FxShimmer:
-                for(auto& c:shimmerCombs){c.position=0;c.damp=0;}for(auto& a:shimmerAllpasses)a.position=0;
+                for(auto& c:shimmerCombs)c.reset();for(auto& a:shimmerAllpasses)a.position=0;
                 shimmerWrite=shimmerPreWrite=0;shimmerToneStateL=shimmerToneStateR=0;shimmerFbL=shimmerFbR=0;
                 shimmerEarlyStateL=shimmerEarlyStateR=0;
                 for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;shimmerReadL[i]=shimmerReadR[i]=0;}
                 break;
             case FxDelay:delayToneL=delayToneR=0;duckEnv=0;break;
-            case FxReverb:for(auto& c:combs){c.position=0;c.damp=0;}for(auto& a:allpasses)a.position=0;break;
+            case FxReverb:for(auto& c:combs)c.reset();for(auto& a:allpasses)a.position=0;plate.resetState();reverbPredelay.reset();break;
             case FxPhaser:for(auto& channel:phaserState)channel.fill(0);phaserFeedback.fill(0);break;
             case FxFlanger:flangerFBL=flangerFBR=0;break;
             case FxCrush:crushHoldL=crushHoldR=0;crushCounter=0;break;
@@ -497,7 +693,7 @@ struct SynthEngine::Impl {
     // Large rings are cleared across several blocks, `budget` floats at a time.
     bool wipeEffect(int slot,size_t& budget) {
         auto& f=fxPower[size_t(slot)];
-        std::array<std::pair<float*,size_t>,12> spans{};int count=0;
+        std::array<std::pair<float*,size_t>,32> spans{};int count=0;
         auto add=[&](float* data,size_t size){spans[size_t(count++)]={data,size};};
         switch(slot){
             case FxShimmer:
@@ -507,7 +703,10 @@ struct SynthEngine::Impl {
                 for(auto& a:shimmerAllpasses)add(a.data.data(),a.data.size());
                 break;
             case FxDelay:add(delayL.data(),delaySize);add(delayR.data(),delaySize);break;
-            case FxReverb:for(auto& c:combs)add(c.data.data(),c.data.size());for(auto& a:allpasses)add(a.data.data(),a.data.size());break;
+            case FxReverb:
+                for(auto& c:combs)add(c.data.data(),c.data.size());for(auto& a:allpasses)add(a.data.data(),a.data.size());
+                plate.forEachLine(add);add(reverbPredelay.data.data(),reverbPredelay.data.size());
+                break;
             case FxChorus:add(chorusL.data(),chorusSize);add(chorusR.data(),chorusSize);break;
             case FxFlanger:add(flangerBufL.data(),flangerBufL.size());add(flangerBufR.data(),flangerBufR.size());break;
             default:break;
@@ -648,8 +847,9 @@ struct SynthEngine::Impl {
         }
         clearSound(); snapshot();
         for(auto& layer:layers){layer.delaySend=layer.delayTarget;layer.reverbSend=layer.reverbTarget;layer.shimmerSend=layer.shimmerTarget;}
-        constexpr float times[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
-        for(int i=0;i<8;i++)combs[i].length=std::clamp(int(sampleRate*times[i]),1,16384);
+        // Combs start at the current Size, so the first block has nothing to cross-fade.
+        for(int i=0;i<8;i++)combs[i].snapLength(combLength(i,globalValue(AGReverbSize,globals[AGReverbSize].load())));
+        reverbPredelay.snapLength(predelaySamples(globalValue(AGReverbPredelay,globals[AGReverbPredelay].load())));
         for(int i=0;i<4;i++)allpasses[i].length=std::clamp(int(sampleRate*(.0047f+.0013f*i)),1,4096);
         constexpr float shimmerTimes[4]={.0311f,.0413f,.0531f,.0677f};
         for(int i=0;i<4;i++)shimmerCombs[i].length=std::clamp(int(sampleRate*shimmerTimes[i]),1,16384);
@@ -664,6 +864,7 @@ struct SynthEngine::Impl {
             f.ramp=globals[AGShimmerPower+i].load()>=.5f?1.f:0.f;f.dirty=false;f.wipeStage=0;f.wipePos=0;
             fxGain(i)=fxCurve(f.ramp);
         }
+        plateActive=globals[AGReverbType].load()>=.5f;
     }
     void requestPanic() {
         // Generation tagging also rejects a producer that reserved a queue slot
@@ -800,10 +1001,23 @@ struct SynthEngine::Impl {
 
         transposeRatio=std::exp2(transpose.load(std::memory_order_relaxed)/12.f);
         for(int g=0;g<AGGlobalCount;g++)global[g]=globals[g].load(std::memory_order_relaxed);
-        constexpr float roomTimes[8]={.0297f,.0371f,.0411f,.0437f,.0307f,.0383f,.0427f,.0451f};
-        for(int i=0;i<8;i++){
-            auto& c=combs[i];c.length=std::clamp(int(sampleRate*roomTimes[i]*(.5f+global[AGReverbSize])),1,16384);c.position%=c.length;
-            c.feedback=panicFxStarved?0.f:std::min(.98f,std::pow(.001f,float(c.length/sampleRate)/global[AGReverbDecay]));
+        {
+            // A reverb that holds no audio (bypassed and wiped) takes new lengths at once;
+            // one that is ringing cross-fades to them. The idle algorithm is always wiped.
+            const bool verbCold=fxPower[FxReverb].ramp==0.f&&!fxPower[FxReverb].dirty;
+            const int fadeSamples=int(sampleRate*kReverbFadeSeconds);
+            const float combDamp=.35f*std::exp2((global[AGReverbTone]-.5f)*2.5f); // Tone .5 = .35
+            for(int i=0;i<8;i++){
+                auto& c=combs[i];
+                if(verbCold||plateActive)c.snapLength(combLength(i,global[AGReverbSize]));
+                else c.setLength(combLength(i,global[AGReverbSize]),fadeSamples);
+                c.dampCoef=combDamp;
+                c.feedback=panicFxStarved?0.f:std::min(.98f,std::pow(.001f,float(c.length/sampleRate)/global[AGReverbDecay]));
+            }
+            plate.configure(sampleRate,global[AGReverbSize],global[AGReverbTone],global[AGReverbDecay],panicFxStarved,verbCold||!plateActive);
+            plateGain=plateLevel(global[AGReverbDecay]);
+            if(verbCold)reverbPredelay.snapLength(predelaySamples(global[AGReverbPredelay]));
+            else reverbPredelay.setLength(predelaySamples(global[AGReverbPredelay]),fadeSamples);
         }
         for(int l=0;l<kLayers;l++) {
             auto& layer=layers[l];auto& p=layer.p;
@@ -1158,8 +1372,14 @@ struct SynthEngine::Impl {
             for(int i=0;i<FxSlotCount;i++){
                 auto& f=fxPower[size_t(i)];
                 if(f.ramp==0.f&&f.dirty)wipeEffect(i,wipeBudget);
-                const bool opening=f.ramp==0.f&&!f.dirty&&global[AGShimmerPower+i]>=.5f;
-                const float target=global[AGShimmerPower+i]>=.5f&&!(f.ramp==0.f&&f.dirty)?1.f:0.f;
+                bool on=global[AGShimmerPower+i]>=.5f;
+                if(i==FxReverb&&(global[AGReverbType]>=.5f)!=plateActive){
+                    // A reverb type change behaves like switching the reverb off and on: the
+                    // running algorithm fades out and is wiped, then the other one opens.
+                    if(f.ramp==0.f&&!f.dirty)plateActive=!plateActive;else on=false;
+                }
+                const bool opening=f.ramp==0.f&&!f.dirty&&on;
+                const float target=on&&!(f.ramp==0.f&&f.dirty)?1.f:0.f;
                 fxTarget[size_t(i)]=target;
                 if(f.ramp!=target)fxMoving|=1u<<i;
                 if(opening){
@@ -1633,9 +1853,12 @@ struct SynthEngine::Impl {
             }
             float rl=0,rr=0;
             if(verbPower>0.f) {
-                float reverbInput=(sendRL+sendRR)*.16f*verbPower;
-                for(int i=0;i<4;i++){rl+=combs[i].process(reverbInput);rr+=combs[i+4].process(reverbInput);}
-                rl=allpasses[1].process(allpasses[0].process(rl));rr=allpasses[3].process(allpasses[2].process(rr));
+                const float reverbInput=reverbPredelay.process((sendRL+sendRR)*.16f*verbPower);
+                if(plateActive){plate.process(reverbInput,rl,rr);rl*=plateGain;rr*=plateGain;}
+                else {
+                    for(int i=0;i<4;i++){rl+=combs[i].process(reverbInput);rr+=combs[i+4].process(reverbInput);}
+                    rl=allpasses[1].process(allpasses[0].process(rl));rr=allpasses[3].process(allpasses[2].process(rr));
+                }
             }
             outL+=dl*global[AGDelayMix]*delayPower+rl*global[AGReverbMix]*.25f*verbPower;
             outR+=dr*global[AGDelayMix]*delayPower+rr*global[AGReverbMix]*.25f*verbPower;

@@ -64,6 +64,11 @@ enum AuroraGlobal { AGMaster=0, AGTempo, AGDelayMix, AGDelayFeedback,
        it is session-sticky, identity at 0 dB, and its bands are not patch data. */
     AGShimmerPower, AGDelayPower, AGReverbPower, AGChorusPower, AGPhaserPower,
     AGFlangerPower, AGTremPower, AGCrushPower, AGWahPower, AGCompPower,
+    /* 0.27.0 reverb: algorithm (0 = Classic Schroeder room, the default and every patch
+       without the key; 1 = Plate, Dattorro figure-eight), pre-delay in ms (0 = none) and
+       tone (0 dark ... 1 bright; 0.5 = the damping every earlier patch was voiced with).
+       Mix, Size, Decay, Pre-delay and Tone drive both algorithms. */
+    AGReverbType, AGReverbPredelay, AGReverbTone,
     AGGlobalCount };
 // Main-thread API; MIDI receive and audio rendering run on platform threads.
 void aurora_initialize(void);

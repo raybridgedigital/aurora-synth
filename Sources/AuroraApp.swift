@@ -285,6 +285,12 @@ struct FmEnvCurve: View {
 func ratioText(_ v:Double)->String{String(format:"%.2f×",v)}
 func fmRateText(_ v:Double)->String{String(format:"%.1f",v)}
 func fmLevelText(_ v:Double)->String{String(format:"%.2f",v)}
+/// Reverb Tone: 0.5 is the damping every earlier patch was voiced with.
+func reverbToneText(_ v:Double)->String{
+    if v<0.47 {return String(format:"Dark %.0f",(0.5-v)*200)}
+    if v>0.53 {return String(format:"Bright %.0f",(v-0.5)*200)}
+    return "Neutral"
+}
 func fmFreqText(_ v:Double)->String{v>=1000 ? String(format:"%.1f kHz",v/1000):String(format:"%.0f Hz",v)}
 /// One cell of the 16-algorithm picker grid — keeps the grid closure trivially typed.
 struct FmAlgorithmCell: View {
@@ -377,7 +383,7 @@ struct MatrixAssignment:Codable,Equatable {
     }
 }
 struct SoundPreset: Identifiable, Codable {
-    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4,37:0,38:0.23,39:0.55,40:0.35,41:0,42:3,43:0.6,44:0,45:0,46:8,47:1,48:0,49:0.4,50:0,51:2,52:5,53:120,54:0,55:0,56:0,57:0.5,58:0.5,59:0,60:0,61:1,62:1,63:0,64:0,65:0,66:0,67:0,68:0,69:0]
+    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4,37:0,38:0.23,39:0.55,40:0.35,41:0,42:3,43:0.6,44:0,45:0,46:8,47:1,48:0,49:0.4,50:0,51:2,52:5,53:120,54:0,55:0,56:0,57:0.5,58:0.5,59:0,60:0,61:1,62:1,63:0,64:0,65:0,66:0,67:0,68:0,69:0,70:0,71:0,72:0.5]
     var fx: [Int:Double]? = nil
     func globalValue(_ id:Int)->Double {id<6 ? globals[id] : id==6 ? (phaserMix ?? 0) : (fx?[id] ?? Self.fxDefaults[id] ?? 0)}
     var id: String
@@ -1036,7 +1042,7 @@ struct VoiceStatus:View {
     private var redoPatches: [SoundPreset] = []
     static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8]
     private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98,99,102,103,104,108,111,112,113,117,120,121,122]
-    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12,0...1,0.03...5,0...1,0...0.9,0...1,0.03...8,0...1,0...2,0...1,1...16,1...64,0...1,0...1,-60...0,1...12,0.1...100,5...1000,0...18,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1]
+    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12,0...1,0.03...5,0...1,0...0.9,0...1,0.03...8,0...1,0...2,0...1,1...16,1...64,0...1,0...1,-60...0,1...12,0.1...100,5...1000,0...18,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...200,0...1]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
@@ -1073,11 +1079,11 @@ struct VoiceStatus:View {
         if let fx=input.fx {
             // 20–22 are session EQ (Play), not patch — drop if present in older files
             let patchFX=fx.filter{!($0.key==20 || $0.key==21 || $0.key==22)}
-            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...69).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
+            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...72).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
             result.fx=patchFX.mapValues{$0}
             for (p,v) in patchFX {
                 let r=globalRanges[p]
-                let rounded = (p==14 || p==16 || p==32 || p==24) ? v.rounded() : v
+                let rounded = (p==14 || p==16 || p==32 || p==24 || p==70) ? v.rounded() : v
                 result.fx?[p]=max(r.lowerBound,min(r.upperBound,rounded))
             }
         }
@@ -1182,7 +1188,7 @@ struct VoiceStatus:View {
         backend.aurora_set_global(15,Float(outputGain))
         backend.aurora_set_global(6,Float(patch.phaserMix ?? 0))
         for p in 7...14{backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
-        for p in 16...69 where p < 20 || p > 22 {
+        for p in 16...72 where p < 20 || p > 22 {
             backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))
         }
         applySessionEQ() // house EQ stays session-sticky across patch loads
@@ -1273,7 +1279,7 @@ struct VoiceStatus:View {
         if !applyingDirectCC{for mapping in directMappings where mapping.target==ControlTarget(layer:-1,parameter:parameter){directPickup.remove(mapping.id);directPrevious[mapping.id]=nil}}
         guard Self.globalRanges.indices.contains(parameter),value.isFinite else{return}
         // Output gain (15) uses setOutputGain; still allow clamping if reached via ControlTarget.
-        let needsRound = parameter==14 || parameter==16 || parameter==32 || parameter==24
+        let needsRound = parameter==14 || parameter==16 || parameter==32 || parameter==24 || parameter==70
         let r=Self.globalRanges[parameter],value=max(r.lowerBound,min(r.upperBound,needsRound ? value.rounded():value))
         if parameter==15{setOutputGain(value);return}
         if parameter==20{setEqLow(value);return}
@@ -2352,12 +2358,15 @@ struct ArpEffectsView:View {
                     control("Depth",8)
                     control("Feedback",9,-0.85...0.85)
                 }
-                Panel(title:"Reverb",accessory:power(62,"Take the shared room out of the bus. Size and decay stay in the patch.")){
+                Panel(title:"Reverb",accessory:power(62,"Take the shared reverb out of the bus. Its settings stay in the patch.")){
+                    globalPicker("Type",70,["Classic","Plate"])
                     ParameterSlider(title:"Mix",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
                     control("Size",12)
                     control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
+                    control("Pre-delay",71,0...200,{String(format:"%.0f ms",$0)})
+                    control("Tone",72,0...1,reverbToneText)
                     ParameterSlider(title:"Reverb send",value:m.sendBinding(.reverb),onBegin:{m.checkpoint()})
-                    Text("Layer send into shared room.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
+                    Text("Classic = small room · Plate = dense studio plate. Pre-delay keeps attacks clear.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
             }
 

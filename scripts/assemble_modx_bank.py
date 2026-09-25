@@ -38,9 +38,11 @@ GRANGES = [(0, 1), (30, 240), (0, .6), (0, .75), (0, .75), (0, .6), (0, 1),
            (0, 1), (0, 2), (0, 1), (1, 16), (1, 64), (0, 1), (0, 1), (-60, 0),
            (1, 12), (.1, 100), (5, 1000), (0, 18), (0, 1), (0, 1), (0, 1),
            (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1),
-           (0, 1), (0, 1), (0, 1), (0, 1)]
-assert len(GRANGES) == 70
-GINTEGER = {14, 16, 44, 46, 47, 55, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69}
+           (0, 1), (0, 1), (0, 1), (0, 1),
+           (0, 1), (0, 200), (0, 1)]  # 0.27: reverb type, pre-delay ms, tone
+assert len(GRANGES) == 73
+GINTEGER = {14, 16, 44, 46, 47, 55, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+            70}
 
 # Classic FX bed (== SoundPreset.fxDefaults minus session EQ 20-22).
 # All ten power toggles default OFF; each recipe powers its featured FX.
@@ -138,7 +140,7 @@ def fx_chain(featured):
     fx = dict(FX_BASE)
     fx.update(featured)
     for k, val in fx.items():
-        assert k == int(k) and ((7 <= k <= 14) or (16 <= k <= 69)), f'bad fx key {k}'
+        assert k == int(k) and ((7 <= k <= 14) or (16 <= k <= 72)), f'bad fx key {k}'
         lo, hi = GRANGES[int(k)]
         assert math.isfinite(val) and lo <= val <= hi, f'fx {k}={val} outside [{lo},{hi}]'
     return {k: (round(v) if int(k) in GINTEGER else round(float(v), 7))

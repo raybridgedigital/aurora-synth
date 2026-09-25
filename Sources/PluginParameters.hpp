@@ -201,6 +201,9 @@ inline constexpr Spec globals[] = {
 {"Bitcrusher power",0,1,false,true},
 {"Auto-wah power",0,1,false,true},
 {"Compressor power",0,1,false,true},
+{"Reverb type",0,1,false,true},
+{"Reverb pre-delay",0,200,false,false},
+{"Reverb tone",0,1,false,false},
 };
 inline constexpr double defaults[] = {1,2,1,0.35,7,0.12,0,2600,0.15,0.025,0.35,0.75,0.7,0.65,0,0,0.4,0.12,0,0,0.15,0.08,0,3,0,1,0.65,0,127,0.16,0.06,2,0,0,0.5,0,1,8,0.6,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3200,0,0,0.5,0.01,0.35,0,0.35,0,0,0,0,1,0,0.25,1,0.5,12,1,0,0,0,4,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,1,1,0,4,0,0,0,0,0,1,1,0,4,0,0,0,0,0,1,1,0,4,0,0,0,0};
 }

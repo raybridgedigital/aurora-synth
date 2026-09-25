@@ -257,7 +257,7 @@ bool Core::setPatchJSON(const char* json,bool apply){
             }
             for(int i=0;i<AGGlobalCount;i++){
                 if(i==AGOutputGain)continue; // managed via outputGainID / saveState revision
-                double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4,0,0.23,0.55,0.35,0,3,0.6,0,0,8,1,0,0.4,0,2,5,120,0,0,0,0.5,0.5,0,0,1,1,0,0,0,0,0,0,0};
+                double fallback[]={0.25,110,0,0.3,0,0,0,0.22,1,0,0.23,1,0.5,1,0,1,1,375,1,0.65,0,0,0,0,12,3,0.55,20,0.45,0.7,0.55,0.4,0,0.45,0.35,0.7,4,0,0.23,0.55,0.35,0,3,0.6,0,0,8,1,0,0.4,0,2,5,120,0,0,0,0.5,0.5,0,0,1,1,0,0,0,0,0,0,0,0,0,0.5};
                 id v=i<6?p[@"globals"][i]:i==6?p[@"phaserMix"]:p[@"fx"][key(i)];
                 setActual(globalBase+i,[v isKindOfClass:NSNumber.class]?[v doubleValue]:fallback[i]);
             }

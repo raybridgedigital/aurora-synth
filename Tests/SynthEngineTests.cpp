@@ -568,6 +568,138 @@ void cleanOutputLimiter() {
     std::printf("Output limiter at +18 dB: peak %.3f, 5th harmonic %.1f dB (0.26.0: -39.9 dB)\n",peak,fifth);
     std::puts("PASS: Output boost limits loud chords without clipping them");
 }
+// ---- 0.27 reverb: Plate type, Pre-delay, Tone, click-free Size and Pre-delay changes ----
+namespace verb {
+std::vector<float> capture(SynthEngine& e,int frames){
+    std::vector<float> out;std::array<float,128> l{},r{};
+    while(frames>0){int n=std::min(frames,128);e.render(l.data(),r.data(),uint32_t(n));for(int i=0;i<n;i++)out.push_back(.5f*(l[i]+r[i]));frames-=n;}
+    return out;
+}
+void append(std::vector<float>& y,SynthEngine& e,int frames){auto part=capture(e,frames);y.insert(y.end(),part.begin(),part.end());}
+// Reverb alone in the chain at a clear level; setting the type goes through the switch fade.
+void setup(SynthEngine& e,int type){
+    e.prepare(rate);for(int id:kFxPower)e.setGlobal(id,0);
+    e.setGlobal(AGDelayMix,0);e.setGlobal(AGChorusMix,0);
+    e.setGlobal(AGReverbPower,1);e.setGlobal(AGReverbMix,.6f);e.setGlobal(AGReverbSize,.5f);e.setGlobal(AGReverbDecay,2);
+    e.setGlobal(AGReverbType,float(type));
+    e.setParameter(0,APAttack,.003f);e.setParameter(0,APRelease,.01f);
+    capture(e,rate/2);
+}
+constexpr int chord[6]={48,55,60,64,67,72};
+void chordOn(SynthEngine& e){for(int k:chord)note(e,0,k,110);}
+void chordOff(SynthEngine& e){for(int k:chord)off(e,0,k);}
+double rms(const std::vector<float>& y,size_t from,size_t to){double s=0;for(size_t i=from;i<to&&i<y.size();i++)s+=double(y[i])*y[i];return std::sqrt(s/double(std::max<size_t>(1,to-from)));}
+// Early wet level, 50-350 ms after a 0.2 s chord is released (the dry voices are gone).
+double earlyTail(int type,float size,float decay){
+    SynthEngine e;setup(e,type);e.setGlobal(AGReverbSize,size);e.setGlobal(AGReverbDecay,decay);capture(e,rate/10);
+    chordOn(e);capture(e,rate/5);chordOff(e);
+    auto y=capture(e,int(rate*.35));return rms(y,size_t(rate*.05),y.size());
+}
+// A pure-tone tail rings; `parameter` moves to each value in turn, 0.8 s apart. Returns the
+// loudest 1 ms burst above 1.5 kHz within 15 ms of each move, in dB over the median of the
+// 300 ms of tail before it. A click stands 15 dB or more above; a smooth change stays near 0.
+std::vector<double> changeBursts(int type,int parameter,std::initializer_list<float> values){
+    SynthEngine e;sineVoice(e);setup(e,type);e.setGlobal(AGReverbDecay,4);capture(e,rate/10);
+    chordOn(e);std::vector<float> y=capture(e,int(rate*.3));chordOff(e);
+    std::vector<size_t> moves;
+    for(float v:values){append(y,e,int(rate*.8));moves.push_back(y.size());e.setGlobal(parameter,v);}
+    append(y,e,rate/2);
+    auto hf=highBand(y,rate);std::vector<double> result;const size_t w=size_t(rate/1000);
+    for(size_t at:moves){
+        std::vector<double> before;for(size_t i=at-size_t(rate*.3);i+w<at;i+=w)before.push_back(windowRMS(hf,i,w));
+        std::nth_element(before.begin(),before.begin()+long(before.size()/2),before.end());const double median=before[before.size()/2];
+        double worst=0;for(size_t i=at-size_t(rate*.015);i<at+size_t(rate*.015);i+=w/4)worst=std::max(worst,windowRMS(hf,i,w));
+        result.push_back(20*std::log10(worst/median));
+    }
+    return result;
+}
+}
+void reverbPlateLevel() {
+    // Plate and Classic give the same early tail for the same Mix, Size and Decay, so switching
+    // type compares character, not loudness. Classic's combs build far more energy as Decay grows;
+    // the Plate's gain follows Decay to match (within about 2 dB across Size).
+    for(float decay:{.6f,2.5f,6.f}){
+        const double gap=20*std::log10(verb::earlyTail(1,.5f,decay)/verb::earlyTail(0,.5f,decay));
+        std::printf("Reverb level: Decay %.1f s, Plate %+.1f dB vs Classic\n",decay,gap);
+        assert(std::abs(gap)<2.5);
+    }
+    std::puts("PASS: the Plate reverb is level-matched to Classic");
+}
+void reverbChangesClean() {
+    // Moving Size while a pure-tone tail rang used to jump every loop length: +11 to +23 dB
+    // clicks. Size and Pre-delay changes now cross-fade over 50 ms in both algorithms.
+    double worst=-99;
+    for(int type:{0,1}){
+        for(double db:verb::changeBursts(type,AGReverbSize,{.9f,.15f,.6f}))worst=std::max(worst,db);
+        for(double db:verb::changeBursts(type,AGReverbPredelay,{80.f,15.f,120.f}))worst=std::max(worst,db);
+    }
+    std::printf("Reverb Size / Pre-delay changes on a ringing sine tail: loudest burst %+.1f dB (0.26.1 Size: up to +23 dB)\n",worst);
+    assert(worst<8);
+    std::puts("PASS: Size and Pre-delay changes do not click in either reverb");
+}
+void reverbPredelayAndTone() {
+    // Pre-delay: a 10 ms blip's tail starts after the pre-delay, not straight away.
+    auto blip=[](float ms){
+        SynthEngine e;sineVoice(e);verb::setup(e,0);e.setGlobal(AGReverbPredelay,ms);e.setGlobal(AGReverbDecay,1.5f);e.setParameter(0,APRelease,.005f);verb::capture(e,rate/5);
+        note(e,0,72,110);auto y=verb::capture(e,rate/100);off(e,0,72);verb::append(y,e,rate/2);return y;};
+    const auto plain=blip(0),held=blip(100);
+    const double early0=verb::rms(plain,size_t(rate*.03),size_t(rate*.08)),early100=verb::rms(held,size_t(rate*.03),size_t(rate*.08));
+    const double late100=verb::rms(held,size_t(rate*.13),size_t(rate*.25));
+    assert(20*std::log10(early100/early0)< -20);   // 30-80 ms: the plain tail rings, the held one has not begun
+    assert(20*std::log10(late100/early100)>20);    // after 100 ms the held tail arrives
+    // Tone: brighter settings put more of the tail above 1.5 kHz, in both algorithms.
+    for(int type:{0,1}){
+        double previous=0;
+        for(float tone:{0.f,.5f,1.f}){
+            SynthEngine e;verb::setup(e,type);e.setGlobal(AGReverbTone,tone);verb::capture(e,rate/10);
+            verb::chordOn(e);verb::capture(e,rate/5);verb::chordOff(e);
+            auto y=verb::capture(e,int(rate*.6));std::vector<float> tail(y.begin()+long(rate*.05),y.end());
+            auto hf=highBand(tail,rate);double high=0,all=0;for(size_t i=0;i<tail.size();i++){high+=hf[i]*hf[i];all+=double(tail[i])*tail[i];}
+            const double brightness=high/all;
+            assert(brightness>previous*1.2);previous=brightness;
+        }
+    }
+    std::puts("PASS: Pre-delay holds the tail back; Tone darkens and brightens both reverbs");
+}
+void plateExtremesAndSwitch() {
+    // Largest Size, longest Decay and Pre-delay, brightest Tone, a loud wide chord: finite and
+    // under full scale (render() asserts both), then exact silence after Panic.
+    {
+        SynthEngine e;verb::setup(e,1);
+        e.setGlobal(AGReverbSize,1);e.setGlobal(AGReverbDecay,8);e.setGlobal(AGReverbTone,1);e.setGlobal(AGReverbPredelay,200);e.setGlobal(AGReverbMix,.75f);
+        for(int k=36;k<96;k+=5)note(e,0,k,127);
+        render(e,rate*3);
+        for(int k=36;k<96;k+=5)off(e,0,k);
+        render(e,rate*2);
+        assert(drainPanic(e)<1e-7f);
+    }
+    // Switching type while the tail rings fades the old reverb out (no click) and the new one
+    // starts empty: no pre-switch audio returns.
+    for(int from:{0,1}){
+        SynthEngine e;sineVoice(e);verb::setup(e,from);e.setGlobal(AGReverbDecay,4);verb::capture(e,rate/10);
+        verb::chordOn(e);auto y=verb::capture(e,int(rate*.3));verb::chordOff(e);verb::append(y,e,int(rate*.7));
+        const size_t at=y.size();e.setGlobal(AGReverbType,float(1-from));verb::append(y,e,rate/2);
+        auto hf=highBand(y,rate);const size_t w=size_t(rate/1000);
+        double before=0,worst=0;for(size_t i=at-size_t(rate*.2);i<at;i+=w)before=std::max(before,windowRMS(hf,i,w));
+        for(size_t i=at;i<at+size_t(rate*.05);i+=w/4)worst=std::max(worst,windowRMS(hf,i,w));
+        assert(worst<=before*2);                                    // the fade-out adds no burst
+        const double tail=verb::rms(y,at-size_t(rate*.1),at),after=verb::rms(y,at+size_t(rate*.3),at+size_t(rate*.5));
+        assert(after<tail*1e-3);                                   // the new reverb holds nothing old
+    }
+    // Informational: what the Plate costs on top of the idle engine. A switched-off reverb of
+    // either type runs no DSP at all (bypassCost guards the Reverb slot).
+    if(!std::getenv("AURORA_SKIP_TIMING")){
+        auto fastest=[](bool on){
+            SynthEngine e;verb::setup(e,1);e.setGlobal(AGReverbPower,on?1.f:0.f);verb::capture(e,rate/10);
+            std::array<float,128> l{},r{};double best=1e9;
+            for(int run=0;run<5;run++){auto start=std::chrono::steady_clock::now();for(int i=0;i<200;i++)e.render(l.data(),r.data(),128);
+                best=std::min(best,std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());}
+            return best;};
+        const double off=fastest(false),on=fastest(true);
+        std::printf("Plate cost, 200 idle blocks: off %.0f us, on %.0f us\n",off*1e6,on*1e6);
+    }
+    std::puts("PASS: Plate stays finite and panic-clean at extremes; type switches fade and start clean");
+}
 void performanceTools() {
     SynthEngine e;dry(e);e.hold(true);note(e,9,60);render(e);off(e,9,60);render(e,rate);assert(e.activeVoices()==1);
     e.hold(false);render(e,rate);assert(e.activeVoices()==0);
@@ -609,4 +741,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();envelopeDeclick();cleanVoiceSteal();cleanOutputLimiter();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();envelopeDeclick();cleanVoiceSteal();cleanOutputLimiter();reverbPlateLevel();reverbChangesClean();reverbPredelayAndTone();plateExtremesAndSwitch();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
