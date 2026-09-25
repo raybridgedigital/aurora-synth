@@ -281,10 +281,9 @@ cd ~/Desktop/KiMiA by Claude/bench     # see README.md there
 ./bin/patchcheck ../aurora-synth/Resources/AuroraFX.json --match " -CL"
 ```
 
-Reference (the 55 originals, first-0.5-s RMS, measured 25 September before the loudest-window
-change): median about −34 dBFS, range −51.5 to −18 dBFS (33 dB spread); slow pads read a few dB
-higher with the loudest-window measure. Re-run `patchcheck` on the whole bank for current
-numbers (`bench/results/patchcheck-v2.*` when present). **Target for new patches: −30 ± 2 dBFS early RMS** (set with Master). Non-bass patches: share below 120 Hz ≤ about
+Reference (the 55 originals, 26 September, `bench/results/patchcheck-v2.*`): early level median
+−33.0 dBFS, from −51.5 (Bell Reed 200) to −17.4 (Reed Confession) — a 34 dB spread; non-bass
+share below 120 Hz, median −14.2 dB. The four FM EP drafts read −33 to −38 dBFS at Master 0.5. **Target for new patches: −30 ± 2 dBFS early RMS** (set with Master). Non-bass patches: share below 120 Hz ≤ about
 −12 dB (Dual Patch low-end rule). **CPU numbers under `taskpolicy -b` run on efficiency cores
 and read ~2.5× high** — compare patches with each other there, or measure at normal priority
 for absolute numbers. Budget guidance: rule 8 of PATCH-DESIGN-RULES.md.
