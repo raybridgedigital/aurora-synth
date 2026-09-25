@@ -67,8 +67,8 @@ import SwiftUI
             print("PASS: concurrent plug-in library additions, renames, favorites and deletions preserve unrelated edits.")
         }
         defer { aurora_shutdown() }
-        precondition(model.collection == "Aurora","Initial collection is \(model.collection), expected Aurora")
-        print("PASS: initial collection is Aurora.")
+        precondition(model.collection == "KiMiA","Initial collection is \(model.collection), expected KiMiA")
+        print("PASS: initial collection is KiMiA.")
         precondition(SynthModel.restoredOutputGain(nil,revision:nil)==9,"Default output gain migration failed")
         precondition(SynthModel.restoredOutputGain(6,revision:nil)==9,"Unversioned output gain migration failed")
         precondition(SynthModel.restoredOutputGain(12,revision:2)==9,"Revision 2 output gain migration failed")
@@ -288,12 +288,13 @@ import SwiftUI
         precondition(fx208.eqLow == -3 && fx208.eqMid == 1.5 && fx208.eqHigh == 2)
         precondition(model.eqLow == -3 && model.eqMid == 1.5 && model.eqHigh == 2)
         precondition(fx208.patch.globalValue(23)==0.35 && fx208.patch.globalValue(24)==7 && fx208.patch.globalValue(32)==1)
-        precondition(SynthModel.globalRanges.count==37 && ControlTarget.globalNames.count==37)
+        // One range and one name per engine global (70 since the 0.25.0 effects and power switches).
+        precondition(SynthModel.globalRanges.count==Int(AGGlobalCount.rawValue) && ControlTarget.globalNames.count==SynthModel.globalRanges.count)
         model.undo()
         precondition(model.patch.globalValue(23)==0)
         precondition(model.eqLow == -3 && model.eqMid == 1.5 && model.eqHigh == 2)
         print("V1 REGRESSION CHECKPOINT: extended FX persistence, session EQ and patch undo passed")
-        print("PASS: delay/shimmer patch FX and session-sticky EQ persist under the current contract; globalRanges/globalNames length 37.")
+        print("PASS: delay/shimmer patch FX and session-sticky EQ persist under the current contract; globalRanges/globalNames cover every engine global.")
         print("PASS: extended FX and expressive settings save, undo/redo, reset on old patch load; per-source velocity curve persists.")
         print("PASS: Save updates, Save As copies, editable categories preserve edits, multiple deletions persist and restore independently, oscillator settings persist.")
         print("PASS: matrix layer independence, shared-FX targets, undo/redo, saving and legacy patch defaults.")

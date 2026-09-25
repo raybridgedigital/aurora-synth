@@ -87,12 +87,18 @@ private func same(_ a:SoundPreset,_ b:SoundPreset)->Bool {
         check(model.patch.sends?[0].shimmerBypass != true,"layer bypass leaked onto another layer")
         model.selectedLayer=0
         check(model.matrixRows(performance:false).count==10,"sound matrix row count")
-        check(model.matrixRows(performance:true).count==6,"performance matrix row count")
+        check(model.matrixRows(performance:true).count==10,"performance matrix row count")
+        // Six-row patches (all factory patches) pad to ten; the Matrix screen draws ten rows.
+        var sixRows=model.patch;sixRows.performanceMatrix=Array(repeating:MatrixAssignment(),count:6)
+        model.patch=sixRows;check(model.matrixRows(performance:true).count==10,"six-row performance matrix pads to ten")
         model.updateMatrix(performance:false,slot:9){$0.enabled=true;$0.source=6;$0.destination=36;$0.amount=0.25}
         check(model.soundRows(0)[9].source==6 && model.soundRows(0)[9].destination==36,"slot 10 did not store LFO 3 to filter envelope")
         check(model.modulationSlots(destination:36,layer:0)==[9],"sound feedback index")
+        // Ten performance slots since 0.25.0: the seventh is accepted, an eleventh is not.
         model.updateMatrix(performance:true,slot:6){$0.enabled=true;$0.destination=1}
-        check(model.matrixRows(performance:true).allSatisfy{!$0.enabled},"performance matrix accepted a seventh slot")
+        check(model.matrixRows(performance:true)[6].enabled && model.patch.performanceMatrix?.count==10,"performance matrix rejected its seventh slot")
+        model.updateMatrix(performance:true,slot:10){$0.enabled=true;$0.destination=1}
+        check(model.matrixRows(performance:true).count==10 && model.matrixRows(performance:true).filter(\.enabled).count==1,"performance matrix accepted an eleventh slot")
 
         print("PASS baseline: Aurora v1 model/preset/UI contract")
     }

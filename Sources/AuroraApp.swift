@@ -1176,8 +1176,16 @@ struct VoiceStatus:View {
         if rows.count==6 {rows.append(contentsOf:Array(repeating:MatrixAssignment(),count:4))}
         return rows.count==10 ? rows : MatrixAssignment.soundEmpty
     }
+    /// The Performance Matrix has ten slots since 0.25.0, but patches authored with six
+    /// (every factory patch so far) store six. Pad them like sound rows: the Matrix screen
+    /// always draws ten rows, and indexing past a stored six crashed it.
+    func performanceRows()->[MatrixAssignment] {
+        var rows=patch.performanceMatrix ?? MatrixAssignment.performanceEmpty
+        if rows.count==6 {rows.append(contentsOf:Array(repeating:MatrixAssignment(),count:4))}
+        return rows.count==10 ? rows : MatrixAssignment.performanceEmpty
+    }
     func matrixRows(performance:Bool)->[MatrixAssignment] {
-        performance ? (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty):soundRows(selectedLayer)
+        performance ? performanceRows():soundRows(selectedLayer)
     }
     func modulationSlots(destination:Int,layer:Int?=nil)->[Int] {
         let layer=layer ?? selectedLayer
@@ -1185,7 +1193,7 @@ struct VoiceStatus:View {
         if destination<8 || destination>=12 {
             for (i,row) in soundRows(layer).enumerated() where row.enabled && row.destination==destination {slots.append(layer*10+i)}
         }
-        for (i,row) in (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty).enumerated() where row.enabled && row.destination==destination && ((8...11).contains(destination) || row.target==4 || row.target==layer){slots.append(40+i)}
+        for (i,row) in performanceRows().enumerated() where row.enabled && row.destination==destination && ((8...11).contains(destination) || row.target==4 || row.target==layer){slots.append(40+i)}
         return slots
     }
     func updateMatrix(performance:Bool,slot:Int,change:(inout MatrixAssignment)->Void) {
@@ -1202,7 +1210,8 @@ struct VoiceStatus:View {
     }
     func applyMatrix() {
         for bank in 0..<5 {
-            let rows=bank==4 ? (patch.performanceMatrix ?? MatrixAssignment.performanceEmpty):soundRows(bank)
+            // Always all ten slots, so a six-row patch clears slots 7-10 left by the previous one.
+            let rows=bank==4 ? performanceRows():soundRows(bank)
             for (slot,row) in rows.enumerated(){backend.aurora_set_matrix(Int32(bank),Int32(slot),row.enabled ? 1:0,Int32(row.source),Int32(row.destination),Int32(row.target),Int32(row.cc),Float(row.amount))}
         }
     }
