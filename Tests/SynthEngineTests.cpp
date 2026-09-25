@@ -487,13 +487,86 @@ void silentVoiceRelease() {
     cc(e,0,64,127);
     for(int k=40;k<100;k++){note(e,0,k);render(e,240);off(e,0,k);}
     render(e,rate/2);assert(e.activeVoices()==0);assert(render(e,4800)==0);
-    note(e,0,60);assert(render(e,2400)>.01f);        // a new note still speaks normally
+    note(e,0,60);assert(render(e,2400)>.005f);       // a new note still speaks (about 0.0095 with the declicked envelope)
     cc(e,0,64,0);render(e,rate);assert(e.activeVoices()==0);
     // Mono/legato keeps its single voice so a legato note does not re-attack after the decay.
     SynthEngine m;dry(m);m.setParameter(0,APVoiceMode,2);m.setParameter(0,APSustain,0);m.setParameter(0,APDecay,.05f);
     note(m,0,60);render(m,rate/2);assert(m.activeVoices()==1);note(m,0,64);render(m,2400);assert(m.activeVoices()==1);
     off(m,0,64);off(m,0,60);render(m,rate);assert(m.activeVoices()==0);
     std::puts("PASS: decayed pedal-held poly voices are freed with exact silence; mono legato keeps its voice");
+}
+// Click detection: a pure tone has almost no energy above 1.5 kHz, so a click (an envelope
+// corner, a cut voice, a clipped peak) stands out in a 4th-order 1.5 kHz high-pass.
+struct HighPass { double b0,b1,b2,a1,a2,z1=0,z2=0; double operator()(double x){double y=b0*x+z1;z1=b1*x-a1*y+z2;z2=b2*x-a2*y;return y;} };
+HighPass highPass(double fc,double sr){double w=2*3.14159265358979*fc/sr,c=std::cos(w),s=std::sin(w),al=s/(2*std::sqrt(.5)),a0=1+al;return {(1+c)/2/a0,-(1+c)/a0,(1+c)/2/a0,-2*c/a0,(1-al)/a0};}
+std::vector<double> highBand(const std::vector<float>& x,double sr){HighPass a=highPass(1500,sr),b=highPass(1500,sr);std::vector<double> y(x.size());for(size_t i=0;i<x.size();i++)y[i]=b(a(x[i]));return y;}
+double windowRMS(const std::vector<double>& y,size_t from,size_t length){double s=0;for(size_t i=from;i<from+length&&i<y.size();i++)s+=y[i]*y[i];return std::sqrt(s/double(length));}
+void sineVoice(SynthEngine& e){
+    for(int id:kFxPower)e.setGlobal(id,0);
+    e.setParameter(0,APWave1,0);e.setParameter(0,APBlend,0);e.setParameter(0,APSub,0);e.setParameter(0,APLFODepth,0);e.setParameter(0,APLFO2Depth,0);
+    e.setParameter(0,APCutoff,18000);e.setParameter(0,APFilterEnvelope,0);
+}
+void envelopeDeclick() {
+    // A sine sub-bass with a 4 ms attack, played detached: the linear attack used to turn into
+    // the decay with a sharp corner, a click 44 dB below the note that was the loudest treble in
+    // the note. Voice gain is now smoothed through two short one-pole stages.
+    SynthEngine e;sineVoice(e);e.setParameter(0,APAttack,.004f);e.setParameter(0,APDecay,.2f);e.setParameter(0,APSustain,.75f);e.setParameter(0,APRelease,.2f);
+    e.setParameter(0,APTranspose,-12);e.prepare(rate);
+    std::vector<float> out;std::array<float,64> l{},r{};
+    auto run=[&](double seconds){for(int i=0;i<int(seconds*rate);i+=64){e.render(l.data(),r.data(),64);out.insert(out.end(),l.begin(),l.end());}};
+    std::vector<size_t> onsets;
+    for(int i=0;i<8;i++){int key=i&1?48:43;onsets.push_back(out.size());note(e,0,key);run(.16);off(e,0,key);run(.04);}
+    run(.3);
+    double sum=0;for(float x:out)sum+=double(x)*x;const double level=std::sqrt(sum/double(out.size()));
+    auto hf=highBand(out,rate);double worst=0;
+    for(size_t onset:onsets)for(size_t w=onset;w<onset+size_t(rate/50);w+=48)worst=std::max(worst,windowRMS(hf,w,48));
+    assert(20*std::log10(worst/level)< -60);
+    std::printf("Declick: loudest note-on click %.1f dB re the note (0.26.0: about -44 dB)\n",20*std::log10(worst/level));
+    std::puts("PASS: fast attacks on a pure tone no longer click at the attack peak");
+}
+void cleanVoiceSteal() {
+    // 64 low sine voices held on the pedal, then 8 more notes: each steals a sounding voice. The
+    // stolen voice used to be replaced by its last sample ramped to zero (a click 42 dB over the
+    // held chord's treble); it now finishes its real waveform through a short fade.
+    SynthEngine e;sineVoice(e);e.setParameter(0,APSustain,1);e.setParameter(0,APAttack,.05f);e.setParameter(0,APRelease,3);e.prepare(rate);
+    cc(e,0,64,127);
+    std::vector<float> out;std::array<float,128> l{},r{};
+    auto run=[&](int frames){for(int i=0;i<frames;i+=128){e.render(l.data(),r.data(),128);out.insert(out.end(),l.begin(),l.end());}};
+    for(int k=0;k<64;k++){note(e,0,24+k%16,90,k/16);run(256);}
+    run(rate/2);assert(e.activeVoices()==64);const size_t steal=out.size();
+    for(int k=0;k<8;k++){note(e,0,28+k,90,4);run(rate/10);}
+    assert(e.activeVoices()==64);
+    auto hf=highBand(out,rate);double held=0,stolen=0;
+    for(size_t w=steal-size_t(rate/4);w<steal;w+=48)held=std::max(held,windowRMS(hf,w,48));
+    for(int k=0;k<8;k++){size_t a=steal+size_t(k)*size_t(rate/10);for(size_t w=a;w<a+size_t(rate/50);w+=48)stolen=std::max(stolen,windowRMS(hf,w,48));}
+    assert(20*std::log10(stolen/held)<25);
+    assert(drainPanic(e)<1e-7f);
+    std::printf("Voice steal: loudest steal click %+.1f dB over the held chord's treble (0.26.0: +42 dB)\n",20*std::log10(stolen/held));
+    std::puts("PASS: stealing a sounding voice on a full pool fades it instead of cutting it");
+}
+void cleanOutputLimiter() {
+    // Output boost used to clamp every sample above the ceiling (hard clipping). The limiter now
+    // rides a held peak envelope; loud chords stay under full scale with low distortion.
+    auto chord=[](float boost,std::vector<float>& out){
+        SynthEngine e;sineVoice(e);e.setGlobal(AGMaster,.72f);e.setGlobal(AGOutputGain,boost);
+        e.setParameter(0,APLevel,1);e.setParameter(0,APSustain,1);e.setParameter(0,APAttack,.01f);e.prepare(rate);
+        for(int k:{36,48,55,60})note(e,0,k,127);
+        out.assign(size_t(rate)*2,0);std::vector<float> r(out.size());
+        for(size_t i=0;i<out.size();i+=256)e.render(out.data()+i,r.data()+i,256);
+    };
+    auto harmonic=[](const std::vector<float>& x,double f){ // Goertzel over whole cycles of the last second
+        const double sr=rate,f0=440*std::pow(2,(36-69)/12.0);size_t n=size_t(std::floor(sr/(sr/f0))*(sr/f0));size_t a=x.size()-n;
+        double w=2*3.14159265358979*f/sr,c=2*std::cos(w),s1=0,s2=0;for(size_t i=a;i<x.size();i++){double s=x[i]+c*s1-s2;s2=s1;s1=s;}
+        return std::sqrt(s1*s1+s2*s2-c*s1*s2);
+    };
+    std::vector<float> boosted;chord(18,boosted);
+    float peak=0;for(float x:boosted)peak=std::max(peak,std::abs(x));
+    assert(peak<=.98001f&&peak>.8f);
+    const double f0=440*std::pow(2,(36-69)/12.0);
+    const double fifth=20*std::log10(harmonic(boosted,5*f0)/harmonic(boosted,f0));
+    assert(fifth< -48);
+    std::printf("Output limiter at +18 dB: peak %.3f, 5th harmonic %.1f dB (0.26.0: -39.9 dB)\n",peak,fifth);
+    std::puts("PASS: Output boost limits loud chords without clipping them");
 }
 void performanceTools() {
     SynthEngine e;dry(e);e.hold(true);note(e,9,60);render(e);off(e,9,60);render(e,rate);assert(e.activeVoices()==1);
@@ -536,4 +609,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();envelopeDeclick();cleanVoiceSteal();cleanOutputLimiter();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

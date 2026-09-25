@@ -197,6 +197,7 @@ struct Voice {
     std::array<float,5> lfoPhase{},lfoRandom{};
     uint32_t extraLFOSeed=0xA5A5A5A5u;
     double age=0;float noteRandom=0;
+    float gainSmooth1=0,gainSmooth2=0; // declicked amplitude envelope (two one-pole stages)
 };
 struct Tail { float left=0,right=0;int remaining=0;int layer=0; };
 struct MatrixRoute {int source=0,destination=0,target=4,cc=1,slot=0;float amount=0;};
@@ -289,6 +290,10 @@ struct SynthEngine::Impl {
     EventQueue queue; std::atomic<bool> panicRequested{false};std::atomic<uint64_t> eventGeneration{0};
     std::atomic<float> outputPeak{0}; std::atomic<int> voiceCount{0};
     std::array<Voice,kVoices> voices{};std::array<Tail,kVoices> tails{};size_t nextTail=0;
+    // Up to 16 stolen voices (a full chord on a two-layer patch), capped at 32 oscillator lanes so
+    // a steal burst on a wide unison sound cannot turn into a CPU spike.
+    static constexpr int kGhosts=16,kGhostLanes=32;static constexpr float kStealFadeSeconds=.006f;
+    std::array<Voice,kGhosts> ghosts{};std::array<float,kGhosts> ghostRamp{}; // outside note/pedal/allocation logic
     std::array<Source,kSources> sources{};
     std::array<Layer,kLayers> layers{};
     std::array<Candidate,512> candidates{};
@@ -315,6 +320,7 @@ struct SynthEngine::Impl {
     // memset on the audio thread. An effect cannot reopen until its wipe has finished.
     enum FxSlot:int{FxShimmer=0,FxDelay,FxReverb,FxChorus,FxPhaser,FxFlanger,FxTrem,FxCrush,FxWah,FxComp,FxSlotCount};
     static constexpr float kFxFadeSeconds=.02f;
+    static constexpr float kDeclickSeconds=.0007f; // per stage of the voice gain smoother
     static constexpr size_t kFxWipeFloatsPerFrame=512; // ~2 KB per frame: a few µs per block
     struct FxPowerState{float ramp=1;bool dirty=false;int wipeStage=0;size_t wipePos=0;};
     std::array<FxPowerState,FxSlotCount> fxPower{};
@@ -332,7 +338,13 @@ struct SynthEngine::Impl {
     }
     std::atomic<float> gainReduction{0};
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
-    size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1,outputLimiter=1;
+    size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1;
+    // Output-boost limiter (only above 0 dB boost): peak hold -> envelope -> gain, then soft knee.
+    // Held peaks settle at the threshold; the soft knee rounds what the attack lets through and
+    // never exceeds the 0.98 ceiling the output has always promised.
+    static constexpr float kLimiterThreshold=.87f,kLimiterKnee=.88f,kLimiterCeiling=.98f;
+    static constexpr float kLimiterAttackSeconds=.001f,kLimiterHoldSeconds=.025f,kLimiterReleaseSeconds=.15f;
+    float limiterHold=0,limiterEnv=0;int limiterHoldLeft=0;
     // Mute-bus panic: fade FINAL stereo only; wipe large FX rings only under true silence.
     enum class PanicPhase : uint8_t { Idle=0, FadingOut=1, Silent=2, FadingIn=3 };
     PanicPhase panicPhase{PanicPhase::Idle};
@@ -420,7 +432,7 @@ struct SynthEngine::Impl {
         latestCC.fill(0);latestVelocity=latestPressure=0;
         for(auto& s:sources){for(auto& cc:s.controls)cc.fill(0);s.pressure.fill(0);}
         for(auto& sample:scopeSamples)sample.store(0,std::memory_order_relaxed);
-        for(auto& v:voices)v=Voice{};for(auto& t:tails)t=Tail{};
+        for(auto& v:voices)v=Voice{};for(auto& t:tails)t=Tail{};for(auto& g:ghosts)g=Voice{};ghostRamp.fill(0);
         for(auto& s:sources) {
             for(auto& a:s.velocity)a.fill(0);for(auto& a:s.physical)a.fill(0);
             s.sustain.fill(false);s.bend.fill(0);s.wheel.fill(0);s.expression.fill(1);
@@ -458,7 +470,7 @@ struct SynthEngine::Impl {
         for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;shimmerReadL[i]=shimmerReadR[i]=0;}
         for(auto& c:combs)c.clear();for(auto& a:allpasses)a.clear();
         for(auto& c:shimmerCombs)c.clear();for(auto& a:shimmerAllpasses)a.clear();
-        outputLimiter=1.f;
+        limiterHold=limiterEnv=0;limiterHoldLeft=0;
         delayPosition=chorusPosition=0;
         for(auto& f:fxPower){f.dirty=false;f.wipeStage=0;f.wipePos=0;}
     }
@@ -682,8 +694,18 @@ struct SynthEngine::Impl {
         return s.used&&s.connected&&(s.mask&(1<<layer))&&(s.channel==0||s.channel==ch+1)&&p[APEnabled]>.5f
             &&key>=p[APKeyLow]&&key<=p[APKeyHigh];
     }
+    // A stolen voice is not cut: it is copied into a free ghost slot and keeps rendering its
+    // real waveform while it fades out (kStealFadeSeconds, S-curve), so voice stealing on a full
+    // pool is click-free. Only if every ghost slot is busy does it fall back to the old 5 ms
+    // tail, which holds the voice's last output sample and ramps it to zero.
+    int lanesOf(const Voice& voice) const {
+        const auto& layer=layers[voice.layer];return layer.fmActive?1:std::clamp(int(layer.p[APUnison]),1,8);
+    }
     void fadeStolen(const Voice& voice) {
-        if(voice.active)tails[nextTail++%tails.size()]={voice.lastL,voice.lastR,std::max(1,int(sampleRate*.005)),voice.layer};
+        if(!voice.active)return;
+        int lanes=lanesOf(voice);for(const auto& g:ghosts)if(g.active)lanes+=lanesOf(g);
+        if(lanes<=kGhostLanes)for(size_t g=0;g<ghosts.size();g++)if(!ghosts[g].active){ghosts[g]=voice;ghostRamp[g]=0;return;}
+        tails[nextTail++%tails.size()]={voice.lastL,voice.lastR,std::max(1,int(sampleRate*.005)),voice.layer};
     }
     void reserveOscillators(int reserve=0) {
         int used=reserve;
@@ -1096,7 +1118,9 @@ struct SynthEngine::Impl {
         float maximum=0;float smooth=1-std::exp(-1.f/float(sampleRate*.008));
         float masterTarget=global[AGMaster];
         float gainTarget=std::pow(10.f,global[AGOutputGain]/20.f);
-        float limiterRelease=1-std::exp(-1.f/float(sampleRate*.1));
+        const float limiterAttack=1-std::exp(-1.f/float(sampleRate*kLimiterAttackSeconds));
+        const float limiterRelease=1-std::exp(-1.f/float(sampleRate*kLimiterReleaseSeconds));
+        const int limiterHoldSamples=std::max(1,int(sampleRate*kLimiterHoldSeconds));
         // 0.25.0 effect envelope coefficients (per-block from current globals).
         const float wahAttCoef=1-std::exp(-1.f/float(sampleRate*.005));
         const float wahRelCoef=1-std::exp(-1.f/float(sampleRate*.15));
@@ -1110,7 +1134,8 @@ struct SynthEngine::Impl {
         const double inverseRate=1/sampleRate;
         const float motionFadeStep=1.f/float(sampleRate*.003);
         const float tailLength=float(std::max(1,int(sampleRate*.005)));
-        const float quietLimiterRelease=1-std::exp(-1.f/float(sampleRate*.02));
+        const float declick=1-std::exp(-1.f/float(sampleRate*kDeclickSeconds));
+        const float ghostStep=1.f/float(sampleRate*kStealFadeSeconds);
         // LFO phase increments depend only on layer parameters and tempo. The tempo can
         // move inside a block (external clock), so they are refreshed whenever it does.
         float lfoStepTempo=std::numeric_limits<float>::quiet_NaN();
@@ -1196,7 +1221,8 @@ struct SynthEngine::Impl {
             }
             float outL=0,outR=0,sendDL=0,sendDR=0,sendRL=0,sendRR=0,sendSL=0,sendSR=0;
             float sharedLFO[kLayers][5];uint32_t sharedLFOReady=0;
-            for(auto& v:voices)if(v.active) {
+            // One voice sample. `fade` < 1 only for a stolen voice finishing in a ghost slot.
+            auto renderVoice=[&](Voice& v,float fade) {
                 auto& layer=layers[v.layer];const auto& p=layer.p;auto& source=sources[v.source];
                 if(v.stage==0){v.envelope+=layer.attack;if(v.envelope>=1){v.envelope=1;v.stage=1;}}
                 else if(v.stage==1){v.envelope=p[APSustain]+(v.envelope-p[APSustain])*layer.decay;
@@ -1207,10 +1233,10 @@ struct SynthEngine::Impl {
                     // silence for as long as the key or pedal holds it. In poly mode, free the voice
                     // now, as release would, so held-pedal playing cannot fill the pool with silent
                     // voices. Mono/legato layers keep theirs: a legato note must not re-attack.
-                    if(v.envelope==0.f&&p[APVoiceMode]<=.5f&&!layer.motion.routed(0)){v.active=false;continue;}
+                    if(v.envelope==0.f&&v.gainSmooth2<1e-7f&&p[APVoiceMode]<=.5f&&!layer.motion.routed(0)){v.active=false;return;}
                 }
                 else {v.envelope*=layer.release;v.motionRelease*=layer.release;
-                    if((layer.motion.routed(0)?v.motionRelease:v.envelope)<.00001f){v.active=false;continue;}}
+                    if((layer.motion.routed(0)?v.motionRelease:v.envelope)<.00001f){v.active=false;return;}}
                 const auto& motion=layer.motion;
                 if(motion.enabled()){
                     float target=motion.shape(float(v.motionTime));
@@ -1344,7 +1370,14 @@ struct SynthEngine::Impl {
                 float characterTone=layer.characterTone;
                 if(character&&mod[35]!=0.f){float t=std::clamp(p[APCharacterTone]+mod[35],0.f,1.f);characterTone=1-std::exp(-tau*std::min(300*std::exp2(t*5.9f),float(sampleRate)*.4f)/float(sampleRate));}
                 const float characterMix=std::clamp(p[APCharacterMix]+mod[34],0.f,1.f);
-                const float amplitude=motion.routed(0)?motion.value(0,v.motionValue)*v.motionRelease*v.motionFade:v.envelope;
+                // Two one-pole stages (~0.7 ms each) round the corners of the piecewise envelope:
+                // the attack peak, the start of the release, legato jumps. A fast linear attack
+                // otherwise clicks where it turns into the decay; on a pure tone such as a sine
+                // sub-bass that broadband corner is the loudest high-frequency content of the note.
+                const float envelopeGain=motion.routed(0)?motion.value(0,v.motionValue)*v.motionRelease*v.motionFade:v.envelope;
+                v.gainSmooth1+=declick*(envelopeGain-v.gainSmooth1);
+                v.gainSmooth2+=declick*(v.gainSmooth1-v.gainSmooth2);
+                const float amplitude=v.gainSmooth2;
                 const float velocityGain=layer.fmActive?1.f:v.velocity;
                 const float expression=source.expression[v.channel];
                 const float ampMod=std::clamp(noteAmp+mod[3]+extraAmp,0.f,2.f);
@@ -1420,10 +1453,19 @@ struct SynthEngine::Impl {
                     if(!std::isfinite(value)||!std::isfinite(lane.ic1)||!std::isfinite(lane.ic2)||!std::isfinite(lane.f2ic1)||!std::isfinite(lane.f2ic2)){lane=OscillatorLane{};continue;}
                     v.lastL+=value*std::sqrt(.5f*(1-pan));v.lastR+=value*std::sqrt(.5f*(1+pan));
                 }
+                if(fade!=1.f){v.lastL*=fade;v.lastR*=fade;}
                 outL+=v.lastL;outR+=v.lastR;
                 sendDL+=v.lastL*layer.delaySend;sendDR+=v.lastR*layer.delaySend;
                 sendRL+=v.lastL*layer.reverbSend;sendRR+=v.lastR*layer.reverbSend;
                 sendSL+=v.lastL*layer.shimmerSend;sendSR+=v.lastR*layer.shimmerSend;
+            };
+            for(auto& v:voices)if(v.active)renderVoice(v,1.f);
+            // Stolen voices finish in ghost slots: the real waveform through a short S-curve fade.
+            for(size_t g=0;g<ghosts.size();g++)if(ghosts[g].active){
+                ghostRamp[g]=std::min(1.f,ghostRamp[g]+ghostStep);
+                const float r=ghostRamp[g];
+                renderVoice(ghosts[g],1-r*r*(3-2*r));
+                if(r>=1.f)ghosts[g].active=false;
             }
             for(auto& t:tails)if(t.remaining>0){float fade=t.remaining/tailLength;if(activeSolo<0||activeSolo==t.layer){outL+=t.left*fade;outR+=t.right*fade;sendDL+=t.left*fade*layers[t.layer].delaySend;sendDR+=t.right*fade*layers[t.layer].delaySend;sendRL+=t.left*fade*layers[t.layer].reverbSend;sendRR+=t.right*fade*layers[t.layer].reverbSend;sendSL+=t.left*fade*layers[t.layer].shimmerSend;sendSR+=t.right*fade*layers[t.layer].shimmerSend;}--t.remaining;}
             // ---- Master FX power ----
@@ -1741,15 +1783,28 @@ struct SynthEngine::Impl {
             float finalL=std::tanh(outL*master),finalR=std::tanh(outR*master);
             outputGain+=smooth*(gainTarget-outputGain);
             if(outputGain>1.00001f){
+                // Output boost drives a real limiter. The previous one set the gain from each
+                // sample's own peak, so every sample above the ceiling was clamped - hard clipping,
+                // heard as crackle on loud chords and bass. Here a peak hold (25 ms, longer than
+                // half a cycle of a 20 Hz bass, so the gain cannot ripple within a waveform) feeds
+                // an envelope with a 1 ms attack and 150 ms release; the gain follows the envelope,
+                // and a soft knee (0.88 to a 0.98 ceiling) rounds what the attack lets through.
                 finalL*=outputGain;finalR*=outputGain;
                 float peak=std::max(std::abs(finalL),std::abs(finalR));
-                float target=std::min(1.f,.98f/std::max(.00001f,peak));
-                // Attack fast on peaks; release quieter when quiet so Delay scrubbing cannot leave the bus muted
-                float release=peak<.05f ? quietLimiterRelease : limiterRelease;
-                outputLimiter=target<outputLimiter?target:outputLimiter+release*(target-outputLimiter);
-                if(!std::isfinite(outputLimiter)||outputLimiter<.0001f)outputLimiter=peak>1.f?.0001f:1.f;
-                finalL*=outputLimiter;finalR*=outputLimiter;
-            }else outputLimiter=1;
+                if(!std::isfinite(peak))peak=0;
+                if(peak>=limiterHold){limiterHold=peak;limiterHoldLeft=limiterHoldSamples;}
+                else if(limiterHoldLeft>0)--limiterHoldLeft;
+                else limiterHold+=limiterRelease*(peak-limiterHold);
+                limiterEnv+=(limiterHold>limiterEnv?limiterAttack:limiterRelease)*(limiterHold-limiterEnv);
+                if(!std::isfinite(limiterEnv))limiterEnv=limiterHold=0;
+                if(limiterEnv>kLimiterThreshold){const float g=kLimiterThreshold/limiterEnv;finalL*=g;finalR*=g;}
+                auto knee=[](float x){
+                    const float a=std::abs(x);if(a<=kLimiterKnee)return x;
+                    constexpr float range=kLimiterCeiling-kLimiterKnee;
+                    return std::copysign(kLimiterKnee+range*std::tanh((a-kLimiterKnee)/range),x);
+                };
+                finalL=knee(finalL);finalR=knee(finalR);
+            }else{limiterHold=limiterEnv=0;limiterHoldLeft=0;}
             // Panic gain applied last (pg advanced at sample start). Idle → pg stays 1.
             finalL=std::isfinite(finalL)?finalL*pg:0;finalR=std::isfinite(finalR)?finalR*pg:0;
             left[frame]=finalL;right[frame]=finalR;
