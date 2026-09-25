@@ -17,7 +17,7 @@ concurrency:
 jobs:
   standalone:
     name: Standalone
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 30
 
     steps:
@@ -37,7 +37,7 @@ jobs:
 
   plugins:
     name: AU + VST3
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 45
 
     steps:

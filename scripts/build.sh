@@ -53,8 +53,15 @@ cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 find "$APP_DIR/Contents/Resources" -maxdepth 1 -name 'Aurora*.json' -delete
 cp "$ROOT_DIR/Resources/AuroraFX.json" "$APP_DIR/Contents/Resources/AuroraFX.json"
 plutil -lint "$APP_DIR/Contents/Info.plist"
-xattr -cr "$APP_DIR"
-codesign --force --sign - "$APP_DIR"
+# On an iCloud-synced Desktop or Documents folder, File Provider can re-add FinderInfo to the
+# bundle between the clear and the signature ("resource fork, Finder information, or similar
+# detritus not allowed"). Clear and sign again when that race is lost.
+for attempt in 1 2 3; do
+    xattr -cr "$APP_DIR"
+    if codesign --force --sign - "$APP_DIR"; then break; fi
+    if [ "$attempt" = 3 ]; then exit 1; fi
+    sleep 1
+done
 codesign --verify "$APP_DIR"
 # File Provider can add FinderInfo to an app directory in Documents. The ZIP
 # excludes extended attributes so its extracted bundle verifies strictly too.

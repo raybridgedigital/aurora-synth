@@ -17,7 +17,7 @@ concurrency:
 jobs:
   baseline:
     name: Current Architecture Baseline
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -28,7 +28,7 @@ jobs:
 
   address-undefined:
     name: Baseline ASan + UBSan
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -41,7 +41,7 @@ jobs:
 
   thread:
     name: Baseline TSan
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - name: Checkout
