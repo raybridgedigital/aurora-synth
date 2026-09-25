@@ -1,3 +1,6 @@
+#include <cstdlib>
+#include <vector>
+#include <string>
 #include "SynthEngine.hpp"
 #include "Wavetable.hpp"
 #include "WavetableImport.hpp"
@@ -58,7 +61,8 @@ int main(){
     for(int i=0;i<1024;i++)sine[i]=.8f*sin(aurora::wt::tau*100*i/1024);
     bank=aurora::wt::make(sine.data(),1,1024);float high=0;for(int i=0;i<1024;i++)high=std::max(high,std::abs(bank->sample(i/1024.f,.02f,0,0,0)));assert(high<.0001f);
     puts("PASS: fundamental amplitude preserved and above-Nyquist harmonic suppressed.");
-    char path[]="/tmp/aurora-wavetable-test-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+    const char* tmp=std::getenv("TMPDIR");std::string pattern=std::string(tmp&&*tmp?tmp:"/tmp")+"/aurora-wavetable-test-XXXXXX"; // $TMPDIR first (sandboxes, CI)
+    std::vector<char> pathBuffer(pattern.begin(),pattern.end());pathBuffer.push_back(0);char* path=pathBuffer.data();int fd=mkstemp(path);assert(fd>=0);close(fd);
     for(int channels:{1,2}){writeWAV(path,512,channels);auto imported=readWavetableWAV(path,256);assert(imported.frames==2&&imported.error.empty());float sum=0,peak=0;for(auto x:imported.samples){sum+=x;peak=std::max(peak,std::abs(x));}assert(std::abs(sum)<.001f&&std::abs(peak-.85f)<.0001f);}
     writeWAV(path,513,1);assert(!readWavetableWAV(path,256).error.empty());
     writeWAV(path,256,1,true);assert(!readWavetableWAV(path,256).error.empty());

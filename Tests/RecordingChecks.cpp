@@ -6,9 +6,13 @@
 #include <cstdio>
 #include <string>
 #include <unistd.h>
+#include <vector>
+#include <cstdlib>
 int main(){
-    char directory[]="/tmp/aurora-recording-XXXXXX";assert(mkdtemp(directory));
-    std::string path=std::string(directory)+"/check.wav";
+    // Temporary files follow $TMPDIR (sandboxes and CI), falling back to /tmp.
+    const char* tmp=std::getenv("TMPDIR");std::string pattern=std::string(tmp&&*tmp?tmp:"/tmp")+"/aurora-recording-XXXXXX";
+    std::vector<char> directory(pattern.begin(),pattern.end());directory.push_back(0);assert(mkdtemp(directory.data()));
+    std::string path=std::string(directory.data())+"/check.wav";
     CFURLRef url=CFURLCreateFromFileSystemRepresentation(nullptr,(const UInt8*)path.data(),path.size(),false);
     AudioRecorder recorder;assert(recorder.start(url,48000)==noErr);
     std::array<float,480> left{},right{};

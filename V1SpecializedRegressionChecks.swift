@@ -6,6 +6,8 @@ import SwiftUI
 // before returning. Live NSHostingViews must not outlive the render: the next
 // model mutation publishes into the hosted SwiftUI graph, which traps on
 // headless CI runners (Trace/BPT trap 5) with no window server.
+/// UI snapshots go to the system temporary directory ($TMPDIR in sandboxes and CI).
+private func snapshotPath(_ name:String)->String{FileManager.default.temporaryDirectory.appendingPathComponent(name).path}
 @MainActor private func renderUIToPNG<V: View>(_ root: V, width: CGFloat, height: CGFloat, to path: String) {
     let host = NSHostingView(rootView: root)
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -124,8 +126,8 @@ import SwiftUI
         model.setOutputGain(24);precondition(model.outputGain==24 && aurora_get_global(15)==24)
         print("PASS: extended sound controls serialize, sanitize, undo/redo, reset on legacy load, and output boost survives patch browsing.")
         model.selectTheme(.copperOrange)
-        renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:"/private/tmp/aurora-upgrade-editor.png")
-        renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:"/private/tmp/aurora-upgrade-browser.png")
+        renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:snapshotPath("aurora-upgrade-editor.png"))
+        renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:snapshotPath("aurora-upgrade-browser.png"))
         precondition(model.collectionSounds.count == FactoryBank.all.count + model.userPresets.count)
         precondition(Set(FactoryBank.all.map(\.id)).count==FactoryBank.all.count)
         precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==FactoryBank.all.count)
@@ -327,8 +329,8 @@ import SwiftUI
         model.undo();precondition(!model.motionSettings.enabled)
         model.redo();precondition(model.motionSettings==designedMotion)
         model.selectedLayer=1;precondition(!model.motionSettings.enabled);model.selectedLayer=0
-        renderUIToPNG(MotionEnvelopePanel(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:900,to:"/private/tmp/aurora-motion-panel.png")
-        renderUIToPNG(WavetableSection(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:430,to:"/private/tmp/aurora-wavetable-panels.png")
+        renderUIToPNG(MotionEnvelopePanel(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:900,to:snapshotPath("aurora-motion-panel.png"))
+        renderUIToPNG(WavetableSection(m:model).padding(16).background(Color.black).environment(\.colorScheme,.dark),width:1120,height:430,to:snapshotPath("aurora-wavetable-panels.png"))
         print("PASS: embedded wavetable persistence, legacy reset, undo/redo, classic switch, and layer-specific wavetable matrix targets.")
         model.persist();model.shutdown()
         let restored=SynthModel(storageDirectory:folder)
@@ -381,7 +383,7 @@ import SwiftUI
         toolsModel.collection="Aurora";toolsModel.category="Bass";toolsModel.search="";toolsModel.browsePatch(1, panic: false)
         precondition(toolsModel.patch.category=="Bass");let browsedID=toolsModel.patch.id;toolsModel.browsePatch(1, panic: false);precondition(toolsModel.patch.id != browsedID)
         print("V1 REGRESSION CHECKPOINT: solo load reset and filtered browsing passed")
-        renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:"/private/tmp/aurora-layer-tools.png")
+        renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:snapshotPath("aurora-layer-tools.png"))
         print("V1 REGRESSION CHECKPOINT: layer tools UI smoke passed")
         toolsModel.selectedLayer=0;toolsModel.loadPreset(legacy, panic: false)
         toolsModel.changeMotion{$0.beats=8;$0.grid=16;$0.points=MotionShapes.points("Heartbeat")}
@@ -429,7 +431,7 @@ import SwiftUI
         toolsModel.changeXY{$0.y.macro=$0.x.macro}
         precondition(toolsModel.xySettings==savedXY)
         print("V1 REGRESSION CHECKPOINT: configurable XY edit undo redo passed")
-        renderUIToPNG(XYPadPanel(m:toolsModel).padding(16).background(Color.black).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1120,height:470,to:"/private/tmp/aurora-xy-pad.png")
+        renderUIToPNG(XYPadPanel(m:toolsModel).padding(16).background(Color.black).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1120,height:470,to:snapshotPath("aurora-xy-pad.png"))
         print("V1 REGRESSION CHECKPOINT: XY UI smoke passed")
         toolsModel.saveName="Creative tools saved";toolsModel.saveUserPreset()
         let themeEncoder=JSONEncoder();themeEncoder.outputFormatting=[.sortedKeys]
@@ -439,13 +441,13 @@ import SwiftUI
             toolsModel.selectTheme(theme)
             precondition(try! themeEncoder.encode(toolsModel.patch)==patchBeforeTheme)
             precondition(toolsModel.dirty==dirtyBeforeTheme)
-            renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:"/private/tmp/aurora-theme-\(theme.rawValue).png")
+            renderUIToPNG(ContentView(m:toolsModel),width:1440,height:900,to:snapshotPath("aurora-theme-\(theme.rawValue).png"))
         }
         print("V1 REGRESSION CHECKPOINT: theme iteration leaves patch untouched")
         toolsModel.loadPreset(legacy, panic: false);precondition(toolsModel.theme == .graphiteOrange)
         toolsModel.undo()
         let creativeID=toolsModel.patch.id
-        renderUIToPNG(CreativeToolsView(m:toolsModel),width:1008,height:748,to:"/private/tmp/aurora-creative-tools.png")
+        renderUIToPNG(CreativeToolsView(m:toolsModel),width:1008,height:748,to:snapshotPath("aurora-creative-tools.png"))
         print("V1 REGRESSION CHECKPOINT: creative tools UI smoke passed")
         toolsModel.shutdown()
         let creativeRestored=SynthModel(storageDirectory:folder.appendingPathComponent("LayerTools"))
