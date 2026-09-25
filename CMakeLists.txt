@@ -31,7 +31,7 @@ target_link_directories(Aurora PRIVATE /Library/Developer/CommandLineTools/usr/l
 target_link_options(Aurora PRIVATE "-Wl,-rpath,/usr/lib/swift")
 smtg_target_set_bundle(Aurora BUNDLE_IDENTIFIER com.raybridgedigital.aurora.vst3 COMPANY_NAME "Ray Bridge Digital")
 set_target_properties(Aurora PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER com.raybridgedigital.aurora.vst3 MACOSX_BUNDLE_BUNDLE_NAME Aurora MACOSX_BUNDLE_BUNDLE_VERSION 0.25.0 MACOSX_BUNDLE_SHORT_VERSION_STRING 0.25.0)
-smtg_target_add_plugin_resources(Aurora RESOURCES Resources/Aurora100.json Resources/AuroraPrism100.json Resources/AuroraNova100.json Resources/AuroraReference.json Resources/AuroraGB109.json)
+smtg_target_add_plugin_resources(Aurora RESOURCES Resources/AuroraFX.json)
 smtg_target_add_plugin_resources(Aurora RESOURCES Resources/PluginLicenses/VST3.txt Resources/PluginLicenses/AudioUnitSDK.txt)
 add_custom_command(TARGET Aurora POST_BUILD
     COMMAND /usr/bin/xattr -cr "$<TARGET_BUNDLE_DIR:Aurora>"

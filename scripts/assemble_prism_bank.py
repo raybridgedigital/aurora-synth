@@ -208,4 +208,5 @@ def assemble():
     (output/'Aurora Prism 100 Catalog.md').write_text('\n'.join(lines)+'\n')
     print('Assembled Prism: 100 unique performances, ten categories, 24 factory wavetables.')
 
-if __name__=='__main__':assemble()
+if __name__=="__main__":
+    raise SystemExit("Retired: this generator writes the classic factory banks, which are archived in archive/factory-banks and no longer ship. The module stays importable because live generators reuse its tables; build the current bank with scripts/assemble_modx_bank.py.")

@@ -77,4 +77,5 @@ def assemble():
     (output/"Aurora 100 Catalog.md").write_text("\n".join(lines))
     print("Assembled 100 unique patches: "+", ".join(f"{c} (10)" for c in CATEGORIES))
 
-if __name__=="__main__": assemble()
+if __name__=="__main__":
+    raise SystemExit("Retired: this generator writes the classic factory banks, which are archived in archive/factory-banks and no longer ship. The module stays importable because live generators reuse its tables; build the current bank with scripts/assemble_modx_bank.py.")

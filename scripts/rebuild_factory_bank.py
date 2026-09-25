@@ -365,4 +365,5 @@ def assemble():
     stats=collections.Counter(sum(v['values']['0'] for v in p['layers']) for p in patches)
     print(f'Spectrum: {len(patches)} unique sounds, 30 per category; layer counts {dict(stats)}; {len(trims)} measured trims.')
 
-if __name__=='__main__':assemble()
+if __name__=="__main__":
+    raise SystemExit("Retired: this generator writes the classic factory banks, which are archived in archive/factory-banks and no longer ship. The module stays importable because live generators reuse its tables; build the current bank with scripts/assemble_modx_bank.py.")

@@ -26,11 +26,10 @@ private func same(_ a:SoundPreset,_ b:SoundPreset)->Bool {
         let root=NSHostingView(rootView:ContentView(m:model));root.frame=NSRect(x:0,y:0,width:1480,height:940);root.layoutSubtreeIfNeeded()
         check(root.frame.width==1480 && root.frame.height==940,"root ContentView layout")
 
-        check(FactoryBank.expansion.count==0,"Aurora100 count")
-        check(FactoryBank.prism.count==0,"Prism count")
-        check(FactoryBank.nova.count==0,"Nova count")
-        check(FactoryBank.gb.count==60,"GB count")
-        check(FactoryBank.shimmer.count==0,"Shimmer count")
+        // The library is the current bank only; retired banks live in archive/factory-banks.
+        check(!FactoryBank.fxBank.isEmpty,"factory bank loads")
+        check(FactoryBank.all.count==FactoryBank.fxBank.count,"library is the current bank only")
+        check(FactoryBank.all.allSatisfy{sound in !FactoryBank.retiredPrefixes.contains{sound.id.hasPrefix($0)}},"no retired factory IDs")
         check(Set(FactoryBank.all.map(\.id)).count==FactoryBank.all.count,"duplicate factory IDs")
         check(Set(FactoryBank.all.map{$0.name.lowercased()}).count==FactoryBank.all.count,"duplicate factory names")
 

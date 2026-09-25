@@ -743,7 +743,8 @@ def build():
 def main():
     patches = build()
     assert len(patches) == 55, len(patches)
-    gb = json.loads((ROOT / 'Resources/AuroraGB109.json').read_text())
+    # Keep new ids/names distinct from the retired GB109 bank (archived, not shipped).
+    gb = json.loads((ROOT / 'archive/factory-banks/v0.25.0/AuroraGB109.json').read_text())
     taken_ids = {x['id'] for x in gb}
     taken_names = {x['name'].lower() for x in gb}
     seen_ids, seen_names = set(), set()

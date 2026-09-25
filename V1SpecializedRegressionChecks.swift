@@ -77,7 +77,7 @@ import SwiftUI
         precondition(SynthModel.restoredOutputGain(30,revision:3)==24,"Revision 3 custom output gain did not clamp to +24 dB")
         precondition(SynthModel.restoredOutputGain(12,revision:4)==12,"Revision 4 output gain was not preserved")
         print("PASS: output-gain migration fixtures.")
-        precondition(FactoryBank.all.count == 438,"Factory bank total is \(FactoryBank.all.count), expected 438")
+        precondition(!FactoryBank.all.isEmpty && FactoryBank.all.count == FactoryBank.fxBank.count,"Factory library is \(FactoryBank.all.count), expected the \(FactoryBank.fxBank.count)-patch current bank")
         print("PASS: factory bank total.")
         do {
             let singlePresetData=try JSONEncoder().encode(FactoryBank.all[0])
@@ -99,7 +99,9 @@ import SwiftUI
         // pipeline); layerNames covers the subset exposed as assignable control
         // targets (99). They are intentionally different lengths since 0.23.1.
         precondition(SynthModel.ranges.count==126 && ControlTarget.layerNames.count==99)
-        for ref in FactoryBank.references {
+        // The two-patch reference set was archived with the old banks; the same recall
+        // and round-trip contract now runs on the first factory sounds.
+        for ref in FactoryBank.all.prefix(2) {
             model.loadPreset(ref, panic: false)
             precondition(SynthModel.sanitized(ref) != nil)
             for l in 0..<4 {for p in 79..<99 {precondition(abs(Double(aurora_get_parameter(Int32(l),Int32(p)))-ref.layers[l][p])<0.0001)}}
@@ -124,20 +126,13 @@ import SwiftUI
         model.selectTheme(.copperOrange)
         renderUIToPNG(EditorView(m:model).padding(16).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1100,height:3400,to:"/private/tmp/aurora-upgrade-editor.png")
         renderUIToPNG(PatchBrowser(m:model,close:{}).environment(\.auroraPalette,model.theme.palette).environment(\.colorScheme,.dark).foregroundStyle(Color.white),width:1380,height:760,to:"/private/tmp/aurora-upgrade-browser.png")
-        precondition(model.collectionSounds.count == 60)
-        precondition(FactoryBank.prism.count == 0)
-        precondition(Set(FactoryBank.all.map(\.id)).count==60)
-        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==60)
-        precondition(FactoryBank.nova.count==0)
+        precondition(model.collectionSounds.count == FactoryBank.all.count + model.userPresets.count)
+        precondition(Set(FactoryBank.all.map(\.id)).count==FactoryBank.all.count)
+        precondition(Set(FactoryBank.all.map{$0.name.lowercased()}).count==FactoryBank.all.count)
         print("CHECKPOINT: factory count preconditions passed")
         model.search=""
-        // The Spectrum bank was replaced: its sounds now live inside the three
-        // main banks with `spectrum-` ids. The exact count is environment-dependent
-        // and purely content: the checked-in banks hold 270 of them, while CI's
-        // scripts/build.sh reruns rebuild_factory_bank.py first, which assigns a
-        // `spectrum-` id to all 300 generated patches (300 on CI). Assert nothing
-        // here — factory bank contents are being redone; engine behavior is
-        // verified by the sampled factory smoke below.
+        // Earlier banks (Spectrum, Prism, Nova, Shimmer, GB109) are archived in
+        // archive/factory-banks and no longer ship; the library is the current bank.
         // Aurora v1 factory contract: sampled engine smoke. Every 10th preset
         // (spread across all banks) goes through load + sanitize + round-trip +
         // macro/XY to verify the engine. Exhaustive per-patch validation is
@@ -175,21 +170,21 @@ import SwiftUI
             precondition(SynthModel.sanitized(model.patch) != nil)
         }
         print("V1 REGRESSION CHECKPOINT: factory engine smoke passed (sampled presets)")
-        model.search="Prism"
+        model.search="Tine"
         precondition(!model.library.isEmpty)
         model.search=""
-        for sound in FactoryBank.prism {
+        for sound in FactoryBank.all.filter({$0.category == "FM EP"}) {
             model.loadPreset(sound, panic: false)
             precondition(model.patch.id==sound.id && aurora_get_parameter(0,44)==Float(sound.layers[0][44]))
         }
-        print("V1 REGRESSION CHECKPOINT: Prism recall passed")
-        model.category="Pads"
-        precondition(model.library.count == FactoryBank.all.filter{$0.category == "Pads"}.count)
+        print("V1 REGRESSION CHECKPOINT: FM EP recall passed")
+        model.category="Pad/Choir"
+        precondition(model.library.count == FactoryBank.all.filter{$0.category == "Pad/Choir"}.count)
         model.category="All categories"
-        model.search="Apricot Solstice"
-        precondition(model.library.count == 1 && model.library[0].id == "spectrum-apricot-solstice")
-        model.search="Atlas Submarine"
-        precondition(model.library.count == 1 && model.library[0].id == "spectrum-atlas-submarine")
+        model.search="Felt & Timber"
+        precondition(model.library.count == 1 && model.library[0].id == "mx-felt-timber")
+        model.search="Tine Stage 76"
+        precondition(model.library.count == 1 && model.library[0].id == "mxep-tine-stage-76")
         model.search="no-match-interface-test"
         precondition(model.library.isEmpty)
         model.search=""

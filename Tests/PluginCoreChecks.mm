@@ -24,10 +24,11 @@ int main(){@autoreleasepool {
     assert(a.values[outputGainID]==9);
     static_assert(layerID(3,57)==231 && layerID(0,58)==6000 && layerID(3,78)==6404);
     static_assert(sendID(3,1)!=routeMaskID && sendID(3,2)!=routeChannelID);
-    for(NSString* file in @[@"Aurora100",@"AuroraPrism100",@"AuroraNova100",@"AuroraReference",@"AuroraGB109",@"AuroraFX"]){
+    for(NSString* file in @[@"AuroraFX"]){
         NSData* data=[NSData dataWithContentsOfFile:[NSString stringWithFormat:@"Resources/%@.json",file]];
-        // AuroraFX is the growing new bank: any count passes, every patch still gets tested below.
-        NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count==([file isEqualToString:@"AuroraGB109"]?60:[file isEqualToString:@"AuroraFX"]?bank.count:0));
+        // AuroraFX is the only shipped bank and grows as patches are authored: any
+        // non-empty count passes, and every patch is tested below.
+        NSArray* bank=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];assert(bank.count>0);
         for(NSDictionary* patch in bank){
             if(!a.setPatchJSON(json(patch).c_str(),true)){std::cerr<<"Rejected patch: "<<[patch[@"name"] UTF8String]<<std::endl;return 1;}
             a.setActual(transposeID,3);a.setActual(2000,.71);a.setActual(xyX,.23);a.setActual(xyY,.82);

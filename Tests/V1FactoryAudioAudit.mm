@@ -16,7 +16,7 @@
 // Build:
 // xcrun clang++ -std=c++20 -O2 -fobjc-arc Sources/SynthEngine.cpp \
 //   Tests/PatchBankAudit.mm -framework Foundation -I Sources -o build/patch-audit
-// Run: build/patch-audit Resources/Aurora100.json build/patch-audit-report.json
+// Run: build/patch-audit Resources/AuroraFX.json build/patch-audit-report.json
 
 namespace {
 constexpr double sampleRate = 48000;

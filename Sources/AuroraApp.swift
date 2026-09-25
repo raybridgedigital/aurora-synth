@@ -466,51 +466,26 @@ enum FactoryBank {
         return SoundPreset(id:id,name:name,category:category,detail:detail,layers:layers,
                            globals:effects,macros:Array(repeating:0.5,count:8))
     }
-    static let categoryOrder = ["Pads", "Bass", "Leads", "Keys", "Plucks", "Arps", "Textures", "Organs", "Brass & Strings", "Splits", "Templates", "FX", "2020s", "Shimmer"]
-    static let expansion: [SoundPreset] = {
-        guard let url = AuroraResources.bundle.url(forResource: "Aurora100", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let sounds = try? JSONDecoder().decode([SoundPreset].self, from: data),
-              sounds.count >= 100 else { return [] }
-        return sounds
-    }()
-    static let prism: [SoundPreset] = {
-        guard let url=AuroraResources.bundle.url(forResource:"AuroraPrism100",withExtension:"json"),
-              let data=try? Data(contentsOf:url),
-              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
-        return sounds
-    }()
-    static let nova: [SoundPreset] = {
-        guard let url=AuroraResources.bundle.url(forResource:"AuroraNova100",withExtension:"json"),
-              let data=try? Data(contentsOf:url),
-              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==100 else{return []}
-        return sounds
-    }()
-    static let gb: [SoundPreset] = {
-        guard let url=AuroraResources.bundle.url(forResource:"AuroraGB109",withExtension:"json"),
-              let data=try? Data(contentsOf:url),
-              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==60 else{return []}
-        return sounds
-    }()
-    static let shimmer: [SoundPreset] = {
-        guard let url=AuroraResources.bundle.url(forResource:"AuroraShimmer29",withExtension:"json"),
-              let data=try? Data(contentsOf:url),
-              let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data),sounds.count==29 else{return []}
-        return sounds
-    }()
-    static let references:[SoundPreset] = {
-        guard let url=AuroraResources.bundle.url(forResource:"AuroraReference",withExtension:"json"),let data=try? Data(contentsOf:url),let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
-        return sounds
-    }()
-    /// Brand-new bank (FX-only era). No strict count: it starts empty and grows
-    /// as new patches are authored. The 60 FX reference sounds live in `gb`.
+    // Library category order follows the factory bank (keyboard-first, MODX-style);
+    // categories only found in user sounds follow alphabetically.
+    static let categoryOrder = ["Piano", "Keyboard", "Organ", "Guitar", "Bass", "Strings", "Brass", "Woodwind", "Syn Lead", "Pad/Choir", "Syn Comp", "Chromatic Perc", "Sound FX", "Musical FX", "Ethnic", "FM EP"]
+    /// The factory library: the current authored bank (Resources/AuroraFX.json).
+    /// The earlier banks (Spectrum, Prism, Nova, Shimmer, GB109 and the 2-patch
+    /// reference set, 765 patches) are retired to archive/factory-banks/v0.25.0 and
+    /// are no longer bundled or loaded. No strict count: the bank grows as new
+    /// patches are authored.
     static let fxBank: [SoundPreset] = {
         guard let url=AuroraResources.bundle.url(forResource:"AuroraFX",withExtension:"json"),
               let data=try? Data(contentsOf:url),
               let sounds=try? JSONDecoder().decode([SoundPreset].self,from:data) else{return []}
         return sounds
     }()
-    static let all: [SoundPreset] = (expansion + prism + nova + gb + shimmer + fxBank).sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+    static let all: [SoundPreset] = fxBank.sorted{$0.name.localizedStandardCompare($1.name) == .orderedAscending}
+    /// First launch and retired-sound fallback: the bank's opening patch.
+    static var defaultSound: SoundPreset { fxBank.first ?? starter[0] }
+    /// ID prefixes of retired factory sounds. A saved session that still points at one
+    /// falls back to the default sound (user presets are never touched).
+    static let retiredPrefixes=["a100-","prism-","nova-","spectrum-","shimmer-","fm-","fx-","y2k-","reference-"]
     static let starter: [SoundPreset] = [
         make("velvet", "Velvet Horizon", "Pads", "Warm analog layers, slow movement, and a little room to breathe.",
              a:[1:2,2:1,7:1800,9:0.65,12:2.4,17:0.16,13:0.48,14:-0.2],
@@ -739,7 +714,7 @@ struct VoiceStatus:View {
     var syncingPlugin=false
     var lastPluginRevision:UInt64=UInt64.max
     var lastPluginMappingsData:Data?
-    @Published var patch = FactoryBank.all.first{$0.name=="Apricot Solstice"} ?? FactoryBank.all[0] {didSet{pluginMetadataChanged(oldValue)}}
+    @Published var patch = FactoryBank.defaultSound {didSet{pluginMetadataChanged(oldValue)}}
     @Published var userPresets: [SoundPreset] = []
     @Published var selectedLayer = 0
     @Published var screen = "Play"
@@ -1137,7 +1112,7 @@ struct VoiceStatus:View {
         backend.aurora_initialize()
         if !backend.isPlugin{restore()}else{restorePluginLibrary();syncPlugin()}
         restoreShapeLibrary()
-        if FactoryBank.expansion.isEmpty || FactoryBank.prism.isEmpty {
+        if FactoryBank.fxBank.isEmpty {
             notice="A factory sound bank could not be loaded. Rebuild or reopen the complete app bundle."
         }
         if !backend.isPlugin{applyPatch()}
@@ -1611,12 +1586,12 @@ struct VoiceStatus:View {
             keyboardOctave=max(-2,min(2,s.keyboardOctave ?? 0))
         }
         if let data=try? Data(contentsOf:folder.appendingPathComponent("presets.json")),let list=try? JSONDecoder().decode([SoundPreset].self,from:data){userPresets=list.compactMap{Self.sanitized($0)}}
-        // Retired factory sounds should not remain the startup sound after the
-        // Spectrum replacement. User sounds, including imports, remain intact.
-        let retiredFactory=patch.id.hasPrefix("a100-") || patch.id.hasPrefix("prism-") || patch.id.hasPrefix("nova-") || FactoryBank.starter.contains{$0.id==patch.id} || FactoryBank.references.contains{$0.id==patch.id}
-        if retiredFactory && !userPresets.contains(where:{$0.id==patch.id}) {
+        // Retired factory sounds should not remain the startup sound once their bank
+        // is archived. User sounds, including imports, remain intact.
+        let retiredFactory=FactoryBank.retiredPrefixes.contains{patch.id.hasPrefix($0)} || FactoryBank.starter.contains{$0.id==patch.id}
+        if retiredFactory && !userPresets.contains(where:{$0.id==patch.id}) && !FactoryBank.all.contains(where:{$0.id==patch.id}) {
             let master=patch.globals[0]
-            patch=FactoryBank.all.first{$0.name=="Apricot Solstice"} ?? FactoryBank.all[0]
+            patch=FactoryBank.defaultSound
             patch.globals[0]=master
         }
     }

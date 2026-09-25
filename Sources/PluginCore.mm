@@ -60,7 +60,7 @@ Core::Core():storage(std::make_unique<Storage>()){
         setActual(outputGainID,9);
         for(int ch=0;ch<16;ch++){values[midiBase+ch*130+7]=1;values[midiBase+ch*130+11]=1;values[midiBase+ch*130+129]=.5;}
         xyMacros[0]=0;xyMacros[1]=2;xyEnds[0]=xyEnds[1]=1;
-        NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"Aurora100.json"]];
+        NSData* data=[NSData dataWithContentsOfFile:[@(resourceDirectory().c_str()) stringByAppendingPathComponent:@"AuroraFX.json"]];
         NSArray* bank=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
         if(bank.count){NSData* patch=[NSJSONSerialization dataWithJSONObject:bank[0] options:0 error:nil];NSString* json=[[NSString alloc] initWithData:patch encoding:NSUTF8StringEncoding];setPatchJSON(json.UTF8String,true);}
         else {for(int l=0;l<4;l++)for(int p=0;p<APParameterCount;p++)setActual(layerID(l,p),p==0?(l==0):defaults[p]);for(int p=0;p<AGGlobalCount;p++){if(p==AGOutputGain)continue;setActual(globalBase+p,engine.getGlobal(p));}}
