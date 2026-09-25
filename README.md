@@ -10,6 +10,15 @@ The current tagged source release is `v0.25.0` (`b29e883`, 24 September 2026). I
 
 **Current validation boundary:** the local standalone 0.25.0 release build completed successfully before tagging. The locally installed AU and VST3 bundles remain **0.24.3**; the 0.25.0 plug-in source has not yet been rebuilt, reinstalled, and revalidated. GitHub CI for the 0.25.0 tag is not green: the app/plug-in jobs hit a Swift compiler type-check timeout, while native test jobs are missing FM-engine link symbols. See [SHARED_STATE.md](SHARED_STATE.md) and [DAW-INTEGRATION.md](DAW-INTEGRATION.md).
 
+## In development · lean factory library and real-time DSP fixes
+
+Unreleased work on top of 0.25.0 (see [CHANGELOG.md](CHANGELOG.md)):
+
+- **Factory library:** KiMiA now ships one bank, `Resources/AuroraFX.json` — 55 patches in 16 keyboard-first categories (Piano, Keyboard, Organ, Guitar, Bass, Strings, Brass, Woodwind, Syn Lead, Pad/Choir, Syn Comp, Chromatic Perc, Sound FX, Musical FX, Ethnic, FM EP). Regular patches use at most two layers so a future Dual Patch runs four layers in total; see [PATCH-DESIGN-RULES.md](PATCH-DESIGN-RULES.md).
+- **Archived, not deleted:** the earlier banks — Spectrum 300, Aurora 100 (with its FM sounds), Prism 100, Nova 100, Shimmer 29, GB109 and the two-patch reference set, 765 patches — are kept for history in [archive/factory-banks](archive/factory-banks/README.md) with their catalogs. They are no longer bundled or listed. Any archived bank can still be imported into **Your sounds** to audition it.
+- **Effects bypass:** a switched-off effect now fades out in 20 ms and then costs no DSP. This fixes a bug where a switched-off Reverb cleared its memory on every sample, costing ~27% of the 128-frame budget at 44.1 kHz with nothing playing.
+- **Voices:** redundant per-sample math is gone (bit-identical output), and decayed notes held by the sustain pedal free their voices. In an 8-bar passage with the pedal held, pianos and FM EPs now use about a third of the DSP they did, and plucked guitars about a seventh.
+
 The sections below are a chronological release archive. Older feature counts and verification totals describe the release named in their section and are not claims about the current v0.25.0 binary or plug-in installation.
 
 ## Aurora 0.23 · five-LFO modulation
@@ -135,7 +144,7 @@ Aurora includes **300 Spectrum factory sounds**, with 30 in each of ten categori
 
 X transforms timbre; Y shifts the layer balance. The six remaining macros control Motion, Space, Contour, Release, Width and Echo. Centered macro positions preserve each patch's authored settings. Drawable motion uses free or tempo-synced curves for filter, pan and wavetable movement, with destinations chosen per sound. Macro routes avoid base controls replaced by motion. Layer count and unison are restrained for the MacBook Air.
 
-See the [Spectrum catalog](Patch%20Banks/Aurora%20Spectrum%20300%20Catalog.md) for layer roles and playing notes, and the [preset archive](Patch%20Banks/Aurora%20Spectrum%20300%20Patches.zip) for portable copies. Spectrum replaces the older factory bank. Saved user sounds remain separate, with a small User flag in both browsers. The factory count excludes user saves.
+See the [Spectrum catalog](archive/factory-banks/catalogs/Aurora%20Spectrum%20300%20Catalog.md) for layer roles and playing notes, and the [preset archive](archive/factory-banks/catalogs/Aurora%20Spectrum%20300%20Patches.zip) for portable copies. Spectrum replaces the older factory bank. Saved user sounds remain separate, with a small User flag in both browsers. The factory count excludes user saves.
 
 ## Color themes · 0.14
 
@@ -187,7 +196,7 @@ The Prism update added 100 sounds to the original 112. Search **Prism** in the A
 
 Prism uses both wavetable oscillators, per-layer Sound Matrix movement, velocity-to-filter response, mod-wheel scanning and pressure-to-warp control. Layered designs combine complementary timbres; the ten splits divide at MIDI 60. Mono leads and basses use legato glide. Imported audio is not required.
 
-See [the complete Prism catalog](Patch%20Banks/Aurora%20Prism%20100%20Catalog.md) for individual playing suggestions. The grouped ZIP beside it contains all 100 portable presets. The build includes the bank automatically; the existing sounds and user saves remain available.
+See [the complete Prism catalog](archive/factory-banks/catalogs/Aurora%20Prism%20100%20Catalog.md) for individual playing suggestions. The grouped ZIP beside it contains all 100 portable presets. The build includes the bank automatically; the existing sounds and user saves remain available.
 
 ## Wavetable update · 0.9
 
@@ -279,7 +288,7 @@ This section catalogs the original 100-patch bank. The current `Aurora100.json` 
 
 At the original milestone, all 300 Spectrum sounds were bundled under **Aurora**. **Your sounds** contains saved and imported copies, visibly marked User; **All sounds** brings the collections together. Search matches names, categories, and descriptions. Favorites apply within the selected collection and category. Saving or importing a sound keeps its category and opens Your sounds.
 
-The [original 100-patch catalog](<Patch Banks/Aurora 100 Catalog.md>) describes that release's sounds. The [grouped patch archive](<Patch Banks/Aurora 100 Patches.zip>) contains those individual `.aurora.json` files for import or backup. It does not need to be imported into the current app.
+The [original 100-patch catalog](<archive/factory-banks/catalogs/Aurora 100 Catalog.md>) describes that release's sounds. The [grouped patch archive](<archive/factory-banks/catalogs/Aurora 100 Patches.zip>) contains those individual `.aurora.json` files for import or backup. It does not need to be imported into the current app.
 
 Arps play while you hold notes. Splits use MIDI notes 0–59 for the lower voice and 60–127 for the upper voice. On the Oxygen Pro 25, use its octave controls to reach either side, or route another keyboard to the same layers. The CK88 and MODX7+ provide more space for two-hand split playing. These are synthesized sounds, not acoustic instrument samples or Yamaha internal voices. Patch loading preserves the current Master volume.
 
@@ -303,12 +312,13 @@ At that milestone, Aurora had two LFOs per layer. The current architecture has f
 ```sh
 ./scripts/test.sh
 ./scripts/test.sh --bridge
-bash scripts/audit_patch_bank.sh
+xcrun clang++ -std=c++20 -O2 -fobjc-arc -I Sources Sources/SynthEngine.cpp Sources/FmEngine.cpp Tests/V1FactoryAudioAudit.mm -framework Foundation -o build/V1FactoryAudioAudit
+build/V1FactoryAudioAudit Resources/AuroraFX.json build/AuroraFX-audio-audit.json
 ```
 
 The first command builds and runs the offline C++ engine tests without opening an audio device. The optional `--bridge` mode also runs a read-only device enumeration probe when its source is present. It does not play audio or change system audio settings.
 
-The patch audit assembles the bank and renders all 100 patches through the real engine at 48 kHz, checking unique names and settings, categories, finite output, audible output, release behavior, eight-note velocity-127 chords for eight seconds, and Stop all notes. It writes `build/patch-audit-report.json`. All 100 passed with no duplicate audio hashes; the highest tested stress peak was 0.1671 at the bank's 25% reference Master. Short plucks naturally have a lower average level over a four-second held note. This is an automated audio check, not a subjective listening review or a measurement of hardware latency.
+The factory audio audit renders every patch of the current bank through the real engine (the CI job of the same name runs it). The historical 100-patch audit described next, `audit_patch_bank.sh`, is archived with its bank in `archive/scripts/`. At that milestone it assembled the bank and rendered all 100 patches through the real engine at 48 kHz, checking unique names and settings, categories, finite output, audible output, release behavior, eight-note velocity-127 chords for eight seconds, and Stop all notes. It writes `build/patch-audit-report.json`. All 100 passed with no duplicate audio hashes; the highest tested stress peak was 0.1671 at the bank's 25% reference Master. Short plucks naturally have a lower average level over a four-second held note. This is an automated audio check, not a subjective listening review or a measurement of hardware latency.
 
 Automated checks cannot establish how the instrument feels and sounds on the physical setup. Hardware validation still needs notes and pedals from each keyboard, three-controller routing, USB disconnect/reconnect, selected-output playback, and a sustained listening/load session on this M3 Mac. The specification's latency, memory, and thirty-minute stability targets are validation goals, not measurements from this first milestone.
 
@@ -334,9 +344,8 @@ User presets and session settings live in `~/Library/Application Support/Aurora/
 | `Sources/SynthEngine.hpp` and `.cpp` | Portable C++ synthesis engine |
 | `Tests/` | Offline engine checks and optional device probe |
 | `Resources/Info.plist` | Local macOS application metadata |
-| `Resources/PatchRecipes/` | Authored sound designs used by the bank assembler |
-| `Resources/Aurora100.json` | Complete bundled factory expansion |
-| `Patch Banks/` | Grouped portable presets and the full catalog |
+| `Resources/AuroraFX.json` | The factory library (the only bundled bank) |
+| `archive/factory-banks/` | Retired factory banks (v0.25.0) and their catalogs, kept for history |
 | `scripts/` | Reproducible build and verification commands |
 
 The interface and hardware integration use Apple frameworks directly; the first milestone does not use JUCE or CMake.

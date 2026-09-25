@@ -24,83 +24,64 @@ KiMiA (internal project lineage: Aurora) — native macOS synthesizer for Apple 
 - `.grok/` is owner-managed and must remain untracked. Never stage or commit it.
 - Do not infer approval to tag, push, install plug-ins, or alter local support data from an implementation or documentation request.
 
-### Named unfreeze in effect (25 September 2026)
+### Owner direction in effect (25 September 2026, Claude Code session)
 
-The owner directed implementation of two items, and that request is the unfreeze for exactly
-their scope. Nothing else is unfrozen, and no release action was taken or implied:
+After the 24 September gig (DSP at 100 %, crackling) the owner asked Claude Code, working in
+`~/Desktop/KiMiA by Claude/aurora-synth` on branch `claude/dsp-bypass-and-performance`, to
+assess and fix the FX-bypass/DSP problem, to improve the software (engine, effects, reliability)
+wherever it helps the gigging instrument, and to archive the old factory banks. Standing limits:
+no release, tag, push, plug-in installation or change to live support data without an explicit
+owner request. Other local folders (`~/Desktop/Aurora Source`, older builds, patch backups) are
+history/reference only; the uncommitted bypass edits in `~/Desktop/Aurora Source` (another
+model's work in progress, which did not compile) are superseded by this branch — do not apply them.
 
-1. **Master bypass / power toggles** for the shared and master FX panels, covering both the UI
-   and DSP silence gating.
-2. **Test infrastructure** — link `FmEngine.o` into every native test target that already
-   links `SynthEngine.o`, and make the benchmark passes opt-in.
+**Owner patch policy:** regular patches use at most two layers, so a future Dual Patch runs four
+layers in total. Three- and four-layer patches are for rare, exceptional designs only
+(PATCH-DESIGN-RULES.md rule 3; CPU budget in rule 8).
 
-Still frozen: the SwiftUI `ContentView.body` split, factory-bank re-baseline, plug-in
-rebuild/install/revalidation, Dual-Patch, release/tag/push, and the stale bank-count fixtures
-described below.
+## Branch `claude/dsp-bypass-and-performance` (25 September 2026, unpushed)
 
-## In-progress work (25 September 2026)
+Five commits on top of `63c0cc4`, each with its tests green:
 
-**Master FX power toggles — implemented, uncommitted.** `AGGlobalCount` is now **70**
-(was 60). Ten append-only power globals were added at IDs 60–69:
-`AGShimmerPower, AGDelayPower, AGReverbPower, AGChorusPower, AGPhaserPower, AGFlangerPower,
-AGTremPower, AGCrushPower, AGWahPower, AGCompPower`. Append-only, so every earlier global ID and
-every saved `patch.fx` key keeps its meaning; old patches simply have no `fx[60…69]` and
-default to powered on.
+1. **Voices (bit-identical).** Per-sample math that cannot change the result is skipped or hoisted
+   (exp2 of zero, sub sine at level 0, wheel vibrato at rest, tanh(Character gain) per lane,
+   per-layer shaping of free-running LFOs, hoisted SVF divisions/LFO steps/motion clocks, FM
+   operator order resolved at compile time, motion curve-0 segments skip pow). Verified sample by
+   sample against the previous engine on all 55 AuroraFX patches, 19 Dual Patch pairs, the 60
+   GB109 sounds and 96 FM variants. Behaviour changes: fully decayed sustain-0 **poly** voices held
+   by key/pedal are freed (mono/legato unchanged); quiet release tails update filter coefficients
+   every 16 samples (≤ 1.4e-6 difference).
+2. **True FX bypass.** Root cause of "DSP still at 100 % after bypass": a powered-off Reverb re-armed
+   its flush every sample and cleared 576 KB of rings 44,100×/s (27.7 % of the 44.1 kHz/128 budget
+   with nothing playing). Now: 20 ms S-curve fade, then zero DSP; memory wiped in bounded slices
+   (512 floats/frame) at block boundaries; an effect reopens only when clean; delay-line effects
+   fade what they record (removes flanger/phaser/delay re-enable clicks); auto-wah power applied at
+   the output. Steady-state audio bit-identical (patch FX settings and all-ten-on). Tests:
+   `trueBypass`, `bypassCost` (timing guard, skipped under sanitizers via `AURORA_SKIP_TIMING`).
+3. **Matrix screen crash fix.** Six-slot performance matrices (every factory patch) are padded to
+   ten; opening the Matrix screen after loading a factory sound crashed the app since 0.25.0.
+   Stale v1 test expectations refreshed (ten performance slots, collection "KiMiA", 70 globals).
+4. **Factory library = AuroraFX only.** 765 retired patches archived with catalogs, Nova generators,
+   Spectrum/reference audits and patch recipes in `archive/`; app/plug-in/CI/tests load only
+   `Resources/AuroraFX.json`; retired-ID sessions fall back to the default sound (Felt & Timber);
+   classic bank generators refuse to run.
+5. **Docs** (this file, README, CHANGELOG, PATCH-DESIGN-RULES rule 8 CPU budget).
 
-- **UI:** `Panel` gained an optional header accessory, and `FxPowerToggle` is wired into all ten
-  FX panel headers. `SynthModel.applyPatch` now pushes globals `16...69` (it stopped at 59).
-- **DSP:** one smoothed 0/1 gate per effect, advanced every sample, applied to every injection
-  point (input, regeneration, return). A closed gate is exact silence; the delay stops
-  regenerating and writes silence into its line, the Schroeder rings are cleared once the fade
-  has reached zero, and the compressor's makeup/gain-reduction both collapse to unity.
-  Bypass is click-free, and `prepare()` snapshots the toggles so a struck effect cannot leak
-  one fade of wet audio at engine start.
-- **Shipping default: only Delay and Reverb are powered.** The owner requires every other
-  effect to start off. All three default sites agree (`SynthEngine` constructor,
-  `PluginCore` `fallback[]`, `AuroraApp` `fxDefaults`): IDs 61/62 = 1, 60 and 63–69 = 0.
-  `masterFxPower` asserts this on a bare engine, so it cannot regress. Consequences handled:
-  `extendedEffects`, `phaserEffect`, `matrices` and `benchmark` now call a new
-  `powerOn()` helper, because they assert that chorus/phaser (and the shared-effect Matrix
-  destinations) change the audio. **Consequence to be aware of:** the frozen v1 factory banks
-  carry no `fx[60…69]` keys, so any bank patch that relied on shimmer/chorus/phaser/flanger/
-  tremolo/bitcrusher/auto-wah/compressor now needs an explicit `"<id>": 1` in its `fx` block to
-  keep that effect. Writing those keys into the banks is a separate, owner-gated resources change
-  that also interacts with the 463-sound re-baseline.
-- **Deliberately excluded:** the Play-screen house EQ. Its bands are session-sticky and not
-  patch data, and it is identity at 0 dB, so a patch-level power switch there would be
-  misleading. Per-layer `LayerSends.shimmerBypass` was also kept: it is a per-layer send mute,
-  semantically different from the master switch, and removing it would break patch decode.
-- **Verification:** `Tests/SynthEngineTests.cpp::masterFxPower` proves each toggle is a true
-  switch and that a struck effect renders the dry bus sample-accurately, alone and with all
-  ten struck together.
+**Measured on the owner's M3 MacBook Air (8 GB), 44.1 kHz/128 frames** (benchmark harness in
+`~/Desktop/KiMiA by Claude/bench`, outside the repo): idle with all FX off 27.7 % → 0.34 %;
+pedal-held 8-bar passage Stage Cedar 22 % → 6 %, Tine Stage 76 22 % → 8 %, Glass Twelve 27 % → 4 %;
+heaviest Dual Patch pair with 16 held keys ≈ 33 % mean / 50 % peak (was ≈ 65 %).
 
-**Latent plug-in bug found and fixed on the way.** `Sources/PluginParameters.hpp::globals[]`
-held 37 entries while `AGGlobalCount` was 60, so `Core::spec()` read past the end of the table
-for IDs 1037–1059 (the whole v0.25.0 FX block), and `PluginVST.mm` dereferenced
-`globals[p].name` across the same range while answering `getParameterInfo`. The table now
-covers all 70 globals, `scripts/generate_backend.py` carries the full range list, and
-`Tests/PluginCoreChecks.mm` holds a `static_assert` so the table can never fall short again.
-The generator now also refuses to run instead of silently truncating `layers[]`/`defaults[]`,
-which its stale `assemble_prism_bank.py` inputs would have done.
+**Gig reconstruction (v0.25.0 engine, set-list Spectrum patches, pedalled chords + melody):**
+Deepwater Pearls 82 % mean / 91 % median / 41 overrun blocks; effects were ~1 % of the load —
+four layers × unison × pedal filled the 64-voice pool. A 256-frame buffer does not help a
+sustained overload.
 
-**CI debt item 1 — FM test link: fixed locally, not yet re-run on CI.** `FmEngine.o` is now in
-`scripts/test.sh`, `scripts/test-baseline.sh`, `scripts/check_plugins.sh`,
-`scripts/audit_patch_bank.sh`, `check-interface.sh`, `check-v1-ab-comparison.sh`,
-`check-v1-specialized-regression.sh`, and the specialized-regression workflow. Verified locally:
-`scripts/test.sh` green, `scripts/build.sh` green, `scripts/test-baseline.sh` compiles, links
-and runs its native half. The `ContentView.body` compile risk is untouched.
-
-**Found while fixing the test runner:** `scripts/test.sh` could not run at all on macOS's
-`/bin/bash` 3.2 — `set -u` plus `"${SANITIZER_FLAGS[@]}"` on an empty array aborts before any
-compilation. Sanitizer flags are now appended only when non-empty.
-
-**Still blocking a full green run — pre-existing, owner decision needed.** `Aurora100.json`
-contains 125 patches in the committed tree, but `BaselineChecks.swift` and
-`Tests/PluginCoreChecks.mm` still assert 100, so `test-baseline.sh`'s last step and
-`check_plugins.sh` fail on that fixture count. This is the same drift already recorded as the
-463-sound inventory re-baseline item; it is unrelated to the power-toggle work and was left
-alone.
-
+**Local validation on the branch:** `scripts/test.sh` green; `scripts/test-baseline.sh` green
+(red on `63c0cc4`); `check-v1-specialized-regression.sh` green (crashed on `63c0cc4`);
+`check-v1-ab-comparison.sh` green; `Tests/PluginCoreChecks.mm` green on all 55 patches;
+`Tests/V1FactoryAudioAudit.mm` on AuroraFX: 55 patches, 0 failures. Not run: AU/VST3 build,
+validator, auval (plug-in build tooling), GitHub CI.
 
 ## Current release — v0.25.0
 
@@ -124,25 +105,18 @@ All four jobs associated with the v0.25.0 push failed:
 
 Do not describe v0.25.0 CI as passing. These failures are recorded validation debt; code remediation is frozen pending an explicit unfreeze.
 
-**Local remediation status (25 September 2026, uncommitted).** The three "missing FM-engine
-symbols" failures and the specialized-regression factory-audit link are fixed in the working
-tree and verified locally (see the in-progress section). The Product Smoke Swift
-`ContentView.body` timeout is **not** addressed, and no CI run has been triggered. Treat all
-four jobs as still red until the owner reviews and commits this work.
+**Remediation status (25 September 2026).** The "missing FM-engine symbols" link failures are
+fixed in `main` (`842ff85`). Branch `claude/dsp-bypass-and-performance` additionally makes the
+baseline and specialized-regression suites pass locally (see the branch section). The Product
+Smoke Swift `ContentView.body` timeout is **not** addressed and no CI run has been triggered:
+treat all four jobs as red until a run proves otherwise.
 
 ### Factory-bank inventory
 
-Current resource counts:
-
-- `Aurora100.json`: 125
-- `AuroraPrism100.json`: 100
-- `AuroraNova100.json`: 100
-- `AuroraGB109.json`: 109
-- `AuroraShimmer29.json`: 29
-- Five-bank v1 audit inventory: **463**
-- Separate Spectrum bank: 300
-
-The **438** total in v0.22-era documentation was accurate for the historical five-bank snapshot (100+100+100+109+29). The current 463-sound inventory still requires a clean full audit/re-baseline; the historical 438-pass result must not be presented as current certification.
+- Shipped: `Resources/AuroraFX.json` — 55 patches (48 single-layer, 7 two-layer), 16 categories.
+- Archived (not shipped, not loaded): `archive/factory-banks/v0.25.0/` — Spectrum 300, Aurora 100
+  (incl. 25 FM), Prism 100, Nova 100, Shimmer 29, GB109, Reference 2 = 765 patches, plus catalogs.
+  The historical 438/463-sound audits and the re-baseline item are obsolete.
 
 ### Plug-ins and hosts
 
@@ -166,14 +140,23 @@ Authoritative current documents:
 
 ## Pending queue
 
-1. **v0.25.0 CI remediation — highest priority technical debt:** split the oversized SwiftUI `body` expression and add `FmEngine.cpp` to every native test link. **The `FmEngine.cpp` half is done in the working tree and locally verified; the `body` split is untouched and remains frozen.** Do not re-run or describe CI as green until the owner commits and the workflows run.
-2. **Current 463-sound factory audit/re-baseline:** owner-triggered; the old library wipe remains intentionally deferred so the instrument is never shipped empty. Also resolves the stale `Aurora100 count == 100` literals in `BaselineChecks.swift` and `Tests/PluginCoreChecks.mm`, which now fail against the committed 125-patch bank.
-3. **v0.25.0 plug-in rebuild/install/revalidation:** source metadata is current, but installed bundles remain 0.24.3.
-4. **Dual-patch live:** locked design, not implemented; parked until explicitly unfrozen.
-5. **Hardware validation:** owner-deferred. Original gates remain three-controller operation, pedals/ownership, reconnect/hot-plug, external clock, 30-minute and two-hour runs, latency, memory, and exact output/hub setup.
+1. **Owner review of branch `claude/dsp-bypass-and-performance`** — play-test on the CK88 rig
+   (pedalled pianos/EPs, Dual-Patch-style layering, toggling effects live), then decide on
+   merge/push. Nothing is pushed.
+2. **CI remediation:** the Swift `ContentView.body` type-check timeout (Product Smoke) is untouched.
+   `FmEngine.o` links are in `main` since `842ff85`. No CI run has happened on the branch.
+3. **Plug-in rebuild/install/revalidation:** installed AU/VST3 bundles are 0.24.3 and carry the
+   Matrix crash and the old bypass; rebuild after owner approval.
+4. **Dual Patch live:** locked design, not implemented. The engine now leaves headroom for it
+   (see PATCH-DESIGN-RULES.md rule 8).
+5. **Hardware validation:** owner-deferred. Gates: three-controller operation, pedals/ownership,
+   reconnect/hot-plug, external clock, 30-minute and two-hour runs (thermal: fanless MacBook Air),
+   latency, memory, exact output/hub setup.
 6. **Public distribution:** Developer ID signing/notarization and clean-machine install.
-7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora; domain/trademark administration and deeper rename tiers are parked.
-8. **Optional EP cleanup:** Solar Tine, Ballad Tine, Felt Cinema Tine, and Wurli Coals still hold sustain; conversion to natural EP decay/move to FM EP requires a separate owner decision.
+7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora.
+8. **Effects sound quality (proposal, needs owner audition):** the Schroeder reverb and grain
+   shimmer are the oldest DSP in the chain; any algorithm change alters every patch that uses
+   them, so it must be auditioned before it replaces the current sound.
 
 The original specification's sampler/granular engine, sample import/library management, microtuning/MPE, and optional hardware-audio/Aggregate Device workflows remain later scope, not active queue items.
 
