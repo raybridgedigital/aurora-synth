@@ -36,10 +36,12 @@ SANITIZER_FLAGS=()
 case "${AURORA_SANITIZER:-none}" in
     none|"") ;;
     address-undefined)
+        export AURORA_SKIP_TIMING=1 # relative CPU guards are meaningless under instrumentation
         OPTIMIZATION="-O1"
         SANITIZER_FLAGS=(-g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined)
         ;;
     thread)
+        export AURORA_SKIP_TIMING=1
         OPTIMIZATION="-O1"
         SANITIZER_FLAGS=(-g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread)
         ;;

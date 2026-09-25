@@ -308,15 +308,28 @@ struct SynthEngine::Impl {
     float crushHoldL=0,crushHoldR=0; int crushCounter=0;
     float duckEnv=0;
     float compEnv=0;
-    // Master FX power gates (AGShimmerPower…AGCompPower). Each is a smoothed 0/1
-    // gain driven by its toggle: 0 = the effect is out of the signal path, 1 = live.
-    // Every injection point of an effect is scaled by its gate, so a closed gate is
-    // exact silence in the output and the effect's regeneration starves to zero
-    // instead of holding a tail. verbFlush records "power went off" so the Schroeder
-    // room rings can be emptied once the fade has already reached zero.
+    // Master FX power (AGShimmerPower…AGCompPower). Switching an effect off fades its
+    // wet contribution over a 20 ms S-curve; once the fade reaches zero the effect runs
+    // no DSP at all. Its memory (delay lines, rings) is then wiped in bounded slices at
+    // block boundaries, so switching it back on starts from silence without a large
+    // memset on the audio thread. An effect cannot reopen until its wipe has finished.
+    enum FxSlot:int{FxShimmer=0,FxDelay,FxReverb,FxChorus,FxPhaser,FxFlanger,FxTrem,FxCrush,FxWah,FxComp,FxSlotCount};
+    static constexpr float kFxFadeSeconds=.02f;
+    static constexpr size_t kFxWipeFloatsPerFrame=512; // ~2 KB per frame: a few µs per block
+    struct FxPowerState{float ramp=1;bool dirty=false;int wipeStage=0;size_t wipePos=0;};
+    std::array<FxPowerState,FxSlotCount> fxPower{};
+    bool delayResume=false;
+    // Effect gains: the S-curve of each ramp, applied at every injection point.
     float shimPower=1,delayPower=1,verbPower=1,chorusPower=1,phaserPower=1;
     float flangerPower=1,tremPower=1,crushPower=1,wahPower=1,compPower=1;
-    bool verbFlush=false;
+    static float fxCurve(float ramp){return ramp*ramp*(3-2*ramp);}
+    float& fxGain(int slot){
+        switch(slot){
+            case FxShimmer:return shimPower;case FxDelay:return delayPower;case FxReverb:return verbPower;
+            case FxChorus:return chorusPower;case FxPhaser:return phaserPower;case FxFlanger:return flangerPower;
+            case FxTrem:return tremPower;case FxCrush:return crushPower;case FxWah:return wahPower;default:return compPower;
+        }
+    }
     std::atomic<float> gainReduction{0};
     std::array<Comb,8> combs{}; std::array<Allpass,4> allpasses{};
     size_t delayPosition=0,chorusPosition=0; float chorusPhase=0,delaySamples=24000,master=.25f,outputGain=1,outputLimiter=1;
@@ -447,6 +460,56 @@ struct SynthEngine::Impl {
         for(auto& c:shimmerCombs)c.clear();for(auto& a:shimmerAllpasses)a.clear();
         outputLimiter=1.f;
         delayPosition=chorusPosition=0;
+        for(auto& f:fxPower){f.dirty=false;f.wipeStage=0;f.wipePos=0;}
+    }
+    // Scalar state of one effect (read/write positions, envelopes, filter memories).
+    void resetEffectState(int slot) {
+        switch(slot){
+            case FxShimmer:
+                for(auto& c:shimmerCombs){c.position=0;c.damp=0;}for(auto& a:shimmerAllpasses)a.position=0;
+                shimmerWrite=shimmerPreWrite=0;shimmerToneStateL=shimmerToneStateR=0;shimmerFbL=shimmerFbR=0;
+                shimmerEarlyStateL=shimmerEarlyStateR=0;
+                for(int i=0;i<3;i++){shimmerGrainL[i]=shimmerGrainR[i]=0;shimmerReadL[i]=shimmerReadR[i]=0;}
+                break;
+            case FxDelay:delayToneL=delayToneR=0;duckEnv=0;break;
+            case FxReverb:for(auto& c:combs){c.position=0;c.damp=0;}for(auto& a:allpasses)a.position=0;break;
+            case FxPhaser:for(auto& channel:phaserState)channel.fill(0);phaserFeedback.fill(0);break;
+            case FxFlanger:flangerFBL=flangerFBR=0;break;
+            case FxCrush:crushHoldL=crushHoldR=0;crushCounter=0;break;
+            case FxWah:wahEnv=0;wahMixS=0;wahLP.fill(0);wahBP.fill(0);break;
+            case FxComp:compEnv=0;break;
+            default:break;
+        }
+    }
+    // Bounded wipe of a silent effect's memory. Returns true once it is fully clean.
+    // Large rings are cleared across several blocks, `budget` floats at a time.
+    bool wipeEffect(int slot,size_t& budget) {
+        auto& f=fxPower[size_t(slot)];
+        std::array<std::pair<float*,size_t>,12> spans{};int count=0;
+        auto add=[&](float* data,size_t size){spans[size_t(count++)]={data,size};};
+        switch(slot){
+            case FxShimmer:
+                add(shimmerBufL.data(),shimmerSize);add(shimmerBufR.data(),shimmerSize);
+                add(shimmerPreL.data(),shimmerPredelaySize);add(shimmerPreR.data(),shimmerPredelaySize);
+                for(auto& c:shimmerCombs)add(c.data.data(),c.data.size());
+                for(auto& a:shimmerAllpasses)add(a.data.data(),a.data.size());
+                break;
+            case FxDelay:add(delayL.data(),delaySize);add(delayR.data(),delaySize);break;
+            case FxReverb:for(auto& c:combs)add(c.data.data(),c.data.size());for(auto& a:allpasses)add(a.data.data(),a.data.size());break;
+            case FxChorus:add(chorusL.data(),chorusSize);add(chorusR.data(),chorusSize);break;
+            case FxFlanger:add(flangerBufL.data(),flangerBufL.size());add(flangerBufR.data(),flangerBufR.size());break;
+            default:break;
+        }
+        while(f.wipeStage<count){
+            auto [data,size]=spans[size_t(f.wipeStage)];
+            const size_t n=std::min(size-f.wipePos,budget);
+            std::fill_n(data+f.wipePos,n,0.f);f.wipePos+=n;budget-=n;
+            if(f.wipePos<size)return false;
+            f.wipePos=0;++f.wipeStage;
+        }
+        resetEffectState(slot);
+        f.wipeStage=0;f.wipePos=0;f.dirty=false;
+        return true;
     }
     void clearSound() {
         // Full reset (prepare / device change): performance + FX under known stop.
@@ -583,12 +646,12 @@ struct SynthEngine::Impl {
         shimmerWrite=shimmerPreWrite=0;
         // Power gates restart at their parameter value so a bypassed effect cannot
         // leak one fade-length of wet audio at engine start or a device change.
-        shimPower=globals[AGShimmerPower].load();delayPower=globals[AGDelayPower].load();
-        verbPower=globals[AGReverbPower].load();chorusPower=globals[AGChorusPower].load();
-        phaserPower=globals[AGPhaserPower].load();flangerPower=globals[AGFlangerPower].load();
-        tremPower=globals[AGTremPower].load();crushPower=globals[AGCrushPower].load();
-        wahPower=globals[AGWahPower].load();compPower=globals[AGCompPower].load();
-        verbFlush=false;
+        // clearSound() above has already emptied every effect.
+        for(int i=0;i<FxSlotCount;i++){
+            auto& f=fxPower[size_t(i)];
+            f.ramp=globals[AGShimmerPower+i].load()>=.5f?1.f:0.f;f.dirty=false;f.wipeStage=0;f.wipePos=0;
+            fxGain(i)=fxCurve(f.ramp);
+        }
     }
     void requestPanic() {
         // Generation tagging also rejects a producer that reserved a queue slot
@@ -1053,6 +1116,37 @@ struct SynthEngine::Impl {
         float lfoStepTempo=std::numeric_limits<float>::quiet_NaN();
         std::array<std::array<float,5>,kLayers> lfoStep{};
         std::array<double,kLayers> motionStep{};
+        float delayTarget=0; // delay time in samples (tempo-synced or free), refreshed with the tempo
+        // House EQ and compressor settings are block constants (globals move at block boundaries).
+        const float eqLowG=std::pow(10.f,global[AGEqLow]/20.f),eqMidG=std::pow(10.f,global[AGEqMid]/20.f),eqHighG=std::pow(10.f,global[AGEqHigh]/20.f);
+        const float eqLowC=std::exp(-2.f*pi*180.f/float(sampleRate)),eqMidC=std::exp(-2.f*pi*1200.f/float(sampleRate)),eqHighC=std::exp(-2.f*pi*5000.f/float(sampleRate));
+        const float compThreshold=std::clamp(global[AGCompThreshold],-60.f,0.f);
+        const float compRatio=std::max(1.f,std::clamp(global[AGCompRatio],1.f,12.f));
+        const float compMakeup=global[AGCompAuto]>=.5f ? std::clamp(-compThreshold*(1.f-1.f/compRatio)*.7f,0.f,12.f) : std::clamp(global[AGCompMakeup],0.f,18.f);
+        // Master FX power: a silent effect that still holds audio is wiped a slice at a
+        // time; an effect opens only once clean; the target of every switch is fixed for
+        // the block, so only effects that are mid-fade need per-sample work.
+        const float fxStep=float(1/(sampleRate*kFxFadeSeconds));
+        std::array<float,FxSlotCount> fxTarget{};uint32_t fxMoving=0;
+        {
+            size_t wipeBudget=size_t(frames)*kFxWipeFloatsPerFrame;
+            for(int i=0;i<FxSlotCount;i++){
+                auto& f=fxPower[size_t(i)];
+                if(f.ramp==0.f&&f.dirty)wipeEffect(i,wipeBudget);
+                const bool opening=f.ramp==0.f&&!f.dirty&&global[AGShimmerPower+i]>=.5f;
+                const float target=global[AGShimmerPower+i]>=.5f&&!(f.ramp==0.f&&f.dirty)?1.f:0.f;
+                fxTarget[size_t(i)]=target;
+                if(f.ramp!=target)fxMoving|=1u<<i;
+                if(opening){
+                    // Resume parameter smoothers at their targets instead of gliding from
+                    // values frozen when the effect went idle.
+                    if(i==FxPhaser)phaserMix=global[AGPhaserMix];
+                    if(i==FxFlanger)flangerMix=global[AGFlangerMix];
+                    if(i==FxDelay)delayResume=true; // jump to the current delay time on first use
+                }
+                if(f.ramp>0.f||target>0.f)f.dirty=true; // it processes audio this block
+            }
+        }
         for(uint32_t frame=0;frame<frames;frame++,sampleCounter++) {
             // Advance panic envelope first so this sample's bus multiply is already correct.
             float pg=1.f;
@@ -1067,6 +1161,14 @@ struct SynthEngine::Impl {
             if(externalClock&&clockBPM>0)global[AGTempo]=clockBPM.load(std::memory_order_relaxed);
             if(!(global[AGTempo]==lfoStepTempo)){
                 lfoStepTempo=global[AGTempo];
+                constexpr float divisions[8]={1,.5f,.25f,2,.75f,1.5f,1.f/3,2.f/3};
+                if(global[AGDelaySync]>=.5f){
+                    int div=std::clamp(int(std::lround(global[AGDelayTiming])),0,7);
+                    float tempo=std::max(30.f,global[AGTempo]);
+                    delayTarget=float(sampleRate*60.0/tempo)*divisions[div];
+                }else
+                    delayTarget=float(sampleRate)*std::clamp(global[AGDelayTimeMs],1.f,2000.f)*.001f;
+                if(!std::isfinite(delayTarget))delayTarget=float(sampleRate)*.375f;
                 for(int l=0;l<kLayers;l++){
                     for(int o=0;o<5;o++)lfoStep[l][o]=lfoRate(layers[l].p,o)/float(sampleRate);
                     const auto& motion=layers[l].motion;
@@ -1324,37 +1426,35 @@ struct SynthEngine::Impl {
                 sendSL+=v.lastL*layer.shimmerSend;sendSR+=v.lastR*layer.shimmerSend;
             }
             for(auto& t:tails)if(t.remaining>0){float fade=t.remaining/tailLength;if(activeSolo<0||activeSolo==t.layer){outL+=t.left*fade;outR+=t.right*fade;sendDL+=t.left*fade*layers[t.layer].delaySend;sendDR+=t.right*fade*layers[t.layer].delaySend;sendRL+=t.left*fade*layers[t.layer].reverbSend;sendRR+=t.right*fade*layers[t.layer].reverbSend;sendSL+=t.left*fade*layers[t.layer].shimmerSend;sendSR+=t.right*fade*layers[t.layer].shimmerSend;}--t.remaining;}
-            // ---- Master FX power gates ----
-            // One smoothed 0/1 gain per effect, advanced every sample so toggling a
-            // panel's power is a short fade rather than a step. Each effect below
-            // scales its injection points (input, regeneration and return) by its
-            // gate, so a closed gate is exact silence in the stereo bus.
-            shimPower+=smooth*((global[AGShimmerPower]>=.5f?1.f:0.f)-shimPower);
-            delayPower+=smooth*((global[AGDelayPower]>=.5f?1.f:0.f)-delayPower);
-            verbPower+=smooth*((global[AGReverbPower]>=.5f?1.f:0.f)-verbPower);
-            chorusPower+=smooth*((global[AGChorusPower]>=.5f?1.f:0.f)-chorusPower);
-            phaserPower+=smooth*((global[AGPhaserPower]>=.5f?1.f:0.f)-phaserPower);
-            flangerPower+=smooth*((global[AGFlangerPower]>=.5f?1.f:0.f)-flangerPower);
-            tremPower+=smooth*((global[AGTremPower]>=.5f?1.f:0.f)-tremPower);
-            crushPower+=smooth*((global[AGCrushPower]>=.5f?1.f:0.f)-crushPower);
-            wahPower+=smooth*((global[AGWahPower]>=.5f?1.f:0.f)-wahPower);
-            compPower+=smooth*((global[AGCompPower]>=.5f?1.f:0.f)-compPower);
-            if(global[AGReverbPower]<.5f)verbFlush=true;
+            // ---- Master FX power ----
+            // Targets are fixed for the block. Only effects in the middle of a fade move.
+            if(fxMoving){
+                for(int i=0;i<FxSlotCount;i++)if(fxMoving&(1u<<i)){
+                    auto& f=fxPower[size_t(i)];const float target=fxTarget[size_t(i)];
+                    f.ramp=target>f.ramp?std::min(target,f.ramp+fxStep):std::max(target,f.ramp-fxStep);
+                    fxGain(i)=fxCurve(f.ramp);
+                    if(f.ramp==target)fxMoving&=~(1u<<i);
+                }
+            }
+            // Every effect below runs only while its gain is above zero. A powered-off
+            // effect whose fade has finished costs nothing; its gain is exactly zero, so
+            // skipping it leaves the bus exactly as the gated code would have.
+            // Effects built on delay lines also fade what they record: a line reopened
+            // after a wipe then fills gradually, so its first repeat cannot step in.
+            // At full power the gain is exactly 1 and the signal path is unchanged.
             // The chorus, delay and Schroeder room are shared stereo sends.
-            chorusL[chorusPosition]=outL;chorusR[chorusPosition]=outR;
-            // Chorus stays powered out of the path by keeping its delay line warm:
-            // the write and pointer advance run always, only the wet return is gated.
-            if(chorusPower>1e-4f) {
+            if(chorusPower>0.f) {
+                chorusL[chorusPosition]=outL*chorusPower;chorusR[chorusPosition]=outR*chorusPower;
                 float chorusDelayL=float(sampleRate)*(.009f+.0028f*global[AGChorusDepth]*std::sin(tau*chorusPhase));
                 float chorusDelayR=float(sampleRate)*(.011f+.0028f*global[AGChorusDepth]*std::sin(tau*(chorusPhase+.25f)));
                 outL+=delayed(chorusL,chorusPosition,chorusDelayL)*global[AGChorusMix]*.5f*chorusPower;
                 outR+=delayed(chorusR,chorusPosition,chorusDelayR)*global[AGChorusMix]*.5f*chorusPower;
+                chorusPosition=(chorusPosition+1)%chorusSize;chorusPhase+=global[AGChorusRate]/float(sampleRate);if(chorusPhase>=1)chorusPhase-=1;
             }
-            chorusPosition=(chorusPosition+1)%chorusSize;chorusPhase+=global[AGChorusRate]/float(sampleRate);if(chorusPhase>=1)chorusPhase-=1;
             // Four swept all-pass stages per channel form moving cancellation
             // notches when blended with the dry signal. Coefficients stay stable.
-            phaserMix+=smooth*(global[AGPhaserMix]-phaserMix);
-            if(phaserPower>1e-4f) {
+            if(phaserPower>0.f) {
+                phaserMix+=smooth*(global[AGPhaserMix]-phaserMix);
                 if((sampleCounter&15)==0) {
                     for(int channel=0;channel<2;channel++) {
                         float sweep=.5f+.5f*global[AGPhaserDepth]*std::sin(tau*(phaserPhase+channel*.18f));
@@ -1372,26 +1472,28 @@ struct SynthEngine::Impl {
                 for(int channel=0;channel<2;channel++)phaserFeedback[channel]=std::tanh(phased[channel]);
                 outL+=phaserMix*.5f*(phased[0]-outL)*phaserPower;
                 outR+=phaserMix*.5f*(phased[1]-outR)*phaserPower;
-            } else phaserFeedback.fill(0);
-            phaserPhase+=global[AGPhaserRate]/float(sampleRate);if(phaserPhase>=1)phaserPhase-=1;
+                phaserPhase+=global[AGPhaserRate]/float(sampleRate);if(phaserPhase>=1)phaserPhase-=1;
+            }
             // ---- 0.25.0 inserts: flanger → tremolo/pan/rotary → auto-wah → bitcrusher ----
-            {
+            if(flangerPower>0.f) {
                 flangerMix+=smooth*(global[AGFlangerMix]-flangerMix);
-                if(flangerPower>1e-4f && flangerMix>1e-3f) {
+                if(flangerMix>1e-3f) {
                     float dep=std::clamp(global[AGFlangerDepth],0.f,1.f);
                     float fb=panicFxStarved?0.f:std::clamp(global[AGFlangerFeedback],0.f,.9f);
                     float dL=float(sampleRate)*(.0009f+.0041f*dep*(.5f+.5f*std::sin(tau*flangerPhase)));
                     float dR=float(sampleRate)*(.0009f+.0041f*dep*(.5f+.5f*std::sin(tau*(flangerPhase+.25f))));
                     float inL=outL+flangerFBL,inR=outR+flangerFBR;
                     if(!std::isfinite(inL))inL=outL; if(!std::isfinite(inR))inR=outR;
-                    flangerBufL[flangerPos]=inL;flangerBufR[flangerPos]=inR;
+                    flangerBufL[flangerPos]=inL*flangerPower;flangerBufR[flangerPos]=inR*flangerPower;
                     float fL=delayed(flangerBufL,flangerPos,dL),fR=delayed(flangerBufR,flangerPos,dR);
                     if(!std::isfinite(fL))fL=0; if(!std::isfinite(fR))fR=0;
                     flangerFBL=std::tanh(fL)*fb*flangerPower;flangerFBR=std::tanh(fR)*fb*flangerPower;
                     if(++flangerPos>=flangerBufL.size())flangerPos=0;
                     outL+=fL*flangerMix*flangerPower;outR+=fR*flangerMix*flangerPower;
                     flangerPhase+=global[AGFlangerRate]/float(sampleRate);if(flangerPhase>=1)flangerPhase-=1;
-                } else if(flangerPower<=1e-4f) {flangerFBL=flangerFBR=0;}
+                }
+            }
+            if(tremPower>0.f) {
                 // Tremolo/pan/rotary is a pure gain stage: gating its depth to zero
                 // returns exactly unity, so bypass restores the untouched dry bus.
                 float tMix=std::clamp(global[AGTremMix],0.f,1.f)*tremPower;
@@ -1404,8 +1506,14 @@ struct SynthEngine::Impl {
                     else if(mode==2){outL*=1.f-d*(.5f+.5f*s);outR*=1.f-d*(.5f+.5f*std::sin(tau*tremPhase+pi*.5f));}
                     else {float g=1.f-d*(.5f+.5f*s);outL*=g;outR*=g;}
                 }
-                float wMix=std::clamp(global[AGWahMix],0.f,1.f)*wahPower;
-                if(wMix>1e-3f) {
+            }
+            if(wahPower>0.f) {
+                // The power fade scales the wet blend directly (as every other effect's
+                // return does). Routed through the Mix smoother it lagged the fade and was
+                // still audible when the effect stopped. The block also keeps running until
+                // the smoothed Mix has settled, so pulling Mix down quickly cannot click.
+                float wMix=std::clamp(global[AGWahMix],0.f,1.f);
+                if(wMix>1e-3f||wahMixS>1e-4f) {
                     wahMixS+=smooth*(wMix-wahMixS);
                     float envIn=std::abs(outL+outR)*.5f;
                     wahEnv+=(envIn>wahEnv?wahAttCoef:wahRelCoef)*(envIn-wahEnv);
@@ -1422,8 +1530,11 @@ struct SynthEngine::Impl {
                         if(!std::isfinite(wahLP[ch])||!std::isfinite(wahBP[ch])){wahLP[ch]=0;wahBP[ch]=0;}
                         wet[ch]=band?wahBP[ch]:wahLP[ch];
                     }
-                    outL+=wahMixS*(wet[0]-outL);outR+=wahMixS*(wet[1]-outR);
+                    const float amount=wahMixS*wahPower;
+                    outL+=amount*(wet[0]-outL);outR+=amount*(wet[1]-outR);
                 }
+            }
+            if(crushPower>0.f) {
                 float cMix=std::clamp(global[AGCrushMix],0.f,1.f)*crushPower;
                 if(cMix>1e-3f) {
                     float bits=std::clamp(global[AGCrushBits],1.f,16.f);
@@ -1439,65 +1550,57 @@ struct SynthEngine::Impl {
                     outL+=cMix*(wetL-outL);outR+=cMix*(wetR-outR);
                 }
             }
-            constexpr float divisions[8]={1,.5f,.25f,2,.75f,1.5f,1.f/3,2.f/3};
-            float delayTargetSamples;
-            if(global[AGDelaySync]>=.5f){
-                int div=std::clamp(int(std::lround(global[AGDelayTiming])),0,7);
-                float tempo=std::max(30.f,global[AGTempo]);
-                delayTargetSamples=float(sampleRate*60.0/tempo)*divisions[div];
-            }else
-                delayTargetSamples=float(sampleRate)*std::clamp(global[AGDelayTimeMs],1.f,2000.f)*.001f;
-            if(!std::isfinite(delayTargetSamples))delayTargetSamples=float(sampleRate)*.375f;
-            delaySamples+=smooth*.05f*(std::min(float(delaySize-2),std::max(1.f,delayTargetSamples))-delaySamples);
-            if(!std::isfinite(delaySamples)||delaySamples<1.f)delaySamples=std::max(1.f,delayTargetSamples);
-            float dl=delayed(delayL,delayPosition,delaySamples),dr=delayed(delayR,delayPosition,delaySamples);
-            if(!std::isfinite(dl))dl=0; if(!std::isfinite(dr))dr=0;
-            // Delay ducking: repeats step aside while you play (Amount>0), release sets the return time.
-            float duckGain=1.f;
-            if(global[AGDuckAmount]>1e-3f) {
-                float envIn=std::abs(outL)+std::abs(outR);
-                duckEnv+=(envIn>duckEnv?duckAttCoef:duckRelCoef)*(envIn-duckEnv);
-                duckGain=1.f-std::clamp(global[AGDuckAmount],0.f,1.f)*std::min(1.f,duckEnv*4.f);
-            } else duckEnv=0;
-            dl*=duckGain;dr*=duckGain;
-            float ping=std::clamp(global[AGDelayPingPong],0.f,1.f);
-            float fbInL=dr*ping+dl*(1.f-ping);
-            float fbInR=dl*ping+dr*(1.f-ping);
-            // Tone: 0 dark (heavy LPF) … 1 bright (almost bypass)
-            float toneAmt=std::clamp(global[AGDelayTone],0.f,1.f);
-            float toneCoeff=.05f+.45f*toneAmt;
-            delayToneL+=toneCoeff*(fbInL-delayToneL);
-            delayToneR+=toneCoeff*(fbInR-delayToneR);
-            if(!std::isfinite(delayToneL)||!std::isfinite(delayToneR)){delayToneL=0;delayToneR=0;}
-            // Soft-clip feedback so scrubbing Mix/Feedback/Tone cannot lock the bus/limiter
-            // During Panic fade-out, freeze delay regeneration so the wipe is near energy-free
-            float fbAmt=std::clamp(global[AGDelayFeedback],0.f,.85f);
-            if(panicFxStarved)fbAmt=0;
-            // A bypassed delay holds no regeneration and writes silence into its line,
-            // so re-powering it starts clean instead of replaying pre-bypass audio.
-            fbAmt*=delayPower;
-            float fbL=std::tanh(delayToneL*fbAmt);
-            float fbR=std::tanh(delayToneR*fbAmt);
-            float writeL=sendDL+fbL, writeR=sendDR+fbR;
-            if(delayPower<=1e-4f){writeL=0;writeR=0;delayToneL=delayToneR=0;duckEnv=0;}
-            if(!std::isfinite(writeL))writeL=0; if(!std::isfinite(writeR))writeR=0;
-            delayL[delayPosition]=writeL;delayR[delayPosition]=writeR;
-            delayPosition=(delayPosition+1)%delaySize;
-            float reverbInput=(sendRL+sendRR)*.16f,rl=0,rr=0;
-            if(verbPower>1e-4f) {
+            float dl=0,dr=0;
+            if(delayPower>0.f) {
+                // A delay resuming from idle starts at its current time (it would otherwise
+                // glide from the value it had when it went quiet).
+                if(delayResume){delaySamples=std::min(float(delaySize-2),std::max(1.f,delayTarget));delayResume=false;}
+                delaySamples+=smooth*.05f*(std::min(float(delaySize-2),std::max(1.f,delayTarget))-delaySamples);
+                if(!std::isfinite(delaySamples)||delaySamples<1.f)delaySamples=std::max(1.f,delayTarget);
+                dl=delayed(delayL,delayPosition,delaySamples);dr=delayed(delayR,delayPosition,delaySamples);
+                if(!std::isfinite(dl))dl=0; if(!std::isfinite(dr))dr=0;
+                // Delay ducking: repeats step aside while you play (Amount>0), release sets the return time.
+                float duckGain=1.f;
+                if(global[AGDuckAmount]>1e-3f) {
+                    float envIn=std::abs(outL)+std::abs(outR);
+                    duckEnv+=(envIn>duckEnv?duckAttCoef:duckRelCoef)*(envIn-duckEnv);
+                    duckGain=1.f-std::clamp(global[AGDuckAmount],0.f,1.f)*std::min(1.f,duckEnv*4.f);
+                } else duckEnv=0;
+                dl*=duckGain;dr*=duckGain;
+                float ping=std::clamp(global[AGDelayPingPong],0.f,1.f);
+                float fbInL=dr*ping+dl*(1.f-ping);
+                float fbInR=dl*ping+dr*(1.f-ping);
+                // Tone: 0 dark (heavy LPF) … 1 bright (almost bypass)
+                float toneAmt=std::clamp(global[AGDelayTone],0.f,1.f);
+                float toneCoeff=.05f+.45f*toneAmt;
+                delayToneL+=toneCoeff*(fbInL-delayToneL);
+                delayToneR+=toneCoeff*(fbInR-delayToneR);
+                if(!std::isfinite(delayToneL)||!std::isfinite(delayToneR)){delayToneL=0;delayToneR=0;}
+                // Soft-clip feedback so scrubbing Mix/Feedback/Tone cannot lock the bus/limiter
+                // During Panic fade-out, freeze delay regeneration so the wipe is near energy-free
+                float fbAmt=std::clamp(global[AGDelayFeedback],0.f,.85f);
+                if(panicFxStarved)fbAmt=0;
+                // A closing delay stops regenerating; its line is wiped once the fade ends.
+                fbAmt*=delayPower;
+                float fbL=std::tanh(delayToneL*fbAmt);
+                float fbR=std::tanh(delayToneR*fbAmt);
+                float writeL=sendDL*delayPower+fbL, writeR=sendDR*delayPower+fbR;
+                if(!std::isfinite(writeL))writeL=0; if(!std::isfinite(writeR))writeR=0;
+                delayL[delayPosition]=writeL;delayR[delayPosition]=writeR;
+                delayPosition=(delayPosition+1)%delaySize;
+            }
+            float rl=0,rr=0;
+            if(verbPower>0.f) {
+                float reverbInput=(sendRL+sendRR)*.16f*verbPower;
                 for(int i=0;i<4;i++){rl+=combs[i].process(reverbInput);rr+=combs[i+4].process(reverbInput);}
                 rl=allpasses[1].process(allpasses[0].process(rl));rr=allpasses[3].process(allpasses[2].process(rr));
-            } else if(verbFlush) {
-                // Only under a fully closed gate: the room is already silent here,
-                // so emptying its rings cannot click.
-                for(auto& c:combs)c.clear();for(auto& a:allpasses)a.clear();verbFlush=false;
             }
             outL+=dl*global[AGDelayMix]*delayPower+rl*global[AGReverbMix]*.25f*verbPower;
             outR+=dr*global[AGDelayMix]*delayPower+rr*global[AGReverbMix]*.25f*verbPower;
 
             // ---- Full Shimmer (pitch-shifted multi-voice diffusion) ----
             // Input is shimmer-send only — never the wet bus — so Mix/Amount cannot form an outer feedback loop.
-            {
+            if(shimPower>0.f) {
                 float shimmerIn=std::tanh((sendSL+sendSR)*.10f*shimPower);
                 // Soft-clip predelay write (send + internal fb)
                 float fbLIn=panicFxStarved?0.f:shimmerFbL;
@@ -1602,41 +1705,33 @@ struct SynthEngine::Impl {
                 outR+=std::tanh(shimmerToneStateR)*mix*.9f*shimPower;
             }
 
+
             // ---- Insert EQ on final stereo bus (before master/limiter) ----
+            // Gains and pole coefficients only change at block boundaries (see eqLowG etc.).
             {
-                // One-pole shelves @ ~180 Hz / presence @ ~1.2 kHz / high @ ~5 kHz
-                float lowG=std::pow(10.f,global[AGEqLow]/20.f);
-                float midG=std::pow(10.f,global[AGEqMid]/20.f);
-                float highG=std::pow(10.f,global[AGEqHigh]/20.f);
-                float lowC=std::exp(-2.f*pi*180.f/float(sampleRate));
-                float midC=std::exp(-2.f*pi*1200.f/float(sampleRate));
-                float highC=std::exp(-2.f*pi*5000.f/float(sampleRate));
                 auto eqChan=[&](float x,float& lo,float& mid,float& hi)->float{
-                    lo=lowC*lo+(1.f-lowC)*x;
+                    lo=eqLowC*lo+(1.f-eqLowC)*x;
                     float highPass=x-lo;
-                    mid=midC*mid+(1.f-midC)*highPass;
+                    mid=eqMidC*mid+(1.f-eqMidC)*highPass;
                     float presence=highPass-mid;
-                    hi=highC*hi+(1.f-highC)*presence;
+                    hi=eqHighC*hi+(1.f-eqHighC)*presence;
                     float air=presence-hi;
-                    return lo*lowG+mid*midG+hi*highG+air;
+                    return lo*eqLowG+mid*eqMidG+hi*eqHighG+air;
                 };
                 outL=eqChan(outL,eqLowL,eqMidL,eqHighL);
                 outR=eqChan(outR,eqLowR,eqMidR,eqHighR);
             }
 
             // ---- Master-bus compressor (feed-forward, zero lookahead) ----
-            {
+            if(compPower>0.f) {
                 float in=std::max(std::abs(outL),std::abs(outR));
                 if(!std::isfinite(in))in=0;
                 compEnv+=(in>compEnv?compAttCoef:compRelCoef)*(in-compEnv);
                 float envDb=20.f*std::log10(std::max(compEnv,1.0e-6f));
-                float thresh=std::clamp(global[AGCompThreshold],-60.f,0.f);
-                float ratio=std::max(1.f,std::clamp(global[AGCompRatio],1.f,12.f));
-                float over=envDb-thresh;
-                float gr=over>0 ? over*(1.f-1.f/ratio) : 0.f;
-                float makeDb=global[AGCompAuto]>=.5f ? std::clamp(-thresh*(1.f-1.f/ratio)*.7f,0.f,12.f) : std::clamp(global[AGCompMakeup],0.f,18.f);
-                // Bypass collapses both the gain reduction and the makeup term, so the
-                // gated gain is exactly unity and the GR meter reads zero.
+                float over=envDb-compThreshold;
+                float gr=over>0 ? over*(1.f-1.f/compRatio) : 0.f;
+                float makeDb=compMakeup;
+                // Fading the switch scales both gain reduction and makeup toward unity.
                 makeDb*=compPower;gr*=compPower;
                 float g=std::pow(10.f,(makeDb-gr)*.05f);
                 if(std::isfinite(g)&&g>0){outL*=g;outR*=g;}

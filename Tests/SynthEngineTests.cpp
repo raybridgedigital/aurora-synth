@@ -402,6 +402,84 @@ void masterFxPower() {
     auto allStruck=capture(0x3ffu,0x3ffu);assert(difference(allStruck,neutral)<1e-7);
     std::puts("PASS: all ten master FX power toggles are true switches; a struck effect renders the dry bus exactly, alone and with every effect struck together");
 }
+constexpr std::array<int,10> kFxPower{AGShimmerPower,AGDelayPower,AGReverbPower,AGChorusPower,AGPhaserPower,
+                                      AGFlangerPower,AGTremPower,AGCrushPower,AGWahPower,AGCompPower};
+// Every effect powered and clearly audible, with long regenerating tails.
+void loudEffects(SynthEngine& e) {
+    for(int id:kFxPower)e.setGlobal(id,1);
+    e.setGlobal(AGShimmerMix,1);e.setGlobal(AGShimmerAmount,.95f);e.setGlobal(AGShimmerDecay,12);
+    e.setGlobal(AGDelaySync,0);e.setGlobal(AGDelayMix,.6f);e.setGlobal(AGDelayFeedback,.85f);e.setGlobal(AGDelayTimeMs,700);
+    e.setGlobal(AGReverbMix,.75f);e.setGlobal(AGReverbSize,1);e.setGlobal(AGReverbDecay,8);
+    e.setGlobal(AGChorusMix,.6f);e.setGlobal(AGPhaserMix,.8f);e.setGlobal(AGPhaserFeedback,.85f);
+    e.setGlobal(AGFlangerMix,.8f);e.setGlobal(AGFlangerFeedback,.9f);e.setGlobal(AGTremMix,1);e.setGlobal(AGTremDepth,1);
+    e.setGlobal(AGCrushMix,.5f);e.setGlobal(AGWahMix,1);e.setGlobal(AGWahSensitivity,1);
+    e.setGlobal(AGCompThreshold,-30);e.setGlobal(AGCompRatio,8);e.setGlobal(AGCompMakeup,12);
+}
+void trueBypass() {
+    // Switching an effect off fades it and then stops it. It must never hand back audio
+    // recorded before it was switched off, and switching must not click.
+    {   // Clean re-enable: fill every effect's memory, switch all off, then on with nothing playing.
+        SynthEngine e;e.prepare(rate);loudEffects(e);e.setParameter(0,APAttack,.003f);e.setParameter(0,APRelease,.02f);
+        note(e,0,60);note(e,0,67);render(e,rate/2);off(e,0,60);off(e,0,67);render(e,rate/10);
+        assert(render(e,2400)>1e-3f);                 // the tails are sounding
+        for(int id:kFxPower)e.setGlobal(id,0);
+        render(e,rate/2);                             // 20 ms fade, then the bounded wipe
+        assert(render(e,4800)==0);                    // off: exact silence
+        for(int id:kFxPower)e.setGlobal(id,1);
+        assert(render(e,rate*2)==0);                  // on again, nothing playing: no stale tail returns
+        assert(drainPanic(e)<1e-7f);
+    }
+    {   // Toggling faster than the fade, across odd block sizes, stays finite and bounded.
+        SynthEngine e;e.prepare(rate);loudEffects(e);note(e,0,60);note(e,0,64);
+        for(int i=0;i<48;i++){for(int id:kFxPower)e.setGlobal(id,float(i&1));render(e,31+i*37);}
+        render(e,rate/4);assert(drainPanic(e)<1e-7f);
+    }
+    // Switching is a fade, not a step: while an effect switches off and back on under a
+    // steady tone, the largest second difference of the output (what a click produces)
+    // stays within that of the steady sound on either side of the switch.
+    auto secondDifference=[](const std::vector<float>& x,size_t from,size_t to){
+        double worst=0;for(size_t i=std::max<size_t>(from,2);i<to;i++)worst=std::max(worst,double(std::abs(x[i]-2*x[i-1]+x[i-2])));return worst;
+    };
+    for(int i=0;i<10;i++){
+        SynthEngine e;loudEffects(e);
+        for(int j=0;j<10;j++)if(j!=i)e.setGlobal(kFxPower[size_t(j)],0);
+        e.setParameter(0,APWave1,0);e.setParameter(0,APBlend,0);e.setParameter(0,APSub,0);
+        e.setParameter(0,APLFODepth,0);e.setParameter(0,APLFO2Depth,0);e.setParameter(0,APFilterEnvelope,0);
+        e.setParameter(0,APCutoff,18000);e.setParameter(0,APAttack,.01f);e.setParameter(0,APSustain,1);
+        e.prepare(rate);note(e,0,57);
+        std::vector<float> out;out.reserve(size_t(rate)*2);std::array<float,256> l{},r{};
+        auto run=[&](int frames){while(frames>0){int n=std::min(frames,256);e.render(l.data(),r.data(),uint32_t(n));out.insert(out.end(),l.begin(),l.begin()+n);frames-=n;}};
+        run(rate/2);e.setGlobal(kFxPower[size_t(i)],0);run(rate/2);e.setGlobal(kFxPower[size_t(i)],1);run(rate);
+        const size_t half=size_t(rate/2),window=size_t(rate/40);
+        double steady=std::max({secondDifference(out,half-window*4,half),secondDifference(out,half*2-window*4,half*2),secondDifference(out,half*4-window*4,half*4)});
+        double switching=std::max(secondDifference(out,half,half+window*2),secondDifference(out,half*2,half*2+window*2));
+        assert(switching<=steady*1.5+1e-4);
+    }
+    std::puts("PASS: switched-off effects return no pre-bypass audio, survive rapid toggling, and switch without clicks");
+}
+void bypassCost() {
+    // A switched-off effect must cost nothing once its fade has finished. Guards against
+    // regressions like a bypassed reverb re-clearing its rings on every sample, which cost
+    // ~27% of the 128-frame budget at 44.1 kHz with nothing playing. Fastest-of-five timing.
+    if(std::getenv("AURORA_SKIP_TIMING")){std::puts("SKIP: bypass CPU guard (AURORA_SKIP_TIMING)");return;}
+    auto fastest=[](bool fxOn){
+        SynthEngine e;loudEffects(e);
+        for(int id:kFxPower)e.setGlobal(id,fxOn?1.f:0.f);
+        e.prepare(44100);
+        std::array<float,128> l{},r{};double best=1e9;
+        for(int i=0;i<200;i++)e.render(l.data(),r.data(),128);
+        for(int run=0;run<5;run++){
+            auto start=std::chrono::steady_clock::now();
+            for(int i=0;i<200;i++)e.render(l.data(),r.data(),128);
+            best=std::min(best,std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());
+        }
+        return best;
+    };
+    double off=fastest(false),on=fastest(true);
+    std::printf("Bypass cost, 200 idle blocks: all effects off %.0f us, all on %.0f us\n",off*1e6,on*1e6);
+    assert(off<on*.5);
+    std::puts("PASS: switched-off effects cost less than half of switched-on ones (no hidden bypass work)");
+}
 void silentVoiceRelease() {
     // A natural-decay note (sustain 0) held by the pedal renders exact silence once decayed.
     // In poly mode its voice is freed, so pedalled playing cannot fill the pool with silence.
@@ -458,4 +536,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();silentVoiceRelease();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
