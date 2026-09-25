@@ -1,64 +1,186 @@
 # SHARED_STATE.md — AI agent coordination file
 
-**Audience: AI coding agents (and the human owner).** This is the shared memory for a vibe-coding workflow: any AI session, editor agent, or teammate picks up context here instead of re-discovering it. Read it at the start of every major action; update it after every significant decision or code change. Human readers can ignore it.
+**Audience:** AI coding agents and the human owner. Read this file before any major action. Human readers may ignore it.
 
 ## Project
 
-Aurora — native macOS synthesizer (standalone + AU + VST3) for Apple silicon, macOS 14 or newer. Swift/SwiftUI UI, C++ engine, Objective-C++ Core Audio/Core MIDI glue, zero third-party dependencies.
+KiMiA (internal project lineage: Aurora) — native macOS synthesizer for Apple silicon, macOS 14 or newer. Standalone app plus AU and VST3 instruments; Swift/SwiftUI UI, C++ engine, and Objective-C++ Core Audio/Core MIDI integration; no third-party dependencies.
 
-- Repo: `raybridgedigital/aurora-synth`, branch `main`
-- Build: `./scripts/build.sh` → `build/Aurora.app` · Tests: `./scripts/run-tests.sh` and specialized suites under `scripts/`
-- Docs: `README.md` (system requirements + release notes), `CHANGELOG.md`, `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md` (parked + frozen), `FUTURE-PROPOSAL-MODULATION-EXPANSION.md` (shipped v0.23 — design history), `Dual-Patch-Specification.md` (locked design, not implemented), `FUTURE-PROPOSAL-FM-ENGINE.md` (**v0.2 draft, local + uncommitted — QUEUE #1**, owner-decided 23 Sep 2026)
+- Repository: `raybridgedigital/aurora-synth`, branch `main`
+- Build: `./scripts/build.sh` → `build/Aurora.app`
+- Tests: `./scripts/run-tests.sh` plus specialized suites under `scripts/`
+- Release record: `CHANGELOG.md`
+- Product/status overview: `README.md`
 
-## Roles (label every statement)
+## Roles
 
-**Researcher · Architect · Implementer · Critic · Security Auditor** — keep roles consistent across sessions and prefer small, concrete next steps over giant jumps.
+**Researcher · Architect · Implementer · Critic · Security Auditor** — keep roles consistent and prefer small, concrete steps.
 
-## Current state (22–23 Sep 2026)
+## Freeze / approval rules
 
-- **HEAD:** `main`, pushed — newest `a2c1e79` (hardware validation = queue item 4), then `f60d464` (modulation-shipped correction + roadmap), `35e3f7e` (this file added), `58abe96` (scroll proposal + README index); all 22 Sep 2026, docs-only. A file can't contain its own hash — run `git log -1` for the live value. Prior `5ceb6a7` archived `InterfaceChecks.swift` + added the README system-requirements line; `28af936` 4/4 green. **CI:** each new push auto-cancels the previous push's still-running Specialized Regression job — those cancellations are not failures; confirm live status anytime with `gh run list --repo raybridgedigital/aurora-synth`.
-- **`archive/InterfaceChecks.swift` is archived** — kept for regression archaeology only, **not CI/release authority**. Path references updated in `check-interface.sh`, `.github/workflows/smoke-build.yml`, `AURORA-LEGACY-TEST-CLASSIFICATION-v1.md`, `AURORA-V1-TEST-RECONSTRUCTION-ASSESSMENT.md`.
-- README now has an explicit **system-requirements line** (top of file): Apple silicon + macOS 14 or newer, no Intel/Windows/Linux versions planned.
-- Working tree: **released 23 Sep 2026 as v0.24.0** (owner order: *"Tag this as 0.24 to GitHub"*) — FM build committed, tagged `v0.24.0`, pushed. `.grok/` stays untracked (owner-managed — never stage or commit it).
-- **Post-release GUI fixes (owner request 23 Sep 2026) — ✅ RELEASED as v0.24.1** (owner order: *"tag this as 0.24.1 now"*): (1) Matrix slot-number column `AuroraApp.swift` `routeRow()`: "10" was wrapping to two stacked digits (`width:14`) — widened to `width:22` + `monospacedDigit().lineLimit(1)`; `routeRow` is shared, so Sound Matrix and Performance Matrix keep identical proportions automatically. (2) Prev/next patch arrows now step alphabetically **within the current patch's category** (e.g. FM → next FM sound) instead of across the whole library: `browsePatch()` scopes `library` to `patch.category` (falls back to full library if no same-category match); `PatchBrowser.step()` does the same when no browser category filter is selected (explicit browser category filter still wins). Header arrow tooltips updated to "…in the current category". (3) Performance-matrix row layout: source picker width 150→140 (matches Sound Matrix) and the 65pt `Color.clear` CC placeholder removed — the → arrow now sits right after the source dropdown (10pt gap) and aligns with Sound Matrix rows above; the CC-number field appears inline only when the source is "MIDI CC". Validated: 6-file Swift typecheck green, `scripts/build.sh` green, app relaunched.
-- **5 new pure DX7-style FM electric pianos (owner order 23 Sep 2026, in working tree, UNCOMMITTED — awaiting owner word):** added to `fm_flagships()` in `scripts/rebuild_factory_bank.py` (specs carry a trailing pure-piano flag; Aurora100.json 115 → **120**, FM category 15 → **20**): **DX Tine Classic · Suitcase 77 · Stage Bark · Glass Hammer EP · Midnight Tine** — all strictly piano (no pad/texture), **single FM layer** (subtractive B/C/D disabled per the owner's 2-layer direction), velocity→index routed per FM policy (slot 2). Validated: generator asserts green, `scripts/build.sh` green, app relaunched. `PatchBankAudit.mm`/`PluginCoreChecks.mm` count asserts go further red — owner-accepted, re-baseline at the deferred wipe.
-- **Rebrand: "Aurora" is patented (owner, 23 Sep 2026) — product becomes "KiMiA".** Done so far: top-left sidebar wordmark + its hover tooltip only (`AuroraApp.swift:2791`, "AURORA" -> "KiMiA", tooltip "KiMiA synthesizer"); typecheck + build green, relaunched. Everything else deliberately UNCHANGED (owner: repo, folder, identifiers stay "for now") — full rename-impact assessment delivered to owner 23 Sep 2026 (window title `WindowGroup("Aurora")` :2908, plists, AU subtype `Auro`, bank file names, Desktop/App Support paths, Patch Banks zips, docs, CI, bridge symbols). **Tier 0 display-name pass then done (owner order 23 Sep 2026: "legal exposure is the concern … do the Tier 0; rest later"):** `WindowGroup("KiMiA")` (:2908); `CFBundleName`/`CFBundleDisplayName` = KiMiA in `Resources/Info.plist` (Dock/menu bar/Cmd-Tab); sidebar collection string "Aurora"→"KiMiA" in all 3 spots (:721 default, :1057 switch case, :2825 picker tag — never persisted, switch has a `default` fallback, zero functional impact); VoiceOver label "KiMiA version" (:2860); AU display name "Ray Bridge Digital: KiMiA" + "KiMiA Synthesizer" in `AuroraAU-Info.plist` (shows in DAWs after the next plugin rebuild; subtype `Auro` + bundle IDs untouched, so DAW projects and settings keep working). Logo also center-aligned in the sidebar column with the waveform icon mirrored on both sides of the wordmark (:2791, owner requests). Validated: build.sh green, bundle plist confirmed KiMiA, app relaunched. Tiers 1–3 parked per owner. **Committed + tagged v0.24.2 on owner word ("Tag it", 24 Sep 2026): commit `2041223`, pushed to origin with tag; app build 35; working tree clean except untracked `.grok/`.** Also delivered owner-requested checks: kimiasynth.com confirmed AVAILABLE (Verisign "No match", 23 Sep 2026); USPTO screen for KIMIA + KIMIYA/KIMYA — only 2 live KIMIA marks (Draco supplements classes 3/5/30-32; Kinexcs Class 10 medical via Madrid) — **nothing live in Class 9 software or Class 15 instruments**; tech-sector KIMIA (Pty) dead since 2020.
-- **Post-release fix (owner report 24 Sep 2026, UNCOMMITTED):** the 5 pure EPs held a constant sustain level while keys were held (pad-like) — root cause: engine holds `levels[2]` (L3) indefinitely in stage 2 (`FmEngine.cpp` stage machine; stage never advances past 2 until note-off). Real pianos decay to zero while held (DX7 practice: L3=0, R3 = tail rate). Fixed: all 20 ops across the 5 EPs now have L3=0; carriers got slow tail rates 0.14–0.3 (~2–4.5 s graded per patch — Stage Bark punchiest, Midnight Tine longest), modulators 0.35–1.4 (bite/bell fades in ~0.1–0.8 s leaving a pure fundamental tail). DX Tine Classic detail text updated ("natural decay to silence"). Regression assert added: pure-flag patches must have L3=0 on every op. Generator + build green, bank JSON verified, app relaunched. Note: envelope segments are linear ramps — if the tail feel needs shaping, adjust L1/rate. **Owner verdict 24 Sep 2026: \"Much better — that's the variation I want for EP.\"** Follow-ups done same day (UNCOMMITTED): **(a)** Glass House EP + Glass Marimba + Nylon Harp fixed — these were hybrid patches whose extra subtractive layers B/C/D sustained under the FM layer (that was the pad/texture mixed in), so all three are now pure single-layer FM with L3=0 and instrument-true tails (marimba fast ~0.5 s, harp ~1.4 s cascade). **(b)** Rhodes — answered owner: yes, a Rhodes is an electric piano and must decay like one; Rhodes Hybrid converted to pure L3=0 decay (name kept). **(c)** New category **\"FM EP\"**: the 12 EP-character patches moved/added there — DX Tine Classic, Suitcase 77, Stage Bark, Glass Hammer EP, Midnight Tine, Rhodes Hybrid, Glass House EP + 5 new **DX7 …** pure EP variants: **DX7 E.Piano 1** (factory-style bright tine), **DX7 E.Piano 2** (sharper, metallic bark), **DX7 Hard Tine** (percussive hammer, short tail), **DX7 Mellow Tine** (soft felt attack, long slow decay), **DX7 Bell Piano** (glass chime over warm body). All strictly pure EP — no pad/texture/brass/string mixing (mixing = owner's job via future dual-patch). Category 'FM' keeps 13 (marimba/harp/clav/bass/pads etc.). Bank **120 → 125**; asserts re-based to 25 FM flagships. Validated: generator green, JSON verified (all FM EP + marimba/harp L3=0, layers B/C/D silent), build.sh green (/tmp/aurora_build10.log EXIT:0), app relaunched. The other tine-family originals (Solar Tine, Ballad Tine, Felt Cinema Tine, Wurli Coals) are also EP-family but still hold sustain — convert+move only on owner word. Awaits owner play-test of the 9 fixed/new patches; commit on word. **Favorite-on-save (owner order 24 Sep 2026: "In save and save as button put an option to save it in favorite, standard star"):** star toggle button added in the header next to Save/Save As (`AuroraApp.swift:2730`, toggles `m.favorite(m.patch.id)`, star/star.fill, tooltip + VoiceOver); Save As sheet gained a star row "Add to favorites" (`:2789`, new `@Published saveFavorite`, reset in `beginSaveAs`, honored in `saveUserPreset` → id into `favorites` before `persist()`, notice reads "… Added to favorites."). Owner follow-up: both stars restyled to the standard favorite look — 32×32, surface background, **gold/accent outer ring when on (faint cyan when off)**, `AuroraFlatButtonStyle` (`AuroraApp.swift:2730` header, `:2789` sheet). **RELEASED as v0.24.3 (24 Sep 2026, owner: "tag and push to github"): app 0.24.3 build 36, AU 0.24.3, CHANGELOG written, build green, committed + tagged + pushed.**
-- **Owner direction 23 Sep 2026 (parked idea, not yet a spec):** 4 layers considered excessive — 2 layers generally enough; future dual-patch = **owner combines 2 whole patches (2 layers each)** instead of 4-layer mega-patches (DSP headroom is a stated reason). Implication when dual-patch is un-parked: prefer patch-pair combination over per-patch layer merging.
-- **Remaining roadmap (owner-reordered 23 Sep 2026): 1 — the FM engine build** — spec drafted in `FUTURE-PROPOSAL-FM-ENGINE.md` (**v1.0 LOCKED, pushed 23 Sep**): per-layer `Subtractive | FM`, 16 visual algorithms, velocity→index, 15 flagship + EP-ish A/B pairs (FM re-author + ` (OLD)` original), all `category: "FM"` — **lock review done 23 Sep: 3 findings folded (phantom patch names → verified pool; loader guard `:233` rides Phase 4; filename citations fixed).** **Owner directives recorded there:** testing/CI compliance out of scope (red accepted; re-baseline later) · hardware validation deferred by owner (not a blocker) · full patch wipe deferred — current library stays (*"bad patches > nothing; no empty synth"*) · live gigging = the optimization target, DAW parity low-priority. **23 Sep later message: zero backward compat re-affirmed** — pristine new code/features > compat, old patches = crap, delete any compat burden instead of engineering around it (spec decision row 17; old binaries misrendering FM patches accepted) · **23 Sep final message: EP-ish re-authors + OLD pairs = optional side quest, AI's call (row 18); core = engine + 15 flagship.** Then parked: scroll P1–P4 (frozen; spec = `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md`) and dual-patch (design locked). Modulation expansion is NOT outstanding — shipped in v0.23.
+- **CODE FROZEN since 24 September 2026 after v0.25.0.** Do not edit `Sources/`, scripts, tests, resources, plug-in code, or build configuration until the owner gives an explicit named unfreeze.
+- Documentation-only corrections require a documentation-only request. This file was refreshed on that basis after the v0.25.0 tag.
+- `.grok/` is owner-managed and must remain untracked. Never stage or commit it.
+- Do not infer approval to tag, push, install plug-ins, or alter local support data from an implementation or documentation request.
 
-## Freeze / approval rules (never violate)
+### Named unfreeze in effect (25 September 2026)
 
-**🔓 UNFROZEN 24 Sep 2026 — owner order: *"1 go"* = named unfreeze covering: Performance Matrix 6→10 + 7 new effects (flanger, tremolo w/ pan+rotary modes, bitcrusher, delay-ducking, compressor w/ GR meter, auto-wah summed-follower) across SynthEngine.cpp / AuroraBridge.h / AuroraApp.swift / PluginCore.mm. Scope = option "1" of reviewed plan (7 effects total). Tag/push still waits for separate owner word.**
+The owner directed implementation of two items, and that request is the unfreeze for exactly
+their scope. Nothing else is unfrozen, and no release action was taken or implied:
 
-**🔨 BUILT & VALIDATED 24 Sep 2026 (UNCOMMITTED — tag/push waits for owner word):** **(a) Performance Matrix 6→10** — engine `slotLimit` caps removed (read loop + `aurora_set_matrix`), `kFeedbackCount` 46→50 (+`copyModulation` & `MacAudioMIDI.mm` caps →50, ModulationTelemetry 46→50), Swift `performanceEmpty`=10, sanitizer pads legacy 6-row → 10 into the result (same pattern as sound matrix), `updateMatrix` guard → 10, UI `ForEach(0..<10)`, PluginCore validate accepts 6 or 10 rows for any bank. Old 6-row presets/sessions pad automatically; slots 6–9 were allocated but capped — now live (the `frameFeedback[40+slot]` vs `kFeedbackCount=46` overflow trap caught & fixed pre-build). **(b) 7 new effects — AG params 37–59, `AGGlobalCount` 37→60, append-only so DAW automation IDs stay stable:** Flanger (37–40; modulated comb 0.9–5 ms, quadrature stereo, tanh'd feedback, panic-starve aware; inserted after phaser) · Tremolo (41–44; Mix/Rate/Depth/**Mode buttons Tremolo|Pan|Rotary** — uniform / opposed / quadrature AM) · Bitcrusher (45–47; quantize + sample-hold, Downsample 1x = clean) · Delay ducking (48–49; dry-envelope driven inside delay read/feedback path, release 0.02–1.5 s exp map) · Compressor (50–55; master-bus feed-forward AFTER insert EQ, BEFORE master tanh + limiter, zero lookahead; Threshold/Ratio/Attack/Release/Makeup/Auto — **default Threshold 0 dB = transparent/off**; auto makeup = −thresh×(1−1/ratio)×0.7 capped 12 dB; **GR meter**: new `gainReduction()` atomic → `aurora_comp_gr()` standalone + `aurora_plugin_comp_gr()` plugin bridge → `CompGRTelemetry` polled in `poll()` → pink capsule + "−x.x dB" readout) · Auto-wah (56–59; summed-signal env follower → 120 Hz–~3.8 kHz SVF LP/BP, pre-sends). Plumbing: `globalRanges` 37→60 (positional lockstep), `fxDefaults` +23 keys (52 total), sanitizer key guard 16…36→16…59, apply-loop `16…59`, PluginCore `fallback[]` 37→60 entries. UI: effects view **Row 3** = Flanger | Tremolo | Bitcrusher | Compressor | Auto-wah panels, Duck + Duck release in Delay panel, new `globalPicker` helper (option-button style for globals). Validated: engine/PluginCore/MacAudioMIDI/PluginBridge `-fsyntax-only` clean, `build.sh` green (`/tmp/aurora_build15.log` EXIT:0), app relaunched; counts cross-checked (AGGlobalCount=60=globalRanges; fxDefaults 52; fallback 60; `set_global`→`globalValue` clamp path confirmed at `SynthEngine.cpp:1578`). Working tree: 10 modified files, `.grok/` untracked. **Still deferred:** plugin rebuild (DAW sees the new params + KiMiA name), CHANGELOG 0.25.0, tag/push — all on owner word. **🔌 PLUGIN REBUILD DONE 24 Sep 2026 (owner: "do the plugin rebuild"):** `scripts/build_plugins.sh` + `scripts/install_plugins.sh` green (`/tmp/aurora_plugins_build.log` + `_2.log` EXIT:0); old bundles backed up to `Application Support/Aurora/Plugin Backups/20260924-142209`; installed AU + VST3 ad-hoc signed & verified. **`auval -v aumu Auro RyBr` = PASS**: AudioUnit Name **KiMiA**, "Ray Bridge Digital: KiMiA", Component Version **0.24.3 (0x1803)**. Also fixed a stale hand-maintained `AudioComponents` integer in `AuroraAU-Info.plist` (5888=0.23.0 → **6147**=0.24.3) so hosts detect the update — plugin UI lib built with `-D AURORA_PLUGIN`, which compile-proves the new `aurora_plugin_comp_gr` path and Row-3 effect panels in the plugin too. DAWs show KiMiA + the 7 new params after a plugin rescan/restart. AuroraAU-Info.plist change included in the working tree (uncommitted). **Next:** owner audition in app/DAW of all 7 effects + the 10 matrix rows; CHANGELOG 0.25.0 + tag/push on word.
+1. **Master bypass / power toggles** for the shared and master FX panels, covering both the UI
+   and DSP silence gating.
+2. **Test infrastructure** — link `FmEngine.o` into every native test target that already
+   links `SynthEngine.o`, and make the benchmark passes opt-in.
 
-**🎛️ FX PANEL REARRANGE + 🖱 SCROLL SMOOTHNESS P1–P4 DONE 24 Sep 2026 (owner orders; same unfreeze, AuroraApp.swift only, UNCOMMITTED):** **(a) Layout:** effects view now Row 1 Arp|Shimmer, **Row 2 = Delay (2-column VStack of HStack pairs, Shimmer-style: Time/Timing+Mix · Feedback+Ping-pong · Tone+Duck · Duck release+Delay send, hint below) | Compressor**, **Row 3 = Chorus | Phaser | Reverb**, **Row 4 = Flanger | Tremolo | Bitcrusher | Auto-wah** (Compressor panel moved verbatim, body unchanged). Delay height no longer grows with the Duck controls. **(b) Scroll smoothness — FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md P1–P4 all implemented** (status header flipped to IMPLEMENTED): **P1** row tracking moved off `SynthModel` into `PatchBrowserState.row` (`setRow` with 0.6 s debounced `mirrorRow` → `m.patchBrowserRow`, immediate on filter-change/onAppear restore; row crossings no longer invalidate the ~19-site global model); **P2** `PatchBrowser.sounds` memoized via `state.soundsCache` keyed on `PatchBrowserSoundsKey` (userOnly/category/favoritesOnly/favorites/userPresets fingerprint id+name+category+detail/query) — no more 438-preset `localizedStandardCompare` sort per body eval; **P3** `syncPlugin`, `performanceTelemetry`, and all six telemetry `.update()` calls (scope/modulation/compGR/wavetable/motion/meter) deferred while `RunLoop.main.currentMode == .eventTracking` (meters freeze mid-scroll, resume on release — the one accepted visible tradeoff); **P4** per-row `GeometryReader` preference fan-in deleted (`PatchRowKey` removed) → single `PatchScrollYKey` reader on the LazyVStack + `row = round(-minY/116)` (card 104 + spacing 12 = proposal's stated crossing). Session row restore preserved via the mirror (row was never in SavedSession — mirror-only, same behavior as before). Validated: brace/paren balance 0/0, `build.sh` green (/tmp/aurora_build16.log EXIT:0, 0 errors), app relaunched. One caught-and-fixed during edit: a swallowed row-closing brace in the preference-block replacement (balance re-checked + full build). Instruments fling profile = optional follow-up.
+Still frozen: the SwiftUI `ContentView.body` split, factory-bank re-baseline, plug-in
+rebuild/install/revalidation, Dual-Patch, release/tag/push, and the stale bank-count fixtures
+described below.
 
-1. **Engine, app, plugin, and test code is FROZEN.** Allowed without unfreeze: docs, README, harness scripts, workflow comments, `archive/`. The owner must unfreeze by naming a specific change.
-2. **Never commit, push, or tag without an explicit per-instance owner request.** Earlier approvals do not carry over.
-3. While frozen, deliver **reports only** — no code edits.
-4. Validate before claiming done: build/test, re-read edited files, confirm `git status` matches the intended scope.
+## In-progress work (25 September 2026)
 
-## Rendering-bug audit (delivered 22 Sep 2026, read-only)
+**Master FX power toggles — implemented, uncommitted.** `AGGlobalCount` is now **70**
+(was 60). Ten append-only power globals were added at IDs 60–69:
+`AGShimmerPower, AGDelayPower, AGReverbPower, AGChorusPower, AGPhaserPower, AGFlangerPower,
+AGTremPower, AGCrushPower, AGWahPower, AGCompPower`. Append-only, so every earlier global ID and
+every saved `patch.fx` key keeps its meaning; old patches simply have no `fx[60…69]` and
+default to powered on.
 
-- **No open rendering bugs** in the UI layer (`Sources/AuroraApp.swift`, `CreativeTools.swift`, `MotionViews.swift`, `PluginEditor.swift`, `WavetableViews.swift`): canvases bounded and gated, `isFinite` guards at data entry, stable row identities, no unsafe unwraps in draw paths; all historical scroll/frame/meter/invalidation fixes already landed.
-- Scroll smoothness vs Safari = main-thread invalidation work, not visuals and not the scroller (macOS `ScrollView` is already `NSScrollView`-backed). Proposed **UI-only** fixes, held until unfreeze (line numbers as of `5ceb6a7`):
-  - **P1** — move `patchBrowserRow` off `SynthModel` (`AuroraApp.swift:479`, writes at `:2302–2305`) into local `PatchBrowserState` (`:2118`). Purely under the hood: no look change; kills whole-app invalidation on every patch-row scroll crossing. ~15–25 lines.
-  - **P2** — memoize `PatchBrowser.sounds` (`:2199–2209`): removes the 438-preset `localizedStandardCompare` re-sort on every body evaluation; identical results. ~10–15 lines.
-  - **P3** — extend the existing `.eventTracking` guard (`:1033`) to the telemetry `.update()` calls in `poll()`. One subtle visible tradeoff: meters/scope pause during an active scroll/drag and resume on release. ~5–10 lines.
-  - **P4** — replace per-row `GeometryReader` preference (`:2189`, `:~2296`) with a single sentinel + row arithmetic; removes per-frame preference churn. Under the hood. ~10–20 lines.
-  - Validation when implemented: Instruments (Time Profiler + Core Animation FPS) while flinging the patch list, plus UI smokes. ≈ half a day total.
+- **UI:** `Panel` gained an optional header accessory, and `FxPowerToggle` is wired into all ten
+  FX panel headers. `SynthModel.applyPatch` now pushes globals `16...69` (it stopped at 59).
+- **DSP:** one smoothed 0/1 gate per effect, advanced every sample, applied to every injection
+  point (input, regeneration, return). A closed gate is exact silence; the delay stops
+  regenerating and writes silence into its line, the Schroeder rings are cleared once the fade
+  has reached zero, and the compressor's makeup/gain-reduction both collapse to unity.
+  Bypass is click-free, and `prepare()` snapshots the toggles so a struck effect cannot leak
+  one fade of wet audio at engine start.
+- **Shipping default: only Delay and Reverb are powered.** The owner requires every other
+  effect to start off. All three default sites agree (`SynthEngine` constructor,
+  `PluginCore` `fallback[]`, `AuroraApp` `fxDefaults`): IDs 61/62 = 1, 60 and 63–69 = 0.
+  `masterFxPower` asserts this on a bare engine, so it cannot regress. Consequences handled:
+  `extendedEffects`, `phaserEffect`, `matrices` and `benchmark` now call a new
+  `powerOn()` helper, because they assert that chorus/phaser (and the shared-effect Matrix
+  destinations) change the audio. **Consequence to be aware of:** the frozen v1 factory banks
+  carry no `fx[60…69]` keys, so any bank patch that relied on shimmer/chorus/phaser/flanger/
+  tremolo/bitcrusher/auto-wah/compressor now needs an explicit `"<id>": 1` in its `fx` block to
+  keep that effect. Writing those keys into the banks is a separate, owner-gated resources change
+  that also interacts with the 463-sound re-baseline.
+- **Deliberately excluded:** the Play-screen house EQ. Its bands are session-sticky and not
+  patch data, and it is identity at 0 dB, so a patch-level power switch there would be
+  misleading. Per-layer `LayerSends.shimmerBypass` was also kept: it is a per-layer send mute,
+  semantically different from the master switch, and removing it would break patch decode.
+- **Verification:** `Tests/SynthEngineTests.cpp::masterFxPower` proves each toggle is a true
+  switch and that a struck effect renders the dry bus sample-accurately, alone and with all
+  ten struck together.
+
+**Latent plug-in bug found and fixed on the way.** `Sources/PluginParameters.hpp::globals[]`
+held 37 entries while `AGGlobalCount` was 60, so `Core::spec()` read past the end of the table
+for IDs 1037–1059 (the whole v0.25.0 FX block), and `PluginVST.mm` dereferenced
+`globals[p].name` across the same range while answering `getParameterInfo`. The table now
+covers all 70 globals, `scripts/generate_backend.py` carries the full range list, and
+`Tests/PluginCoreChecks.mm` holds a `static_assert` so the table can never fall short again.
+The generator now also refuses to run instead of silently truncating `layers[]`/`defaults[]`,
+which its stale `assemble_prism_bank.py` inputs would have done.
+
+**CI debt item 1 — FM test link: fixed locally, not yet re-run on CI.** `FmEngine.o` is now in
+`scripts/test.sh`, `scripts/test-baseline.sh`, `scripts/check_plugins.sh`,
+`scripts/audit_patch_bank.sh`, `check-interface.sh`, `check-v1-ab-comparison.sh`,
+`check-v1-specialized-regression.sh`, and the specialized-regression workflow. Verified locally:
+`scripts/test.sh` green, `scripts/build.sh` green, `scripts/test-baseline.sh` compiles, links
+and runs its native half. The `ContentView.body` compile risk is untouched.
+
+**Found while fixing the test runner:** `scripts/test.sh` could not run at all on macOS's
+`/bin/bash` 3.2 — `set -u` plus `"${SANITIZER_FLAGS[@]}"` on an empty array aborts before any
+compilation. Sanitizer flags are now appended only when non-empty.
+
+**Still blocking a full green run — pre-existing, owner decision needed.** `Aurora100.json`
+contains 125 patches in the committed tree, but `BaselineChecks.swift` and
+`Tests/PluginCoreChecks.mm` still assert 100, so `test-baseline.sh`'s last step and
+`check_plugins.sh` fail on that fixture count. This is the same drift already recorded as the
+463-sound inventory re-baseline item; it is unrelated to the power-toggle work and was left
+alone.
+
+
+## Current release — v0.25.0
+
+- HEAD: `b29e88319ec69dbbccbba3d93b11f7dca6d60a5a` (`b29e883`), tagged `v0.25.0`, pushed to `origin/main` and `origin/v0.25.0` on 24 September 2026.
+- Source metadata: app `0.25.0` build `37`; AU/VST3 source metadata `0.25.0`.
+- Local standalone 0.25.0 release build completed successfully before tagging. A current local `build/Aurora.app` artifact is not guaranteed to remain present.
+- **Installed plug-in boundary:** the locally installed AU and VST3 bundles are `0.24.3`. The v0.25.0 plug-in source has not been rebuilt/installed/revalidated after the final version bump.
+- v0.25.0 features: flanger; tremolo with Tremolo/Pan/Rotary modes; bitcrusher; master compressor with gain-reduction meter; auto-wah; delay ducking; Performance Matrix 6→10; compact Delay + Compressor effects row; P1–P4 scroll-smoothness work.
+- v0.24 line: four-operator FM engine with 16 visual algorithms; FM/EP factory expansion; natural-decay EP fixes; favorites-on-save; KiMiA display-name pass.
+
+## Validation status — read before making release claims
+
+### v0.25.0 GitHub CI: NOT GREEN
+
+All four jobs associated with the v0.25.0 push failed:
+
+- Product Smoke / standalone and AU+VST3 build: Swift compiler could not type-check `ContentView.body` in reasonable time at `Sources/AuroraApp.swift:261` (the generated plug-in interface copy reports the same body line).
+- Aurora v1 Baseline: native test link failed because `FmEngine` symbols used by `SynthEngine` were absent from the test link (`FmEngine::initTables`, `FmEngine::renderSample`).
+- Aurora v1 Specialized Regression: same FM-engine test-link class of failure.
+- Native Sanitizers: ASan/UBSan and TSan native suites failed to link for the same missing FM-engine symbols.
+
+Do not describe v0.25.0 CI as passing. These failures are recorded validation debt; code remediation is frozen pending an explicit unfreeze.
+
+**Local remediation status (25 September 2026, uncommitted).** The three "missing FM-engine
+symbols" failures and the specialized-regression factory-audit link are fixed in the working
+tree and verified locally (see the in-progress section). The Product Smoke Swift
+`ContentView.body` timeout is **not** addressed, and no CI run has been triggered. Treat all
+four jobs as still red until the owner reviews and commits this work.
+
+### Factory-bank inventory
+
+Current resource counts:
+
+- `Aurora100.json`: 125
+- `AuroraPrism100.json`: 100
+- `AuroraNova100.json`: 100
+- `AuroraGB109.json`: 109
+- `AuroraShimmer29.json`: 29
+- Five-bank v1 audit inventory: **463**
+- Separate Spectrum bank: 300
+
+The **438** total in v0.22-era documentation was accurate for the historical five-bank snapshot (100+100+100+109+29). The current 463-sound inventory still requires a clean full audit/re-baseline; the historical 438-pass result must not be presented as current certification.
+
+### Plug-ins and hosts
+
+- v0.24.3 installed AU passed `auval -v aumu Auro RyBr` in the prior release work.
+- v0.25.0 plug-in source is not represented by a successful current plug-in build/install/validator run.
+- Logic Pro remains unverified in-app; exhaustive playback, bounce, automation, project, and commercial-host coverage remains incomplete.
+- Public distribution still lacks Developer ID signing, notarization, and clean-machine installation qualification.
+
+## Documentation status
+
+Authoritative current documents:
+
+- `README.md` — current release overview plus chronological release archive
+- `CHANGELOG.md` — release-by-release record
+- `DAW-INTEGRATION.md` — installed/source plug-in boundary and host-verification limits
+- `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md` — shipped design history
+- `FUTURE-PROPOSAL-MODULATION-EXPANSION.md` — shipped design history
+- `FUTURE-PROPOSAL-FM-ENGINE.md` — shipped design history plus deferred wipe
+- `Dual-Patch-Specification.md` — locked, not implemented
+- `AURORA-*-TEST-*.md` — v0.22 reconstruction authority; current release must still pass the test contract before being called green
 
 ## Pending queue
 
-1. **FM engine build — QUEUE #1 (owner, 23 Sep 2026: "super important, life blood")** — spec drafted in `FUTURE-PROPOSAL-FM-ENGINE.md` (**LOCKED v1.0 — committed + pushed 23 Sep at owner order**; full decision log rows 1–18 inside). Shape: per-layer engine mode `Subtractive | FM` (ops replace Osc1/Osc2; sub + noise kept), 16 visual algorithms, rate/level operator envelopes, single per-layer feedback, dedicated pitch env, velocity promoted into `soundSources`, matrix 37→~49 destinations, ~24-note polyphony target, optimization target = live gigging (app); DAW parity low-priority/fix-if-cheap. Each build phase needs a named unfreeze (Phase 1 = C++ `FmEngine.hpp/.cpp` beside `SynthEngine.cpp`). **🔓 UNFROZEN 23 Sep 2026 — owner order: *"Unfreeze and implement this FM feature according to the locked specification now. Go."* = the named unfreeze covering FM Phases 1–4 (spec §11); build in progress. Spec stays LOCKED (edits need owner word).** **✅ BUILT 23 Sep 2026:** Phases 1–4 landed in the working tree (uncommitted — git action waits for owner word): `Sources/FmEngine.hpp/.cpp` (4-op, 16 visual algorithms, rate/level + ADSR operator envelopes, per-layer feedback, pitch env, double-precision phase) beside `SynthEngine.cpp`; per-layer `Subtractive | FM` toggle with Oscillators↔FM panel swap, algorithm grid + vector diagrams, operator columns with env-curve canvases; velocity + channel pressure promoted into `soundSources`; matrix destinations 37→46 (Op 1–4 level · feedback · carrier mix · pitch env · ratio fine · WT mod pos/warp); 96-float `aurora_set_layer_fm` bridge through app + AU + VST3. Validated: C++ `-fsyntax-only` green, 6-file Swift typecheck green, `scripts/build.sh` green (FM engine compiled into the app), `scripts/build_plugins.sh` green (VST3 + AU, zero errors, installed). Owner audition = next step.
-2. **FM patch library (spec Phase 4) — ✅ SHIPPED 23 Sep 2026:** 15 flagship patches, all `category: "FM"`, generated by `fm_flagships()` in `scripts/rebuild_factory_bank.py` and appended into `Resources/Aurora100.json` (**100 → 115**): Solar Tine · Ballad Tine · Wurli Coals · Felt Cinema Tine · Rhodes Hybrid · Chrome Clav · Glass House EP · Velvet Vibes · Glass Marimba · Nylon Harp · Copper Harpsichord · Round FM Bass · Click Tine Bass · Bell Pad Drift · Evolving Keys. Coverage: **15 of 16 algorithms** (all but Twin Roots), sine-core per wave policy, **every patch routes velocity→index** (soundMatrix source 9 → destination 37+op, slot 2). Loader guard relaxed: `sounds.count >= 100` (now `AuroraApp.swift:474`). **Side quest: SKIPPED (AI's call, spec row 18)** — no EP-ish re-authors, no ` (OLD)` pairs; core deliverable only. Note: `build.sh` line 9 regenerates all banks every build; the regenerated Prism/Nova/Spectrum churn vs HEAD is pre-existing generator drift (keys 99–125 now explicit; added values ≠ `extensionDefaults`, so committed banks were stale relative to build output — the app was already loading regenerated banks on every local build). `PatchBankAudit.mm:246` + `PluginCoreChecks.mm:22` count asserts red = owner-accepted, re-baseline at the deferred wipe. Full library wipe = **deferred, owner-triggered**, atomic with its re-baseline at that time.
-3. **P1–P4 scroll-smoothness work** — proposal published at `FUTURE-PROPOSAL-SCROLL-SMOOTHNESS.md` (commit `58abe96`, indexed in README's parked proposals). Implementation starts only when the owner unfreezes the UI for this named change.
-4. **Dual-patch live** — design locked in `Dual-Patch-Specification.md`, not implemented; engine-touching, parked until the owner explicitly scopes and unfreezes it.
-5. **Hardware validation pass — owner-deferred (23 Sep 2026: "not important for now, i believe it will be stable")** — out of the active queue; revive only at the owner's explicit word (original three-controller/pedal/USB/clock/30-min checklist preserved in this file's git history).
-6. **This file's git fate** — ✅ resolved 22 Sep 2026 (committed/pushed at owner request; PII scan clean). Working tree now also holds `FUTURE-PROPOSAL-FM-ENGINE.md` + this update — **both committed & pushed 23 Sep 2026 at owner order (*"commit and push the spec"*)**; future doc commits likewise wait for an explicit owner word.
+1. **v0.25.0 CI remediation — highest priority technical debt:** split the oversized SwiftUI `body` expression and add `FmEngine.cpp` to every native test link. **The `FmEngine.cpp` half is done in the working tree and locally verified; the `body` split is untouched and remains frozen.** Do not re-run or describe CI as green until the owner commits and the workflows run.
+2. **Current 463-sound factory audit/re-baseline:** owner-triggered; the old library wipe remains intentionally deferred so the instrument is never shipped empty. Also resolves the stale `Aurora100 count == 100` literals in `BaselineChecks.swift` and `Tests/PluginCoreChecks.mm`, which now fail against the committed 125-patch bank.
+3. **v0.25.0 plug-in rebuild/install/revalidation:** source metadata is current, but installed bundles remain 0.24.3.
+4. **Dual-patch live:** locked design, not implemented; parked until explicitly unfrozen.
+5. **Hardware validation:** owner-deferred. Original gates remain three-controller operation, pedals/ownership, reconnect/hot-plug, external clock, 30-minute and two-hour runs, latency, memory, and exact output/hub setup.
+6. **Public distribution:** Developer ID signing/notarization and clean-machine install.
+7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora; domain/trademark administration and deeper rename tiers are parked.
+8. **Optional EP cleanup:** Solar Tine, Ballad Tine, Felt Cinema Tine, and Wurli Coals still hold sustain; conversion to natural EP decay/move to FM EP requires a separate owner decision.
+
+The original specification's sampler/granular engine, sample import/library management, microtuning/MPE, and optional hardware-audio/Aggregate Device workflows remain later scope, not active queue items.
 
 ## Handoff protocol
 
-1. Read this file first. 2. Label your role. 3. Take the smallest concrete next step. 4. Update this file after every significant decision or code change. 5. Re-check the freeze/approval rules before any edit or git action.
+1. Read this file first.
+2. Label the active role.
+3. Re-check the code freeze before any action.
+4. Make the smallest authorized change.
+5. Update this file after every significant decision or documentation change.
+6. Never describe historical test results or installed plug-in versions as current without checking the live evidence.

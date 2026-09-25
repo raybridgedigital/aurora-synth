@@ -377,7 +377,7 @@ struct MatrixAssignment:Codable,Equatable {
     }
 }
 struct SoundPreset: Identifiable, Codable {
-    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4,37:0,38:0.23,39:0.55,40:0.35,41:0,42:3,43:0.6,44:0,45:0,46:8,47:1,48:0,49:0.4,50:0,51:2,52:5,53:120,54:0,55:0,56:0,57:0.5,58:0.5,59:0]
+    static let fxDefaults:[Int:Double]=[7:0.22,8:1,9:0,10:0.23,11:1,12:0.5,13:1,14:0,16:1,17:375,18:1,19:0.65,20:0,21:0,22:0,23:0,24:12,25:3,26:0.55,27:20,28:0.45,29:0.7,30:0.55,31:0.4,32:0,33:0.45,34:0.35,35:0.7,36:4,37:0,38:0.23,39:0.55,40:0.35,41:0,42:3,43:0.6,44:0,45:0,46:8,47:1,48:0,49:0.4,50:0,51:2,52:5,53:120,54:0,55:0,56:0,57:0.5,58:0.5,59:0,60:0,61:1,62:1,63:0,64:0,65:0,66:0,67:0,68:0,69:0]
     var fx: [Int:Double]? = nil
     func globalValue(_ id:Int)->Double {id<6 ? globals[id] : id==6 ? (phaserMix ?? 0) : (fx?[id] ?? Self.fxDefaults[id] ?? 0)}
     var id: String
@@ -1009,7 +1009,7 @@ struct VoiceStatus:View {
     private var redoPatches: [SoundPreset] = []
     static let ranges: [ClosedRange<Double>] = [0...1,0...4,0...4,0...1,0...30,0...1,0...1,30...18000,0...0.9,0.001...8,0.01...8,0...1,0.01...12,0...1,-1...1,-48...48,0.03...20,0...1,0...3,0...4,-1...1,0...1,0...1,0...5,0...29,1...4,0.1...0.95,0...127,0...127,0.03...20,0...1,0...3,0...3,0...4,0.05...0.95,0...1,1...8,0...30,0...1,0...1,0...36,0...2,0...2,0...24,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...24,0...1,0...5,0...1,0...1,0...1,0...1,0...3,30...18000,0...0.9,0...2,0...1,0.001...8,0.01...12,0...1,0.01...12,-1...1,0...6,0...3,0...1,0.25...8,0...4,0...1,0...1,0...1,4...16,0.02...1,0...1,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...9,0...1,0...1,0...8,0...8,0...1,0...1,0...1,0...1,0...1,0...4,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8,0...4,0.03...20,0...1,0...1,0...9,0...1,0...1,0...8,0...8]
     private static let integerParameters: Set<Int> = [0,1,2,15,18,19,22,23,24,25,27,28,31,32,33,36,39,41,43,44,45,47,51,52,54,58,59,62,69,70,73,77,79,80,81,82,83,87,88,89,98,99,102,103,104,108,111,112,113,117,120,121,122]
-    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12,0...1,0.03...5,0...1,0...0.9,0...1,0.03...8,0...1,0...2,0...1,1...16,1...64,0...1,0...1,-60...0,1...12,0.1...100,5...1000,0...18,0...1,0...1,0...1,0...1,0...1]
+    static let globalRanges: [ClosedRange<Double>] = [0...1,30...240,0...0.6,0...0.75,0...0.75,0...0.6,0...1,0.03...5,0...1,-0.85...0.85,0.03...5,0...1,0...1,0.2...8,0...7,0...24,0...1,1...2000,0...1,0...1,-12...12,-12...12,-12...12,0...1,-12...24,0.2...12,0...1,0...200,0...0.95,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0.2...12,0...1,0.03...5,0...1,0...0.9,0...1,0.03...8,0...1,0...2,0...1,1...16,1...64,0...1,0...1,-60...0,1...12,0.1...100,5...1000,0...18,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1,0...1]
     static func sanitized(_ input:SoundPreset) -> SoundPreset? {
         guard input.layers.count==4,input.globals.count==6,input.macros.count==8,
               input.globals.allSatisfy(\.isFinite),input.macros.allSatisfy(\.isFinite) else{return nil}
@@ -1046,7 +1046,7 @@ struct VoiceStatus:View {
         if let fx=input.fx {
             // 20–22 are session EQ (Play), not patch — drop if present in older files
             let patchFX=fx.filter{!($0.key==20 || $0.key==21 || $0.key==22)}
-            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...59).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
+            guard patchFX.allSatisfy({(((7...14).contains($0.key)) || ((16...69).contains($0.key))) && $0.value.isFinite && globalRanges.indices.contains($0.key)}) else{return nil}
             result.fx=patchFX.mapValues{$0}
             for (p,v) in patchFX {
                 let r=globalRanges[p]
@@ -1155,7 +1155,7 @@ struct VoiceStatus:View {
         backend.aurora_set_global(15,Float(outputGain))
         backend.aurora_set_global(6,Float(patch.phaserMix ?? 0))
         for p in 7...14{backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))}
-        for p in 16...59 where p < 20 || p > 22 {
+        for p in 16...69 where p < 20 || p > 22 {
             backend.aurora_set_global(Int32(p),Float(patch.globalValue(p)))
         }
         applySessionEQ() // house EQ stays session-sticky across patch loads
@@ -1668,8 +1668,32 @@ struct WeightedHeightRow: Layout {
 struct Panel<Content:View>:View {
     @Environment(\.auroraPalette) private var palette
     let title:String
-    @ViewBuilder var content:Content
-    var body:some View {VStack(alignment:.leading,spacing:16){Text(title).font(.system(size:19,weight:palette.weight(.semibold)));content}.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).background(palette.surface,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.white.opacity(0.07))).buttonStyle(AuroraButtonStyle())}
+    var accessory:AnyView?=nil
+    let content:Content
+    init(title:String,accessory:AnyView?=nil,@ViewBuilder content:()->Content){self.title=title;self.accessory=accessory;self.content=content()}
+    var body:some View {VStack(alignment:.leading,spacing:16){HStack(alignment:.center,spacing:10){Text(title).font(.system(size:19,weight:palette.weight(.semibold)));Spacer(minLength:0);if let accessory{accessory}};content}.padding(18).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).background(palette.surface,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.white.opacity(0.07))).buttonStyle(AuroraButtonStyle())}
+}
+/// Master FX power switch for an effects panel header. Off is a true bypass in the
+/// engine — the effect leaves the stereo bus — and the wet mix, rate and depth
+/// settings stay stored in the patch so powering back on restores the exact sound.
+struct FxPowerToggle:View {
+    @ObservedObject var m:SynthModel
+    let parameter:Int
+    let name:String
+    let help:String
+    private var on:Bool{m.patch.globalValue(parameter) >= 0.5}
+    var body:some View {
+        Button{m.checkpoint();m.global(parameter,on ? 0:1)}label:{
+            Label(on ? "On":"Off",systemImage:"power").font(.system(size:12)).lineLimit(1)
+        }
+        // selected = the accent colour, so powered reads orange and Off reads grey.
+        // AuroraButtonStyle also bolds the selected label, reinforcing the state.
+        .buttonStyle(AuroraButtonStyle(selected:on))
+        .accessibilityLabel(name)
+        .accessibilityValue(on ? "On":"Off")
+        .accessibilityHint(help)
+        .help(help)
+    }
 }
 struct ParameterSlider:View {
     @Environment(\.auroraPalette) private var palette
@@ -2090,6 +2114,8 @@ struct ArpEffectsView:View {
         ParameterSlider(title:title,value:m.globalBinding(id),range:range,format:format,onBegin:{m.checkpoint()})
             .modifier(ControlLearnMenu(m:m,target:ControlTarget(layer:-1,parameter:id)))
     }
+    /// Header power switch for one shared return or master insert (AG*Power global).
+    func power(_ parameter:Int,_ help:String)->AnyView {AnyView(FxPowerToggle(m:m,parameter:parameter,name:ControlTarget.globalNames[parameter],help:help))}
     func globalPicker(_ label:String,_ parameter:Int,_ options:[String])->some View {
         HStack(spacing:8){
             Text(label).font(.system(size:14,weight:palette.weight(.regular))).foregroundStyle(palette.muted).fixedSize()
@@ -2181,7 +2207,7 @@ struct ArpEffectsView:View {
                     Text("Latch uses the global Hold — Panic or Latch off clears held arp notes.")
                         .font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }.font(.system(size:15,weight:palette.weight(.regular)))
-                Panel(title:"Shimmer"){
+                Panel(title:"Shimmer",accessory:power(60,"Take the shimmer return out of the shared bus. Mix, pitch and decay stay in the patch.")){
                     VStack(alignment:.leading,spacing:10){
                         HStack(alignment:.center,spacing:12){
                             control("Mix",23)
@@ -2233,7 +2259,7 @@ struct ArpEffectsView:View {
 
             // Row 2 — Delay | Compressor
             EqualHeightRow(spacing:16){
-                Panel(title:"Delay"){
+                Panel(title:"Delay",accessory:power(61,"Take the shared delay return out of the bus and stop its repeats regenerating.")){
                     VStack(alignment:.leading,spacing:10){
                         delaySyncButtons()
                         HStack(alignment:.center,spacing:12){
@@ -2261,7 +2287,7 @@ struct ArpEffectsView:View {
                         Text("Layer send into shared delay return.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                     }
                 }
-                Panel(title:"Compressor"){
+                Panel(title:"Compressor",accessory:power(69,"Take the master compressor out of the chain. Gain reduction falls back to 0 dB.")){
                     control("Threshold",50,-60...0,{String(format:"%.0f dB",$0)})
                     control("Ratio",51,1...12,{String(format:"%.1f:1",$0)})
                     HStack(alignment:.center,spacing:12){
@@ -2279,18 +2305,18 @@ struct ArpEffectsView:View {
 
             // Row 3 — Chorus | Phaser | Reverb
             EqualHeightRow(spacing:16){
-                Panel(title:"Chorus"){
+                Panel(title:"Chorus",accessory:power(63,"Take the shared chorus out of the bus. Rate and depth stay in the patch.")){
                     ParameterSlider(title:"Mix",value:m.globalBinding(5),range:0...0.6).modifier(MatrixFeedback(model:m,destination:8))
                     control("Rate",10,0.03...5,{String(format:"%.2f Hz",$0)})
                     control("Depth",11)
                 }
-                Panel(title:"Phaser"){
+                Panel(title:"Phaser",accessory:power(64,"Take the master phaser out of the chain. Its all-pass state is cleared while bypassed.")){
                     ParameterSlider(title:"Mix",value:m.globalBinding(6),onBegin:{m.checkpoint()}).modifier(MatrixFeedback(model:m,destination:9))
                     control("Rate",7,0.03...5,{String(format:"%.2f Hz",$0)})
                     control("Depth",8)
                     control("Feedback",9,-0.85...0.85)
                 }
-                Panel(title:"Reverb"){
+                Panel(title:"Reverb",accessory:power(62,"Take the shared room out of the bus. Size and decay stay in the patch.")){
                     ParameterSlider(title:"Mix",value:m.globalBinding(4),range:0...0.75).modifier(MatrixFeedback(model:m,destination:10))
                     control("Size",12)
                     control("Decay",13,0.2...8,{String(format:"%.1f s",$0)})
@@ -2301,27 +2327,27 @@ struct ArpEffectsView:View {
 
             // Row 4 — Flanger | Tremolo | Bitcrusher | Auto-wah
             EqualHeightRow(spacing:16){
-                Panel(title:"Flanger"){
+                Panel(title:"Flanger",accessory:power(65,"Take the flanger comb out of the master chain.")){
                     control("Mix",37,0...0.8)
                     control("Rate",38,0.03...5,{String(format:"%.2f Hz",$0)})
                     control("Depth",39)
                     control("Feedback",40,0...0.9)
                     Text("Short modulated comb · the classic jet swoosh.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
-                Panel(title:"Tremolo"){
+                Panel(title:"Tremolo",accessory:power(66,"Take the tremolo/pan/rotary stage out of the chain. Bypass restores unity gain.")){
                     control("Mix",41,0...0.8)
                     control("Rate",42,0.03...8,{String(format:"%.1f Hz",$0)})
                     control("Depth",43)
                     globalPicker("Mode",44,["Tremolo","Pan","Rotary"])
                     Text("Tremolo = amp wobble · Pan = left/right sweep · Rotary = spinning speaker.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
-                Panel(title:"Bitcrusher"){
+                Panel(title:"Bitcrusher",accessory:power(67,"Take the bitcrusher out of the chain.")){
                     control("Mix",45,0...1)
                     control("Bits",46,1...16,{String(format:"%.0f bit",$0)})
                     control("Downsample",47,1...64,{String(format:"%dx",Int($0))})
                     Text("Lo-fi grit · Downsample 1x = clean.").font(.system(size:12,weight:palette.weight(.regular))).foregroundStyle(palette.muted)
                 }
-                Panel(title:"Auto-wah"){
+                Panel(title:"Auto-wah",accessory:power(68,"Take the envelope filter out of the chain.")){
                     control("Mix",56,0...1)
                     control("Sensitivity",57)
                     control("Range",58)

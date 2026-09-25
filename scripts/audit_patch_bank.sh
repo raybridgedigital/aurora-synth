@@ -6,6 +6,6 @@ cd "$ROOT_DIR"
 python3 "$ROOT_DIR/scripts/rebuild_factory_bank.py"
 xcrun clang++ -std=c++20 -O2 -fobjc-arc \
     -fmodules-cache-path="$ROOT_DIR/build/ModuleCache" \
-    "$ROOT_DIR/Sources/SynthEngine.cpp" "$ROOT_DIR/Sources/PluginCore.mm" "$ROOT_DIR/Tests/SpectrumAudit.mm" \
+    "$ROOT_DIR/Sources/SynthEngine.cpp" "$ROOT_DIR/Sources/FmEngine.cpp" "$ROOT_DIR/Sources/PluginCore.mm" "$ROOT_DIR/Tests/SpectrumAudit.mm" \
     -framework Foundation -I "$ROOT_DIR/Sources" -o "$ROOT_DIR/build/patch-audit"
 "$ROOT_DIR/build/patch-audit"

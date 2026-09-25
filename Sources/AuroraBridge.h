@@ -56,6 +56,14 @@ enum AuroraGlobal { AGMaster=0, AGTempo, AGDelayMix, AGDelayFeedback,
     AGDuckAmount, AGDuckRelease,
     AGCompThreshold, AGCompRatio, AGCompAttack, AGCompRelease, AGCompMakeup, AGCompAuto,
     AGWahMix, AGWahSensitivity, AGWahRange, AGWahMode,
+    /* Master FX power (bypass) toggles: 1 = in the chain, 0 = struck from it.
+       Shared returns (shimmer, delay, reverb) and master inserts (chorus, phaser,
+       flanger, tremolo, bitcrusher, auto-wah, compressor) each own one toggle.
+       Append-only: these IDs trail the v0.25.0 block so every earlier ID and every
+       saved patch fx key keeps its meaning. The Play-screen house EQ is excluded —
+       it is session-sticky, identity at 0 dB, and its bands are not patch data. */
+    AGShimmerPower, AGDelayPower, AGReverbPower, AGChorusPower, AGPhaserPower,
+    AGFlangerPower, AGTremPower, AGCrushPower, AGWahPower, AGCompPower,
     AGGlobalCount };
 // Main-thread API; MIDI receive and audio rendering run on platform threads.
 void aurora_initialize(void);

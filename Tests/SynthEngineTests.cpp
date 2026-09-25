@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <initializer_list>
 #include <limits>
 #include <thread>
 #include <vector>
@@ -17,6 +18,8 @@ void dry(SynthEngine& e) {
     e.prepare(rate);e.setGlobal(AGDelayMix,0);e.setGlobal(AGReverbMix,0);e.setGlobal(AGChorusMix,0);
     e.setParameter(0,APRelease,.025f);e.setParameter(0,APAttack,.003f);
 }
+// Only Delay and Reverb ship powered; a test that exercises another effect must say so.
+void powerOn(SynthEngine& e,std::initializer_list<int> effects){for(int id:effects)e.setGlobal(id,1);}
 float render(SynthEngine& e,int frames=4800) {
     std::array<float,257> l{},r{};float peak=0;
     while(frames>0) {
@@ -171,6 +174,7 @@ void phaserEffect() {
     for(double sampleRate:{44100.,48000.,96000.,192000.}) {
         SynthEngine dryEngine,wetEngine;dry(dryEngine);dry(wetEngine);
         dryEngine.prepare(sampleRate);wetEngine.prepare(sampleRate);
+        powerOn(wetEngine,{AGPhaserPower});
         wetEngine.setGlobal(AGPhaserMix,1);
         note(dryEngine,0,60);note(wetEngine,0,60);
         std::array<float,256> dl{},dr{},wl{},wr{};double difference=0;
@@ -242,7 +246,7 @@ void matrixLFOs() {
     std::puts("PASS: LFO 3–5 are Matrix-only, Depth scales them, and LFO 5 does not alias to LFO 1");
 }
 std::vector<float> matrixAudio(int bank,int source,int destination,int target=4,bool enabled=true,float amount=.65f,int controllerChannel=0) {
-    SynthEngine e;dry(e);e.setParameter(0,APAttack,.01f);e.setParameter(0,APCutoff,1700);
+    SynthEngine e;dry(e);powerOn(e,{AGChorusPower,AGPhaserPower});e.setParameter(0,APAttack,.01f);e.setParameter(0,APCutoff,1700);
     e.setParameter(0,APLFORate,4);e.setParameter(0,APLFO2Rate,7);
     e.setParameter(0,APLFODestination,1);e.setParameter(0,APLFO2Destination,2);
     e.setMatrix(bank,0,enabled,source,destination,target,74,amount);
@@ -327,13 +331,76 @@ void expressivePlaying() {
     std::puts("PASS: mono/legato last-note return, sustain, source isolation, disconnect, glide trajectory, live bend range and velocity curves");
 }
 void extendedEffects() {
-    auto sound=[](int parameter,float value){SynthEngine e;dry(e);e.setGlobal(AGPhaserMix,.8f);e.setGlobal(AGChorusMix,.6f);e.setGlobal(AGReverbMix,.7f);e.setGlobal(AGDelayMix,.6f);if(parameter>=0)e.setGlobal(parameter,value);note(e,0,60);render(e,2400);off(e,0,60);std::vector<float> l(rate*2),r(rate*2);e.render(l.data(),r.data(),uint32_t(l.size()));for(float x:l)assert(std::isfinite(x)&&std::abs(x)<=1);assert(drainPanic(e)<1e-7f);return l;};
+    auto sound=[](int parameter,float value){SynthEngine e;dry(e);powerOn(e,{AGPhaserPower,AGChorusPower});e.setGlobal(AGPhaserMix,.8f);e.setGlobal(AGChorusMix,.6f);e.setGlobal(AGReverbMix,.7f);e.setGlobal(AGDelayMix,.6f);if(parameter>=0)e.setGlobal(parameter,value);note(e,0,60);render(e,2400);off(e,0,60);std::vector<float> l(rate*2),r(rate*2);e.render(l.data(),r.data(),uint32_t(l.size()));for(float x:l)assert(std::isfinite(x)&&std::abs(x)<=1);assert(drainPanic(e)<1e-7f);return l;};
     auto baseline=sound(-1,0);
     for(auto pair:std::array<std::pair<int,float>,8>{{{AGPhaserRate,3},{AGPhaserDepth,.1f},{AGPhaserFeedback,.7f},{AGChorusRate,3},{AGChorusDepth,.1f},{AGReverbSize,1},{AGReverbDecay,5},{AGDelayTiming,4}}}){
         auto other=sound(pair.first,pair.second);double delta=0;for(size_t i=0;i<other.size();i++)delta+=std::abs(other[i]-baseline[i]);assert(delta>.01);
     }
     for(double sr:{44100.,48000.,96000.,192000.}){SynthEngine e;e.prepare(sr);e.setGlobal(AGTempo,30);e.setGlobal(AGDelayMix,1);e.setGlobal(AGPhaserMix,1);e.setGlobal(AGPhaserFeedback,.85f);e.setGlobal(AGReverbMix,1);e.setGlobal(AGReverbDecay,8);e.setGlobal(AGReverbSize,1);note(e,0,60);for(int timing=0;timing<8;timing++){e.setGlobal(AGDelayTiming,float(timing));render(e,4096);}assert(drainPanic(e)<1e-7f);}
     std::puts("PASS: all eight FX controls change rendered audio; all delay timings and maximum feedback stay bounded at four sample rates");
+}
+void masterFxPower() {
+    // Each master FX power toggle has to be a real bypass in the engine, not a UI flag.
+    // Two claims are checked: a toggle is a true switch (never a partial blend), and an
+    // unpowered effect contributes exactly nothing — alone, and with every other effect
+    // struck at the same time. "Exactly nothing" is measured against the same patch with
+    // that effect dialled transparent, which is the untouched dry bus.
+    constexpr std::array<int,10> power{AGShimmerPower,AGDelayPower,AGReverbPower,AGChorusPower,AGPhaserPower,
+                                       AGFlangerPower,AGTremPower,AGCrushPower,AGWahPower,AGCompPower};
+    constexpr int frames=16800; // 0.35 s: note on, release, then the effect tails
+    auto capture=[&power](unsigned liveMask,unsigned offMask){
+        SynthEngine e;
+        auto on=[liveMask](int i){return (liveMask>>i)&1u;};
+        e.setParameter(0,APAttack,.003f);e.setParameter(0,APRelease,.025f);
+        e.setGlobal(AGShimmerMix,on(0)?1.f:0.f);e.setGlobal(AGShimmerAmount,.9f);e.setGlobal(AGShimmerDecay,8);
+        e.setGlobal(AGShimmerVoice1,1);e.setGlobal(AGShimmerVoice2,1);e.setGlobal(AGShimmerVoice3,1);
+        e.setGlobal(AGDelaySync,0);e.setGlobal(AGDelayMix,on(1)?.6f:0.f);e.setGlobal(AGDelayFeedback,.75f);e.setGlobal(AGDelayTimeMs,60);
+        e.setGlobal(AGReverbMix,on(2)?.75f:0.f);e.setGlobal(AGReverbSize,1);e.setGlobal(AGReverbDecay,6);
+        e.setGlobal(AGChorusMix,on(3)?.6f:0.f);e.setGlobal(AGChorusRate,3);e.setGlobal(AGChorusDepth,1);
+        e.setGlobal(AGPhaserMix,on(4)?.8f:0.f);e.setGlobal(AGPhaserRate,3);e.setGlobal(AGPhaserDepth,1);e.setGlobal(AGPhaserFeedback,.7f);
+        e.setGlobal(AGFlangerMix,on(5)?.8f:0.f);e.setGlobal(AGFlangerDepth,1);e.setGlobal(AGFlangerFeedback,.8f);
+        e.setGlobal(AGTremMix,on(6)?1.f:0.f);e.setGlobal(AGTremDepth,1);e.setGlobal(AGTremRate,4);
+        e.setGlobal(AGCrushMix,on(7)?1.f:0.f);e.setGlobal(AGCrushBits,4);e.setGlobal(AGCrushDownsample,8);
+        e.setGlobal(AGWahMix,on(8)?1.f:0.f);e.setGlobal(AGWahSensitivity,1);e.setGlobal(AGWahRange,1);
+        e.setGlobal(AGCompThreshold,on(9)?-40.f:0.f);e.setGlobal(AGCompRatio,12);e.setGlobal(AGCompMakeup,on(9)?18.f:0.f);
+        for(int i=0;i<10;i++)e.setGlobal(power[size_t(i)],((offMask>>i)&1u)?0.f:1.f);
+        // prepare() snapshots the toggles, so a struck effect starts fully closed
+        // instead of leaking one fade of wet audio before its gate settles.
+        e.prepare(rate);
+        std::array<float,257> l{},r{};std::vector<float> out;out.reserve(size_t(frames)*2);
+        auto push=[&](int n){for(int i=0;i<n;i++){assert(std::isfinite(l[i])&&std::isfinite(r[i]));assert(std::abs(l[i])<=1&&std::abs(r[i])<=1);out.push_back(l[i]);out.push_back(r[i]);}};
+        note(e,0,60);note(e,0,67);
+        for(int remaining=frames/2;remaining>0;){int n=std::min(remaining,257);e.render(l.data(),r.data(),uint32_t(n));push(n);remaining-=n;}
+        off(e,0,60);off(e,0,67);
+        for(int remaining=frames-frames/2;remaining>0;){int n=std::min(remaining,257);e.render(l.data(),r.data(),uint32_t(n));push(n);remaining-=n;}
+        assert(e.activeVoices()==0);
+        return out;
+    };
+    auto difference=[](const std::vector<float>& a,const std::vector<float>& b){double worst=0;for(size_t i=0;i<a.size();i++)worst=std::max(worst,double(std::abs(a[i]-b[i])));return worst;};
+    {SynthEngine e; // Shipping default: only the shared Delay and Reverb returns are powered.
+     for(int id:power){
+         bool expectOn=id==AGDelayPower||id==AGReverbPower;
+         assert(e.getGlobal(id)==(expectOn?1.f:0.f));
+     }
+     // A power toggle is a switch, never a wet blend.
+     e.setGlobal(AGShimmerPower,.4f);assert(e.getGlobal(AGShimmerPower)==0);
+     e.setGlobal(AGShimmerPower,.6f);assert(e.getGlobal(AGShimmerPower)==1);
+     e.setGlobal(AGCompPower,-3);assert(e.getGlobal(AGCompPower)==0);
+     e.setGlobal(AGWahPower,7);assert(e.getGlobal(AGWahPower)==1);
+     // A bare engine must be silent apart from the two shared returns.
+     e.setGlobal(AGDelayMix,0);e.setGlobal(AGReverbMix,0);
+     dry(e);powerOn(e,{AGShimmerPower,AGChorusPower,AGPhaserPower,AGFlangerPower,AGTremPower,AGCrushPower,AGWahPower,AGCompPower,AGReverbPower});
+     e.setGlobal(AGShimmerMix,1);e.setGlobal(AGCompThreshold,-40);e.setGlobal(AGCompRatio,12);e.setGlobal(AGCompMakeup,18);
+     note(e,0,60);render(e,2400);off(e,0,60);render(e);
+     assert(drainPanic(e)<1e-7f);}
+    // Reference bus: every effect dialled transparent with every power switch on.
+    auto neutral=capture(0,0);
+    // Each effect on its own has to change the bus, otherwise the toggle proves nothing.
+    for(int i=0;i<10;i++){auto wet=capture(1u<<i,0);assert(difference(wet,neutral)>1e-3);}
+    // Each effect switched off has to give that same dry bus back.
+    for(int i=0;i<10;i++){auto struck=capture(1u<<i,1u<<i);assert(difference(struck,neutral)<1e-7);}
+    auto allStruck=capture(0x3ffu,0x3ffu);assert(difference(allStruck,neutral)<1e-7);
+    std::puts("PASS: all ten master FX power toggles are true switches; a struck effect renders the dry bus exactly, alone and with every effect struck together");
 }
 void performanceTools() {
     SynthEngine e;dry(e);e.hold(true);note(e,9,60);render(e);off(e,9,60);render(e,rate);assert(e.activeVoices()==1);
@@ -353,6 +420,7 @@ void performanceTools() {
 }
 void benchmark(int unison=1) {
     SynthEngine e;e.prepare(44100);e.setGlobal(AGMaster,.25f);
+    powerOn(e,{AGChorusPower,AGPhaserPower});
     e.setGlobal(AGChorusMix,.4f);e.setGlobal(AGDelayMix,.3f);e.setGlobal(AGReverbMix,.3f);
     for(int l=0;l<4;l++) {
         e.setParameter(l,APEnabled,1);e.setParameter(l,APWave1,2);e.setParameter(l,APWave2,3);
@@ -375,4 +443,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

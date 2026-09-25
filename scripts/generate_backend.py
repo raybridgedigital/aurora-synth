@@ -32,9 +32,7 @@ c.insert(-3,'void aurora_plugin_xy(void *context,double x,double y);')
 c.insert(-3,'double aurora_plugin_control(void *context,int id);')
 c.insert(-3,'const char *aurora_plugin_mappings(void *context);')
 c.insert(-3,'void aurora_plugin_set_mappings(void *context,const char *json);')
-(root/'Sources/AuroraBackend.swift').write_text('\n'.join(swift)+'\n')
-(root/'Sources/PluginBridge.h').write_text('\n'.join(c)+'\n')
-print(f'Generated {len(decls)} typed backend methods')
+# Outputs are written only after every consistency check below has passed.
 import json
 from assemble_prism_bank import RANGES, INTEGER, DEFAULTS
 RANGES=list(RANGES)+[(0,1),(0,2),(30,18000),(0,.9),(0,2),(0,1),(.001,8),(.01,12),(0,1),(.01,12),(-1,1),(0,6),(0,3),(0,1),(.25,8),(0,4),(0,1),(0,1),(0,1),(4,16),(.02,1)]
@@ -43,11 +41,42 @@ DEFAULTS=list(DEFAULTS)+[0,0,3200,0,0,.5,.01,.35,0,.35,0,0,0,0,1,0,.25,1,.5,12,1
 creative=(root/'Sources/CreativeTools.swift').read_text()
 names=json.loads('['+re.search(r'static let layerNames=\[([^\]]+)\]',creative)[1]+']')
 globals_=json.loads('['+re.search(r'static let globalNames=\[([^\]]+)\]',creative)[1]+']')
-granges=[(0,1),(30,240),(0,.6),(0,.75),(0,.75),(0,.6),(0,1),(.03,5),(0,1),(-.85,.85),(.03,5),(0,1),(0,1),(.2,8),(0,7)]
+# Global (shared + master FX) ranges, index-aligned with enum AuroraGlobal in
+# Sources/AuroraBridge.h and with SynthModel.globalRanges in Sources/AuroraApp.swift.
+# One entry per AGGlobalCount parameter; SynthEngine::globalValue is the DSP clamp authority.
+granges=[(0,1),(30,240),(0,.6),(0,.75),(0,.75),(0,.6),(0,1),(.03,5),(0,1),(-.85,.85),(.03,5),(0,1),(0,1),(.2,8),(0,7),
+ (0,24),(0,1),(1,2000),(0,1),(0,1),(-12,12),(-12,12),(-12,12),(0,1),(-12,24),(.2,12),(0,1),(0,200),(0,.95),
+ (0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(.2,12),
+ (0,1),(.03,5),(0,1),(0,.9),(0,1),(.03,8),(0,1),(0,2),(0,1),(1,16),(1,64),(0,1),(0,1),
+ (-60,0),(1,12),(.1,100),(5,1000),(0,18),(0,1),(0,1),(0,1),(0,1),(0,1),
+ (0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(0,1)]
+GINTEGER={14,16,44,46,47,55,59,60,61,62,63,64,65,66,67,68,69}
 meta=['#pragma once','#include <array>','namespace auroraPlugin {','struct Spec {const char* name;double low,high;bool logarithmic,integer;};','inline constexpr Spec layers[] = {']
 for i,(name,(lo,hi)) in enumerate(zip(names,RANGES)):
     meta.append('{'+f'{json.dumps(name)},{lo},{hi},{str(i in (7,9,10,12,16,29,60,64,65,67,72,78)).lower()},{str(i in INTEGER).lower()}'+'},')
 meta+=['};','inline constexpr Spec globals[] = {']
-for i,(name,(lo,hi)) in enumerate(zip(globals_,granges)):meta.append('{'+f'{json.dumps(name)},{lo},{hi},false,{str(i==14).lower()}'+'},')
+assert len(globals_)==len(granges), f'globalNames {len(globals_)} != ranges {len(granges)}'
+for i,(name,(lo,hi)) in enumerate(zip(globals_,granges)):meta.append('{'+f'{json.dumps(name)},{lo},{hi},false,{str(i in GINTEGER).lower()}'+'},')
 meta+=['};','inline constexpr double defaults[] = {'+','.join(map(str,DEFAULTS))+'};','}']
-(root/'Sources/PluginParameters.hpp').write_text('\n'.join(meta)+'\n')
+
+# Guard before writing: the layer half of this generator is fed by
+# assemble_prism_bank.RANGES/INTEGER/DEFAULTS, which have drifted from the
+# committed Sources/PluginParameters.hpp. Writing a truncated layers[]/defaults[]
+# silently breaks Core::spec/actual and the 126-entry defaults[] fallback in
+# PluginCore.mm, so refuse instead of corrupting the table.
+target=root/'Sources/PluginParameters.hpp'
+if target.exists():
+    committed=target.read_text()
+    committed_layers=len(re.findall(r'\{"',committed.split('inline constexpr Spec globals')[0]))
+    committed_defaults=len(re.search(r'defaults\[\] = \{([^}]+)',committed)[1].split(','))
+    if len(names)!=committed_layers or len(DEFAULTS)!=committed_defaults:
+        raise SystemExit(
+            f'generate_backend.py is stale: it would write {len(names)} layers / {len(DEFAULTS)} defaults, '
+            f'but Sources/PluginParameters.hpp holds {committed_layers} layers / {committed_defaults} defaults. '
+            'Reconcile assemble_prism_bank.py first; nothing was written.')
+
+(root/'Sources/AuroraBackend.swift').write_text('\n'.join(swift)+'\n')
+(root/'Sources/PluginBridge.h').write_text('\n'.join(c)+'\n')
+target.write_text('\n'.join(meta)+'\n')
+print(f'Generated {len(decls)} typed backend methods')
+print(f'Generated {len(names)} layer specs, {len(globals_)} global specs, {len(DEFAULTS)} layer defaults')

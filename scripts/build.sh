@@ -8,7 +8,7 @@ MODULE_CACHE_DIR="$BUILD_DIR/ModuleCache"
 
 python3 "$ROOT_DIR/scripts/rebuild_factory_bank.py"
 
-for source_file in Sources/AuroraApp.swift Sources/AuroraBridge.h Sources/SynthEngine.cpp Sources/MacAudioMIDI.mm Resources/Info.plist Resources/Aurora100.json; do
+for source_file in Sources/AuroraApp.swift Sources/AuroraBridge.h Sources/SynthEngine.cpp Sources/FmEngine.cpp Sources/MacAudioMIDI.mm Resources/Info.plist Resources/Aurora100.json; do
     if [[ ! -f "$ROOT_DIR/$source_file" ]]; then
         printf 'Missing source file: %s\n' "$source_file" >&2
         exit 1

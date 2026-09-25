@@ -31,7 +31,10 @@ COMMON=(-std=c++20 "$OPTIMIZATION" -pthread -target "$TARGET" -isysroot "$SDK_DI
 
 printf 'Compiling Aurora v1 native baseline…\n'
 "$CLANGXX" "${COMMON[@]}" -c "$ROOT_DIR/Sources/SynthEngine.cpp" -o "$BUILD_DIR/SynthEngine.o"
-"$CLANGXX" "${COMMON[@]}" "$BUILD_DIR/SynthEngine.o" "$ROOT_DIR/Tests/BaselineEngineTests.cpp" -o "$BUILD_DIR/BaselineEngineTests"
+# SynthEngine.cpp calls FmEngine::initTables/renderSample, so FmEngine.o takes part
+# in every native link that already carries SynthEngine.o.
+"$CLANGXX" "${COMMON[@]}" -c "$ROOT_DIR/Sources/FmEngine.cpp" -o "$BUILD_DIR/FmEngine.o"
+"$CLANGXX" "${COMMON[@]}" "$BUILD_DIR/SynthEngine.o" "$BUILD_DIR/FmEngine.o" "$ROOT_DIR/Tests/BaselineEngineTests.cpp" -o "$BUILD_DIR/BaselineEngineTests"
 "$BUILD_DIR/BaselineEngineTests"
 
 # Sanitizer jobs intentionally exercise the native real-time engine only.
@@ -68,6 +71,7 @@ xcrun swiftc -parse-as-library -O -target "$TARGET" \
     "$ROOT_DIR/Sources/CreativeTools.swift" \
     "$ROOT_DIR/BaselineChecks.swift" \
     "$ROOT_DIR/build/objects/SynthEngine.o" \
+    "$ROOT_DIR/build/objects/FmEngine.o" \
     "$ROOT_DIR/build/objects/MacAudioMIDI.o" \
     -lc++ -framework SwiftUI -framework AppKit -framework Foundation \
     -framework CoreAudio -framework AudioUnit -framework AudioToolbox -framework CoreMIDI \

@@ -14,6 +14,13 @@ static void finishPanic(Core& c){
 static void panicAndDrain(Core& c){c.engine.panic();finishPanic(c);}
 int main(){@autoreleasepool {
     Core a,b;int tested=0;
+    // The plug-in spec table must cover every AuroraGlobal id: Core::spec() indexes
+    // globals[] with the id, so a short table reads past its end.
+    static_assert(sizeof(globals)/sizeof(globals[0])==size_t(AGGlobalCount),"Spec globals[] must cover AGGlobalCount");
+    for(int i=0;i<AGGlobalCount;i++){
+        Spec s=Core::spec(globalBase+i);
+        assert(s.name&&s.name[0]&&s.low<s.high);
+    }
     assert(a.values[outputGainID]==9);
     static_assert(layerID(3,57)==231 && layerID(0,58)==6000 && layerID(3,78)==6404);
     static_assert(sendID(3,1)!=routeMaskID && sendID(3,2)!=routeChannelID);

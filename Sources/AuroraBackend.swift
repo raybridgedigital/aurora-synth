@@ -200,13 +200,6 @@ final class AuroraBackend {
         return aurora_clock_tempoStandalone()
 #endif
     }
-    func aurora_comp_gr() -> Float {
-#if AURORA_PLUGIN
-        return aurora_plugin_comp_gr(context)
-#else
-        return aurora_comp_grStandalone()
-#endif
-    }
     func aurora_record_start(_ path: String) -> Int32 {
 #if AURORA_PLUGIN
         return aurora_plugin_record_start(context, path)
@@ -261,6 +254,13 @@ final class AuroraBackend {
         return aurora_plugin_output_peak(context)
 #else
         return aurora_output_peakStandalone()
+#endif
+    }
+    func aurora_comp_gr() -> Float {
+#if AURORA_PLUGIN
+        return aurora_plugin_comp_gr(context)
+#else
+        return aurora_comp_grStandalone()
 #endif
     }
     func aurora_copy_scope(_ samples: UnsafeMutablePointer<Float>?, _ capacity: Int32) -> Int32 {
@@ -385,9 +385,9 @@ private let aurora_note_onStandalone = aurora_note_on
 private let aurora_note_offStandalone = aurora_note_off
 private let aurora_panicStandalone = aurora_panic
 private let aurora_output_peakStandalone = aurora_output_peak
+private let aurora_comp_grStandalone = aurora_comp_gr
 private let aurora_copy_scopeStandalone = aurora_copy_scope
 private let aurora_copy_modulationStandalone = aurora_copy_modulation
-private let aurora_comp_grStandalone = aurora_comp_gr
 private let aurora_set_custom_wavetableStandalone = aurora_set_custom_wavetable
 private let aurora_clear_custom_wavetableStandalone = aurora_clear_custom_wavetable
 private let aurora_copy_wavetable_previewStandalone = aurora_copy_wavetable_preview
