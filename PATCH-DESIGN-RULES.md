@@ -27,12 +27,15 @@ pads/choirs/drones, sustained horns, evolving clouds, and held-synth voices
 (sub goblin, acid line, fretless song, mono synth leads). Ebow is a guitar
 but bowed — it sustains. When in doubt, ask what excites the string.
 
-## 2. Delay lives only in FX-flavored categories (ENFORCED)
+## 2. Delay ships OFF by default; only Reverb may ship ON
 
-Delay power (global 61) is ON only in **Sound FX** and **Musical FX**
-(plus the legacy GB109 FX bank, which is frozen reference). Everywhere else
-it is OFF — mixes may stay authored so re-enabling restores intent, but the
-toggle stays off. Reverb/chorus/shimmer/etc. have no such restriction.
+Delay is part of the sound design — patches that call for it carry fully
+authored delay parameters (mix, feedback, timing, tone, ducking) — but the
+delay power toggle ships OFF by default in every category, with no
+exceptions (not even Sound FX / Musical FX). If the player wants delay,
+one toggle restores the factory-designed delay for that patch.
+Reverb is the only insert FX that may ship powered ON.
+Rule 5 still applies: everything not featured stays off.
 
 ## 3. One character per patch, 1–2 layers max
 
