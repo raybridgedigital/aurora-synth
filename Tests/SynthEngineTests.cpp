@@ -1,4 +1,5 @@
 #include "SynthEngine.hpp"
+#include "FmEngine.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -661,6 +662,32 @@ void reverbPredelayAndTone() {
     }
     std::puts("PASS: Pre-delay holds the tail back; Tone darkens and brightens both reverbs");
 }
+void fmExponentialEnvelope() {
+    // FM envelope mode 2 (DX-style) falls evenly in decibels: 96 dB per 1/rate seconds, so a
+    // rate-1 decay is about -48 dB after half a second, where the straight-line mode is only at
+    // -6 dB. Rates now reach 1000 (1 ms segments). Modes 0 and 1 are unchanged.
+    aurora::FmEngine::initTables();
+    auto patch=[](int envMode,float rate1,float rate2){
+        aurora::FmParams p{};auto& v=p.v;const int b=aurora::kFmGlobalCount; // operator 0
+        v[aurora::FmEnabled]=1;v[aurora::FmAlgorithm]=12;v[aurora::FmCarrierMix]=0; // op 0 alone
+        v[b+aurora::FmRatio]=1;v[b+aurora::FmLevel]=1;v[b+aurora::FmVel]=0;v[b+aurora::FmEnvMode]=float(envMode);
+        v[b+aurora::FmRate1]=rate1;v[b+aurora::FmRate2]=rate2;v[b+aurora::FmRate3]=rate2;v[b+aurora::FmRate4]=10;
+        v[b+aurora::FmLevel1]=1;return p;};
+    auto envelopeDb=[](const aurora::FmParams& p,double at){ // peak of a 100 Hz carrier around `at` seconds
+        aurora::FmVoiceState st{};double peak=0;const int from=int(at*rate)-rate/100,to=int(at*rate)+rate/100;
+        for(int i=0;i<to;i++){float x=aurora::FmEngine::renderSample(p,st,100.f,1.f,60,false,rate,nullptr);if(i>=from)peak=std::max(peak,double(std::abs(x)));}
+        return 20*std::log10(std::max(peak,1e-9));};
+    const double exponentialHalf=envelopeDb(patch(2,1000,1),.5),linearHalf=envelopeDb(patch(0,1000,1),.5);
+    std::printf("FM envelope, rate 1, after 0.5 s: exponential %.1f dB, linear %.1f dB\n",exponentialHalf,linearHalf);
+    assert(std::abs(exponentialHalf+48)<2.5);
+    assert(std::abs(linearHalf+6)<1.0);
+    {   // rate 1000 reaches full level within ~1 ms
+        aurora::FmVoiceState st{};auto p=patch(0,1000,.02f);double peak=0;
+        for(int i=0;i<rate/500;i++)peak=std::max(peak,double(std::abs(aurora::FmEngine::renderSample(p,st,1000.f,1.f,60,false,rate,nullptr))));
+        assert(peak>.9);
+    }
+    std::puts("PASS: FM exponential envelopes fall evenly in dB; 1 ms envelope segments");
+}
 void plateExtremesAndSwitch() {
     // Largest Size, longest Decay and Pre-delay, brightest Tone, a loud wide chord: finite and
     // under full scale (render() asserts both), then exact silence after Panic.
@@ -741,4 +768,4 @@ void benchmark(int unison=1) {
         e.activeVoices(),unison,elapsed,durations[size_t(durations.size()*.99)],100*durations[size_t(durations.size()*.99)]/deadline,deadline,durations.back());
 }
 }
-int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();envelopeDeclick();cleanVoiceSteal();cleanOutputLimiter();reverbPlateLevel();reverbChangesClean();reverbPredelayAndTone();plateExtremesAndSwitch();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }
+int main() { performanceTools();expressivePlaying();extendedEffects();masterFxPower();trueBypass();bypassCost();silentVoiceRelease();envelopeDeclick();cleanVoiceSteal();cleanOutputLimiter();reverbPlateLevel();reverbChangesClean();reverbPredelayAndTone();plateExtremesAndSwitch();fmExponentialEnvelope();oscillatorCharacter();modulationFeedback();matrices();lfoTwoShapes();matrixLFOs();scopeCapture();phaserEffect();globalTranspose();ownership();deferredPanicCommit();routingAndPrepare();arp();overflowAndConcurrent();extremesAndCapacity();if(!std::getenv("AURORA_SKIP_BENCHMARKS")){benchmark();benchmark(4);}std::puts("All SynthEngine tests passed."); }

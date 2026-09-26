@@ -29,9 +29,10 @@ enum FmOpField : int {
     FmVel,        // velocity sense 0...1
     FmKeyScale,   // 0 off / 1 low / 2 even / 3 odd
     FmKeySync,    // stored for v1.1 free-run phase continuity; voices always reset today
-    FmEnvMode,    // 0 rate/level (4 rates + 4 levels), 1 ADSR alternate (rates = seconds)
+    FmEnvMode,    // 0 rate/level (4 rates + 4 levels), 1 ADSR alternate (rates = seconds),
+                  // 2 exponential rate/level (falls at 96 dB per 1/rate s, DX-style)
     FmPulseWidth, // 0.05...0.95
-    FmRate1, FmRate2, FmRate3, FmRate4,       // rate/level: speed 0.02...200 (time = 1/rate)
+    FmRate1, FmRate2, FmRate3, FmRate4,       // rate/level: speed 0.02...1000 (time = 1/rate)
     FmLevel1, FmLevel2, FmLevel3, FmLevel4,   // 0...1
     FmWTTable,    // 0...23 factory wavetable
     FmWTPos,      // wavetable position 0...1
@@ -43,6 +44,8 @@ struct FmVoiceState {
     std::array<float,kFmOpCount> env{};
     std::array<int8_t,kFmOpCount> stage{};   // 0 attack · 1 decay · 2 hold · 3 release
     float feedbackDelay=0; // 1-sample delay at the internal modulator rate (DX lineage)
+    std::array<float,kFmOpCount> expFactor{}; // exponential mode: per-sample fall for expSpeed
+    std::array<float,kFmOpCount> expSpeed{};
     float pitchEnv=0;      // semitones; one-shot strike envelope
     float pitchClock=0;    // seconds since note-on; <0 once the strike envelope parks
 };

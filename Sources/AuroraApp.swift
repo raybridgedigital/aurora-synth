@@ -192,9 +192,9 @@ struct FmPatch: Codable, Equatable {
             out[b + 6] = Float(FmPatch.cl(o.vel, 0, 1))
             out[b + 7] = Float(FmPatch.cl(o.keyScale, 0, 3))
             out[b + 8] = o.keySync > 0 ? 1 : 0
-            out[b + 9] = o.envMode > 0 ? 1 : 0
+            out[b + 9] = Float(FmPatch.cl(o.envMode, 0, 2)) // 0 rate/level, 1 ADSR, 2 exponential
             out[b + 10] = Float(FmPatch.cl(o.pulseWidth, 0.05, 0.95))
-            for r in 0..<4 { out[b + 11 + r] = Float(FmPatch.cl(rates[r], 0.02, 300)) }
+            for r in 0..<4 { out[b + 11 + r] = Float(FmPatch.cl(rates[r], 0.02, 1000)) }
             for l in 0..<4 { out[b + 15 + l] = Float(FmPatch.cl(levels[l], 0, 1)) }
             out[b + 19] = Float(FmPatch.cl(o.wtTable, 0, 23))
             out[b + 20] = Float(FmPatch.cl(o.wtPos, 0, 1))
@@ -291,6 +291,8 @@ func reverbToneText(_ v:Double)->String{
     if v>0.53 {return String(format:"Bright %.0f",(v-0.5)*200)}
     return "Neutral"
 }
+/// Slider position p of a modulator (level p²) as the FM index in radians (level 1 = 20π).
+func fmIndexText(_ p:Double)->String{String(format:"%.2f",p*p*62.832)}
 func fmFreqText(_ v:Double)->String{v>=1000 ? String(format:"%.1f kHz",v/1000):String(format:"%.0f Hz",v)}
 /// One cell of the 16-algorithm picker grid — keeps the grid closure trivially typed.
 struct FmAlgorithmCell: View {
@@ -1844,6 +1846,11 @@ struct EditorView:View {
         Binding(get:{(m.patch.layers[m.selectedLayer].fm ?? FmPatch()).op(op)[keyPath:kp]},
                 set:{v in m.setFm({var o=$0.op(op);o[keyPath:kp]=v;$0.setOp(op,o)},checkpointing:false)})
     }
+    /// Modulator level on a squared taper: slider position p stores level p², shown as the index.
+    func fmModulatorBinding(_ op:Int)->Binding<Double>{
+        Binding(get:{((m.patch.layers[m.selectedLayer].fm ?? FmPatch()).op(op).level).squareRoot()},
+                set:{v in m.setFm({var o=$0.op(op);o.level=v*v;$0.setOp(op,o)},checkpointing:false)})
+    }
     func fmEnvBinding(_ op:Int,_ levels:Bool,_ i:Int)->Binding<Double>{
         Binding(get:{let o=(m.patch.layers[m.selectedLayer].fm ?? FmPatch()).op(op)
             return levels ? (o.env.levels.count>i ? o.env.levels[i] : 0) : (o.env.rates.count>i ? o.env.rates[i] : 0.02)},
@@ -1897,11 +1904,18 @@ struct EditorView:View {
                 ForEach(Array(fmWaves.enumerated()),id:\.offset){idx,n in Text(n).tag(idx)}
             }.labelsHidden().pickerStyle(.segmented).font(.system(size:11)).accessibilityLabel("Op \(i+1) wave").help("Operator \(i+1) waveform")
             fmSlider("Ratio",fmOpBinding(i,\.ratio),0.25...16,log:true,help:"Operator \(i+1) frequency ratio",format:ratioText)
-            fmSlider("Level",fmOpBinding(i,\.level),0...1,help:"Operator \(i+1) level — modulator index or carrier amplitude")
+            if meta.target[i]<0 {
+                fmSlider("Level",fmOpBinding(i,\.level),0...1,help:"Operator \(i+1) carrier amplitude")
+            } else {
+                // Modulator level is an index (1.0 = 10 cycles, about 63 radians): a squared taper
+                // spreads the musical range (index 0.5–3) over the slider instead of its first 5%.
+                fmSlider("Index",fmModulatorBinding(i),0...1,help:"Operator \(i+1) modulation index. About 1 = soft electric piano, 2–3 = bright bark, 5 and up = brassy or harsh.",format:fmIndexText)
+            }
             fmSlider("Velocity",fmOpBinding(i,\.vel),0...1,help:"Operator \(i+1) velocity sensitivity")
             FmEnvCurve(op:op).frame(height:42)
             DisclosureGroup("Envelope"){
-                Picker("Mode",selection:fmOpBinding(i,\.envMode)){Text("Rate/Level").tag(0);Text("ADSR").tag(1)}
+                Picker("Mode",selection:fmOpBinding(i,\.envMode)){Text("Rate/Level").tag(0);Text("Exp").tag(2);Text("ADSR").tag(1)}
+                    .help("Rate/Level: straight-line segments. Exp: falls evenly in decibels like a DX7 — natural tails for pianos, bells and plucks (a 60 dB fall takes 0.63/rate s). ADSR: rates are seconds.")
                     .pickerStyle(.segmented).font(.system(size:11)).accessibilityLabel("Op \(i+1) envelope mode")
                 ForEach(0..<4,id:\.self){s in fmEnvRow(i,s)}
                 Picker("Keys",selection:fmOpBinding(i,\.keyScale)){
@@ -1930,7 +1944,7 @@ struct EditorView:View {
 
     func fmEnvRow(_ i:Int,_ s:Int)->some View {
         HStack(spacing:6){
-            fmSlider("R\(s+1)",fmEnvBinding(i,false,s),0.02...300,log:true,format:fmRateText)
+            fmSlider("R\(s+1)",fmEnvBinding(i,false,s),0.02...1000,log:true,format:fmRateText)
             fmSlider("L\(s+1)",fmEnvBinding(i,true,s),0...1,format:fmLevelText)
         }
     }

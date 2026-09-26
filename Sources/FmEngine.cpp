@@ -86,7 +86,7 @@ float opWave(int wave,float phase,float step,float width,float table,float pos,f
             float v=phase<width?1.f:-1.f;
             v+=polyBlep(phase,step);
             v-=polyBlep(std::fmod(phase+1-width,1.f),step);
-            return v;}
+            return v-(2*width-1);} // DC-free, like the subtractive pulse
         case 4:{auto* bank=wt::factory()[std::clamp(int(table),0,23)].get();
             if(!bank)return sineLookup(phase);
             float amount=std::clamp(warp,0.f,1.f);
@@ -137,31 +137,42 @@ float FmEngine::renderSample(const FmParams& params,FmVoiceState& st,float baseH
     float opLevel[4],opEnv[4],opScale[4],opHz[4],opWidth[4],opPos[4],opWarp[4];
     float opTable[4],opWaveId[4],halfStep[4],stepCyc[4];
     for(int o=0;o<4;o++){
-        int envMode=int(opP(o,FmEnvMode));
+        const int envMode=std::clamp(int(opP(o,FmEnvMode)),0,2);
         float r[4],lv[4];
-        for(int i=0;i<4;i++){r[i]=std::clamp(opP(o,FmRate1+i),.02f,200.f);lv[i]=std::clamp(opP(o,FmLevel1+i),0.f,1.f);}
+        for(int i=0;i<4;i++){r[i]=std::clamp(opP(o,FmRate1+i),.02f,1000.f);lv[i]=std::clamp(opP(o,FmLevel1+i),0.f,1.f);}
         int ks=std::clamp(int(opP(o,FmKeyScale)),0,3);
         float levelScale=1.f,rateScale=1.f;
         if(ks==1){levelScale=std::exp2(float(60-key)/60.f);rateScale=std::exp2(float(key-60)/120.f);}
         else if(ks==2&&key%2)levelScale=.72f;
         else if(ks==3&&!(key%2))levelScale=.72f;
         // Envelope stage machine: 0 attack → 1 decay → 2 hold → 3 release (note-off enters
-        // 3 from any stage). Rate/Level mode: time = 1/rate. ADSR alternate: rates are
-        // seconds, decay lands on level3 (sustain); level2 unused in ADSR.
+        // 3 from any stage). Rate/Level mode: a full-scale ramp takes 1/rate seconds (rates
+        // 0.02–1000, so segments down to 1 ms). ADSR alternate: rates are seconds, decay lands
+        // on level3 (sustain); level2 unused in ADSR. Exponential (mode 2, DX-style): rises
+        // like Rate/Level, but falls at a constant rate in decibels — 96 dB per 1/rate
+        // seconds — so tines, bells and plucks die away naturally instead of fading in a line.
         int stage=int(st.stage[o]);
         if(released&&stage<3)stage=3;
         float target,sec;
-        if(envMode==0){
+        if(envMode!=1){
             target=lv[stage];
             sec=1.f/std::max(.02f,r[stage]*rateScale);
         } else if(stage==0){target=lv[0];sec=std::clamp(opP(o,FmRate1),.001f,20.f)*rateScale;}
         else if(stage==1){target=lv[2];sec=std::clamp(opP(o,FmRate2),.001f,20.f)*rateScale;}
         else if(stage==2){target=lv[2];sec=.001f;}
         else {target=lv[3];sec=std::clamp(opP(o,FmRate4),.001f,20.f)*rateScale;}
-        float ramp=1.f/(sr*std::max(sec,1e-6f));
-        float d=target-st.env[o];
-        if(std::abs(d)<=ramp){st.env[o]=target;if(stage<2)stage++;}
-        else st.env[o]+=d>0?ramp:-ramp;
+        if(envMode==2&&target<st.env[o]){
+            const float speed=1.f/sec;
+            if(st.expSpeed[o]!=speed){st.expSpeed[o]=speed;st.expFactor[o]=std::exp2(-16.f*speed/sr);} // 2^-16 ≈ -96 dB
+            const float next=st.env[o]*st.expFactor[o],floor=std::max(target,1e-5f); // 1e-5 = -100 dB
+            if(next<=floor){st.env[o]=target;if(stage<2)stage++;}
+            else st.env[o]=next;
+        } else {
+            float ramp=1.f/(sr*std::max(sec,1e-6f));
+            float d=target-st.env[o];
+            if(std::abs(d)<=ramp){st.env[o]=target;if(stage<2)stage++;}
+            else st.env[o]+=d>0?ramp:-ramp;
+        }
         st.stage[o]=int8_t(stage);
         opEnv[o]=st.env[o];
         opLevel[o]=std::clamp(opP(o,FmLevel)+mm[o],0.f,1.f);

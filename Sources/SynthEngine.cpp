@@ -125,7 +125,11 @@ float oscillator(float phase,float step,int wave,float width=.5f) {
         case 1: return 1-4*std::abs(phase-.5f);
         case 2: return 2*phase-1-polyBLEP(phase,step);
         case 3: { width=std::clamp(width,.05f,.95f);float v=phase<width?1.f:-1.f;
-            v+=polyBLEP(phase,step); v-=polyBLEP(std::fmod(phase+1-width,1.f),step); return v; }
+            v+=polyBLEP(phase,step); v-=polyBLEP(std::fmod(phase+1-width,1.f),step);
+            // A pulse of width w averages 2w-1: remove it (AC coupling, as on analog synths).
+            // Otherwise narrow pulses carry a large DC offset: lost headroom and a thump at
+            // note-on/off. The 50 % square is unchanged.
+            return v-(2*width-1); }
         default: {
             // Original compact harmonic voice, retained for classic patches.
             float v=std::sin(tau*phase);
