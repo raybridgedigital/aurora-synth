@@ -4,9 +4,9 @@
 
 **System requirements:** KiMiA runs only on Apple silicon Macs with macOS 14 or newer. There is no plan to support other systems — no Intel Mac, Windows, or Linux versions are planned.
 
-## Current release · 0.26.1
+## Current release · 0.27.0
 
-The current release line is 0.26 (25 September 2026): gig-reliability fixes and a lean factory library (details in [CHANGELOG.md](CHANGELOG.md)). **0.26.1** removes the clicks found in the first play-test: declicked voice envelopes, click-free voice stealing and a clean Output-boost limiter; the dropout counter now blinks while dropouts happen and clears with a click. What 0.26.0 brought:
+**0.27.0** (26 September 2026, details in [CHANGELOG.md](CHANGELOG.md)): a second reverb type (**Plate**) with **Pre-delay** and **Tone**, click-free Size changes; DX-style exponential FM envelopes, 1 ms FM segments and an Index slider; DC-free pulse waves; and **50 new factory patches** (names ending in " -CL" until the owner approves them) calibrated to one loudness. **0.26.1** removed the clicks found in the first play-test: declicked voice envelopes, click-free voice stealing and a clean Output-boost limiter, and the dropout counter blinks while dropouts happen and clears with a click. What 0.26.0 brought:
 
 - **Factory library:** KiMiA now ships one bank, `Resources/AuroraFX.json` — 55 patches in 16 keyboard-first categories (Piano, Keyboard, Organ, Guitar, Bass, Strings, Brass, Woodwind, Syn Lead, Pad/Choir, Syn Comp, Chromatic Perc, Sound FX, Musical FX, Ethnic, FM EP). Factory patches use one or two layers (A, or A + B) so a future Dual Patch runs four layers in total; layers C and D are reserved for the owner's own designs. See [PATCH-DESIGN-RULES.md](PATCH-DESIGN-RULES.md).
 - **Archived, not deleted:** the earlier banks — Spectrum 300, Aurora 100 (with its FM sounds), Prism 100, Nova 100, Shimmer 29, GB109 and the two-patch reference set, 765 patches — are kept for history in [archive/factory-banks](archive/factory-banks/README.md) with their catalogs. They are no longer bundled or listed. Any archived bank can still be imported into **Your sounds** to audition it.

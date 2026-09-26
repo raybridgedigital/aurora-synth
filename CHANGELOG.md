@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.27.0 — unreleased (local branch `claude/0.27-reverb-and-patches`)
+## 0.27.0 — 2026-09-26
 
 ### Reverb
 - **Type: Classic or Plate.** Plate is a Dattorro figure-eight plate (dense, smooth tail) with its level matched to Classic within about 2 dB at every Size and Decay. Switching type fades the old reverb out and starts the new one clean.

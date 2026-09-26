@@ -145,7 +145,7 @@ that could not be reproduced.
   (55 patches) and the AuroraFX audio audit (55 patches, 0 failures) all green; the plug-in
   interface type-checks with `AURORA_PLUGIN`. Plug-ins not rebuilt (owner direction).
 
-## Work after 0.26.1 — branch `claude/0.27-reverb-and-patches` (local, not pushed)
+## Release 0.27.0 — branch `claude/0.27-reverb-and-patches`, merged to `main`
 
 On top of the local 0.26.1 commits (`90b6f07`):
 
@@ -165,7 +165,9 @@ On top of the local 0.26.1 commits (`90b6f07`):
   originals), levels calibrated to −33 dBFS with `scripts/calibrate_claude_levels.py` and
   `bench/patchcheck` (45 exact, 4 within 1–3 dB where Level is at its cap; the Riser by hand).
   `PATCH-ENGINE-REFERENCE.md` = how the engine behaves, for patch designers.
-- Version numbers still read 0.26.1; the owner decides release numbering and pushes.
+- **Released 26 September 2026 (owner: "tag to github"):** `v0.26.1` on `90b6f07`, `v0.27.0` on the
+  release commit after it (app 0.27.0 build 40, AU component version 6912, VST3 "0.27.0");
+  `main` fast-forwarded and pushed. Plug-ins not rebuilt (owner direction).
 
 **No backward compatibility until after the v1 assessment (owner, 26 September 2026):** "make
 the best engine possible ... forget about backward compatibility". Engine changes may alter
