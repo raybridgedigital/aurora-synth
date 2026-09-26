@@ -1,0 +1,202 @@
+{
+ "mx-banjo-porch": {
+  "level_scale": 1.2477,
+  "master": 1.0
+ },
+ "mx-breath-choir": {
+  "level_scale": 1.1765,
+  "master": 1.0
+ },
+ "mx-cello-lament": {
+  "level_scale": 1.0,
+  "master": 0.9726
+ },
+ "mx-chip-square": {
+  "level_scale": 1.0,
+  "master": 0.6184
+ },
+ "mx-cinema-section": {
+  "level_scale": 1.0,
+  "master": 0.7962
+ },
+ "mx-clarinet-shadow": {
+  "level_scale": 1.0,
+  "master": 0.4547
+ },
+ "mx-clav-stax": {
+  "level_scale": 1.3744,
+  "master": 1.0
+ },
+ "mx-clean-chime": {
+  "level_scale": 1.0,
+  "master": 0.6109
+ },
+ "mx-combo-sixty": {
+  "level_scale": 1.0,
+  "master": 0.4269
+ },
+ "mx-cs-sunrise": {
+  "level_scale": 1.0,
+  "master": 0.8394
+ },
+ "mx-dark-matter": {
+  "level_scale": 1.0221,
+  "master": 1.0
+ },
+ "mx-drawbar-jazz": {
+  "level_scale": 1.0,
+  "master": 0.4959
+ },
+ "mx-electric-grand-80": {
+  "level_scale": 1.0,
+  "master": 0.8018
+ },
+ "mx-finger-round": {
+  "level_scale": 1.0,
+  "master": 0.8819
+ },
+ "mx-funk-poly": {
+  "level_scale": 1.0,
+  "master": 0.7377
+ },
+ "mx-glass-halo": {
+  "level_scale": 1.0,
+  "master": 0.8284
+ },
+ "mx-glock-candy": {
+  "level_scale": 1.6667,
+  "master": 0.671
+ },
+ "mx-harmonium-porch": {
+  "level_scale": 1.0,
+  "master": 0.6502
+ },
+ "mx-heartbeat-pulse": {
+  "level_scale": 1.0,
+  "master": 0.4797
+ },
+ "mx-horn-swell": {
+  "level_scale": 1.0,
+  "master": 0.7551
+ },
+ "mx-house-piano-90": {
+  "level_scale": 1.0,
+  "master": 0.6528
+ },
+ "mx-jump-brass": {
+  "level_scale": 1.0,
+  "master": 0.5512
+ },
+ "mx-kalimba-sun": {
+  "level_scale": 1.4398,
+  "master": 1.0
+ },
+ "mx-koto-garden": {
+  "level_scale": 1.2945,
+  "master": 1.0
+ },
+ "mx-lagoon-pluck": {
+  "level_scale": 1.2416,
+  "master": 1.0
+ },
+ "mx-lo-fi-upright": {
+  "level_scale": 1.0,
+  "master": 0.3971
+ },
+ "mx-mono-floor": {
+  "level_scale": 1.0,
+  "master": 0.4988
+ },
+ "mx-musette-caf": {
+  "level_scale": 1.0,
+  "master": 0.7321
+ },
+ "mx-muted-noir": {
+  "level_scale": 1.0901,
+  "master": 1.0
+ },
+ "mx-pan-flute-andes": {
+  "level_scale": 1.0,
+  "master": 0.297
+ },
+ "mx-pianet-spark": {
+  "level_scale": 1.034,
+  "master": 1.0
+ },
+ "mx-polyester-pad": {
+  "level_scale": 1.0,
+  "master": 0.6781
+ },
+ "mx-reso-stab-90": {
+  "level_scale": 1.6667,
+  "master": 1.0
+ },
+ "mx-riser-nebula": {
+  "level_scale": 1.0,
+  "master": 0.5
+ },
+ "mx-rock-drive": {
+  "level_scale": 1.0,
+  "master": 0.2458
+ },
+ "mx-sawtooth-sermon": {
+  "level_scale": 1.0,
+  "master": 0.6777
+ },
+ "mx-section-punch": {
+  "level_scale": 1.0,
+  "master": 0.5019
+ },
+ "mx-soft-cloud": {
+  "level_scale": 1.0,
+  "master": 0.9642
+ },
+ "mx-solina-glow": {
+  "level_scale": 1.3114,
+  "master": 1.0
+ },
+ "mx-staccato-bows": {
+  "level_scale": 1.25,
+  "master": 1.0
+ },
+ "mx-supersaw-anthem": {
+  "level_scale": 1.1765,
+  "master": 1.0
+ },
+ "mx-sync-scream": {
+  "level_scale": 1.0,
+  "master": 0.7351
+ },
+ "mx-vibes-night-club": {
+  "level_scale": 1.0,
+  "master": 0.6136
+ },
+ "mx-vowel-talker": {
+  "level_scale": 1.0,
+  "master": 0.896
+ },
+ "mx-whistle-portamento": {
+  "level_scale": 1.1111,
+  "master": 0.7586
+ },
+ "mx-wurli-smoke": {
+  "level_scale": 1.0,
+  "master": 0.2417
+ },
+ "mxep-ballad-glass": {
+  "level_scale": 1.0,
+  "master": 0.7898
+ },
+ "mxep-bell-tine-nineties": {
+  "level_scale": 1.0,
+  "master": 0.7767
+ },
+ "mxep-eighty-three-tines": {
+  "level_scale": 1.0,
+  "master": 0.7409
+ },
+ "mxep-tine-bark": {
+  "level_scale": 1.0,
+  "master": 0.4824
+ }
+}

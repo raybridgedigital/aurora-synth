@@ -125,8 +125,11 @@ after the known ones — no app change needed for new categories.
   bitcrusher holds were added for exactly this reason. Any newly featured
   DSP state must be added there too.
 - Peak headroom: hold peaks well under 1.0; stress (8 notes @ 127, master
-  100%) must stay finite and unclipped. Calibrate against the GB109 house
-  band (hold RMS roughly 0.008–0.035).
+  100%) must stay finite and unclipped.
+- Loudness: new patches sit at **−33 dBFS early level** (the originals' median;
+  loudest 0.4 s of a held chord, 0 dB boost), measured with `bench/patchcheck`
+  and set with `scripts/calibrate_claude_levels.py`, so switching patches or
+  pairing them in a Dual Patch does not jump in volume.
 
 ## 7. Identity and placement
 

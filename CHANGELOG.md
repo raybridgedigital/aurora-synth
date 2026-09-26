@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.27.0 — unreleased (local branch `claude/0.27-reverb-and-patches`)
+
+### Reverb
+- **Type: Classic or Plate.** Plate is a Dattorro figure-eight plate (dense, smooth tail) with its level matched to Classic within about 2 dB at every Size and Decay. Switching type fades the old reverb out and starts the new one clean.
+- **Pre-delay** (0–200 ms) and **Tone** (dark to bright; the middle is the original damping) for both types.
+- Moving **Size** or **Pre-delay** while the reverb rings no longer clicks: pure-tone tails used to jump by up to +23 dB; the loop lengths now cross-fade over 50 ms.
+
+### FM engine
+- **Exponential envelopes (DX-style):** a new per-operator envelope mode whose decays fall evenly in decibels, the natural tail of pianos, bells and plucks.
+- **Faster envelope segments:** rates up to 1000 (1 ms), for crisp FM attacks (previously 5 ms).
+- **Index slider:** a modulator's level now uses a squared taper and shows the modulation index, so the musical range (about 0.5–3) fills the slider instead of its first few percent.
+
+### Oscillators
+- **DC-free pulse waves** (subtractive and FM): narrow pulses no longer carry a DC offset, which wasted headroom and thumped at note-on and note-off.
+
+### Factory sounds
+- **50 new patches** (names ending in " -CL" until the owner approves them), across all 16 categories, designed with the new rules: only Reverb ships on (every other effect is preset for the sound), layers A/B only, struck sounds decay naturally, levels calibrated to the originals' median (-33 dBFS), low CPU with the pedal down.
+
+### Design rules and tests
+- PATCH-DESIGN-RULES: effects rule with the Sound FX exception, Dual Patch halves, batch reviews, " -CL" names, reference-based imitation. PATCH-ENGINE-REFERENCE: how the engine behaves, for patch designers.
+- Tests write temporary files under $TMPDIR.
+
 ## 0.26.1 — 2026-09-25
 
 ### Clicks and crackle (from the first play-test of 0.26.0)

@@ -157,11 +157,19 @@ On top of the local 0.26.1 commits (`90b6f07`):
 - **Tests (`0a5ef75`):** temporary files follow `$TMPDIR` (sandbox/CI friendly).
 - **Design rules (`0caf190`):** effects rule (only Reverb ships on; Sound FX exempt; the original
   55 exempt), Dual Patch halves, batches, ` -CL` names, reference-based imitation.
-- **Patch job (in progress):** `scripts/claude_patches.py` (authoring DSL + definitions, appended by
-  `scripts/assemble_modx_bank.py` after the 55 originals, which stay byte-identical) and
-  `PATCH-ENGINE-REFERENCE.md` (how the engine behaves, for patch designers; appendix A = the 50-patch
-  plan and status). 4 of 50 drafted (FM EPs), measured once, not calibrated.
+- **FM engine:** exponential (DX-style) operator envelopes (env mode 2), rates up to 1000 (1 ms
+  segments), editor Index slider with a squared taper. **Oscillators:** DC-free pulse waves
+  (subtractive and FM).
+- **50 new patches (` -CL`), done and awaiting the owner's review:** `scripts/claude_patches.py`
+  (authoring DSL + definitions, appended by `scripts/assemble_modx_bank.py` after the 55
+  originals), levels calibrated to −33 dBFS with `scripts/calibrate_claude_levels.py` and
+  `bench/patchcheck` (45 exact, 4 within 1–3 dB where Level is at its cap; the Riser by hand).
+  `PATCH-ENGINE-REFERENCE.md` = how the engine behaves, for patch designers.
 - Version numbers still read 0.26.1; the owner decides release numbering and pushes.
+
+**No backward compatibility until after the v1 assessment (owner, 26 September 2026):** "make
+the best engine possible ... forget about backward compatibility". Engine changes may alter
+existing patches; the owner will build new patches and does not plan to reuse the old ones.
 
 **Version 1 plan (owner, 26 September 2026):** v1 = the current software + 150 factory patches
 (55 originals + 50 Claude patches reviewed together + 45 more later), then a full stress test and
@@ -243,8 +251,8 @@ Authoritative current documents:
 7. **Brand follow-up:** internal repo/file/identifier paths intentionally remain Aurora.
 8. **Plate reverb — done** on `claude/0.27-reverb-and-patches` (`67f2c25`). The old local branch
    `claude/plate-reverb` (`f7cb142`) is superseded.
-9. **50 new patches (` -CL`):** continue from `PATCH-ENGINE-REFERENCE.md` appendix A with
-   `scripts/claude_patches.py` and `bench/patchcheck`; deliver all 50 for one owner review.
+9. **50 new patches (` -CL`):** built and calibrated; the owner reviews all 50 together (keep /
+   tweak / drop). Approved patches lose ` -CL` in the next build; ids stay.
 10. **Version 1 assessment + stress test:** after the patches — full-system optimisation for
    real gigs (crackle-free, crash-free); the owner prefers a fresh session with a handoff.
 

@@ -59,7 +59,7 @@ macros/UI, *int* = integer.
 | # | Param | Range | Behaviour |
 |---|---|---|---|
 | 0 | Enabled | 0/1 | layers C/D (2, 3) stay 0 for AI patches |
-| 1, 2 | Osc 1/2 wave | 0–4 int | 0 sine, 1 triangle, 2 saw (polyBLEP), 3 pulse (uses PW), 4 harmonic (sine + .32·2nd + .18·3rd + .08·5th) |
+| 1, 2 | Osc 1/2 wave | 0–4 int | 0 sine, 1 triangle, 2 saw (polyBLEP), 3 pulse (uses PW; **DC-free since 0.27** — its 2w−1 average is removed, so narrow pulses no longer carry an offset), 4 harmonic (sine + .32·2nd + .18·3rd + .08·5th) |
 | 3 | Oscillator blend | 0–1 | 0 = Osc 1 only, 1 = Osc 2 only |
 | 4 | Detune | 0–30 cents | Osc 2 ratio (Osc 2 sharp) |
 | 5 | Sub | 0–1 | **sine** one octave below, ×0.6 |
@@ -152,9 +152,10 @@ amp envelope, Level and pan still apply. FM layers render one lane (no unison).
 | 14 | Twin Feedback | as EP Twin, fb on 3 | 3 |
 | 15 | Loopback | chain, fb on 3 | 3 |
 
-**Operator fields:** wave (0 sine, 1 tri, 2 saw, 3 pulse, 4 wavetable), ratio 0.25–16 (or
-fixed Hz), fine ±1 = ±100 cents, level, velocity sense, key scale, envelope (4 rates, 4
-levels), env mode (0 rate/level, 1 ADSR-seconds), pulse width, wavetable table/pos/warp.
+**Operator fields:** wave (0 sine, 1 tri, 2 saw, 3 pulse — DC-free, 4 wavetable), ratio 0.25–16
+(or fixed Hz), fine ±1 = ±100 cents, level, velocity sense, key scale, envelope (4 rates, 4
+levels), env mode (0 rate/level, 1 ADSR-seconds, **2 exponential**), pulse width, wavetable
+table/pos/warp.
 
 - **Modulator level is an index: 1.0 = 10 cycles ≈ 63 radians of phase deviation.** Musical
   indices are small: an electric-piano body wants 1–2 rad (**level ≈ 0.015–0.03**), a tine
@@ -168,11 +169,15 @@ levels), env mode (0 rate/level, 1 ADSR-seconds), pulse width, wavetable table/p
 - **Key scale:** 1 "low" = level × 2^((60−key)/60) (−2.4 dB two octaves up) and envelope rates ×
   2^((key−60)/120) (higher notes faster) — the DX-like choice for tines and EP bodies; 2/3 = ×0.72
   on odd/even keys (special effects).
-- **Envelope (mode 0):** stage 1 ramps to L1 at R1, stage 2 to L2 at R2, stage 3 to L3 at R3 and
-  holds; note-off ramps to L4 at R4 from any stage. Segment time = 1/rate seconds; **ramps are
-  linear in amplitude** (not dB like a DX7), so approximate an exponential fall with a quick
-  first drop (L2) and a slower second segment. **Rates are clamped 0.02–200 (≥ 5 ms per
-  segment)** by the engine; the app's packer allows up to 300, which then acts as 200.
+- **Envelope:** stage 1 ramps to L1 at R1, stage 2 to L2 at R2, stage 3 to L3 at R3 and holds;
+  note-off ramps to L4 at R4 from any stage. Rates 0.02–**1000** (a full-scale segment takes
+  1/rate s, so 1 ms attacks are possible since 0.27). **Mode 0** ramps are linear in
+  amplitude. **Mode 2 (exponential, DX-style, 0.27)** rises the same way but *falls* at a
+  constant rate in decibels — 96 dB per 1/rate s, i.e. a 60 dB fall takes 0.625/rate s
+  (`fall_rate(db, seconds)` in `scripts/claude_patches.py`) — the natural tail of pianos, bells
+  and plucks. Use mode 2 for anything that decays.
+- **Editor:** a modulator's Level slider is labelled **Index** and uses a squared taper (slider
+  p stores level p²) showing the index in radians, so the musical range fills the slider.
 - Feedback (0–1) adds the feedback op's own output × 6 cycles to its phase — its effect scales
   with that op's level, so feedback on a small-index modulator is subtle.
 - Pitch envelope: amount × 12 semitones at note-on, falling to 0 over `time` (curve shapes it)
@@ -283,7 +288,8 @@ cd ~/Desktop/KiMiA by Claude/bench     # see README.md there
 
 Reference (the 55 originals, 26 September, `bench/results/patchcheck-v2.*`): early level median
 −33.0 dBFS, from −51.5 (Bell Reed 200) to −17.4 (Reed Confession) — a 34 dB spread; non-bass
-share below 120 Hz, median −14.2 dB. The four FM EP drafts read −33 to −38 dBFS at Master 0.5. **Target for new patches: −30 ± 2 dBFS early RMS** (set with Master). Non-bass patches: share below 120 Hz ≤ about
+share below 120 Hz, median −14.2 dB. The four FM EP drafts read −33 to −38 dBFS at Master 0.5. **Target for new patches: −33 dBFS early level (the originals' median), within about 2 dB**,
+set by `scripts/calibrate_claude_levels.py` (Master first, then a layer-level scale). Non-bass patches: share below 120 Hz ≤ about
 −12 dB (Dual Patch low-end rule). **CPU numbers under `taskpolicy -b` run on efficiency cores
 and read ~2.5× high** — compare patches with each other there, or measure at normal priority
 for absolute numbers. Budget guidance: rule 8 of PATCH-DESIGN-RULES.md.
@@ -298,9 +304,11 @@ for absolute numbers. Budget guidance: rule 8 of PATCH-DESIGN-RULES.md.
 2. `python3 scripts/assemble_modx_bank.py` rebuilds `Resources/AuroraFX.json`: the 55
    originals byte-identical, then the Claude patches, validated (unique base names and ids,
    layers A/B only, only Reverb powered, eight valid macros).
-3. Measure with `bench/patchcheck`, then write calibrated Master values to
-   `scripts/claude_levels.json` (`{"mx-…": master}`; new master = old × 10^((target − early)/20),
-   capped so the stress peak stays sane) and rebuild.
+3. Measure with `bench/patchcheck --match " -CL" --json x.json`, run
+   `python3 scripts/calibrate_claude_levels.py x.json` (writes `scripts/claude_levels.json`:
+   `{"mx-…": {"master": m, "level_scale": s}}` — Master up to 1.0 first, then a common scale
+   on the layer levels; the Riser is levelled by hand), rebuild the bank, measure again (two
+   passes converge), and check the stress peaks.
 4. `./scripts/build.sh`, then the test suites (`scripts/test.sh`, `scripts/test-baseline.sh`,
    `check-v1-specialized-regression.sh`, `check-v1-ab-comparison.sh`, `Tests/PluginCoreChecks.mm`,
    `Tests/V1FactoryAudioAudit.mm`); the audit and plug-in checks loop over every patch.
@@ -309,7 +317,7 @@ for absolute numbers. Budget guidance: rule 8 of PATCH-DESIGN-RULES.md.
 ## 12. Gotchas (all found the hard way)
 
 - FM modulator level 1.0 ≈ 63 rad; EP indices are 0.01–0.03 (section 4).
-- FM envelope rates ≤ 200 (5 ms segments) and linear in amplitude.
+- FM envelopes: use mode 2 (exponential) for decays; rates up to 1000.
 - LFO 2 rate = mod-wheel vibrato rate, even when LFO 2 depth is 0.
 - Filter envelope follows the **amp** envelope; for an independent filter sweep use the mod
   envelope (destination 0).
@@ -320,6 +328,12 @@ for absolute numbers. Budget guidance: rule 8 of PATCH-DESIGN-RULES.md.
 - Sustain-0 poly voices free themselves at −80 dB, so long Decay = more pedalled voices = CPU.
 - Master goes through tanh: loud Master on dense chords saturates.
 - Pure tones expose envelope corners (rule 9): attack ≥ 5 ms on sine/triangle sounds.
+- **Gain range is limited:** Master ≤ 1 and Level ≤ 1, and each voice is scaled by 0.16/unison.
+  Quiet timbres can't be rescued by gain: wavetable frames differ by 10+ dB, the WT **formant**
+  shift costs ~9 dB, low-cut filters above a chord's fundamentals cost a lot, and unison lanes
+  average down. Fix the design (table, formant, filter), then calibrate.
+- The patch measurement tool must be rebuilt after any engine change (`bench/build-patchcheck.sh`
+  always compiles the current engine) — stale objects once reported FM patches as silent.
 - Macros can't target FM fields; the performance matrix can't reach destinations above 20.
 
 ## 13. Where everything else is
@@ -343,13 +357,15 @@ patches (55 originals + these 50 + 45 more later). Spread: Pad/Choir 6, Syn Lead
 FM EP 4, Organ 4, Strings 4, Brass 4, Syn Comp 4, Piano 3, Chromatic Perc 3, Woodwind 2, Guitar 2,
 Bass 2, Ethnic 1, Musical FX 1, Sound FX 1.
 
-**Status 26 September 2026:** framework done; 4 FM EP drafts in `scripts/claude_patches.py`
-(Eighty-Three Tines, Ballad Glass, Tine Bark, Bell Tine Nineties) — built and measured once,
-not yet level-calibrated (early −33 to −38 dBFS at Master .5), CPU with pedal high because of
-Decay 8 s (consider 5–6 s), Bell Tine Nineties too dark (−48 dB above 2.5 kHz). The other 46 are
-planned below, not written.
+**Status 26 September 2026: all 50 built** in `scripts/claude_patches.py`, measured with
+`bench/patchcheck` and calibrated to −33 dBFS (45 exact; Staccato Bows, Supersaw Anthem, Reso
+Stab 90 and Breath Choir 1–3 dB short with Level at its cap; Riser Nebula levelled by hand).
+Stress peaks ≤ 0.66. With 16 keys held, the FM keys cost about 21 % (P-cores), pads 6–15 %.
+Changes from the plan: Glass Halo became a metallic-wavetable pad (FM cost too much CPU for a
+pad); Vowel Talker uses the Reed Talk table without formant shift (the formant cost 9 dB).
+Waiting for the owner's review.
 
-| Category | Planned patches (musical job) |
+| Category | Patches (musical job) |
 |---|---|
 | FM EP | Eighty-Three Tines (1983 FM EP, ballads/80s pop) · Ballad Glass (soft verse EP) · Tine Bark (funk EP, velocity bark + grit) · Bell Tine Nineties (90s R&B bell EP) |
 | Keyboard | Wurli Smoke (Wurlitzer 200A, reedy bark) · Pianet Spark (Hohner Pianet, short woody pluck) · Clav Stax (dark funk clav, no wah) · Harmonium Porch (reed harmonium, bellows) |
